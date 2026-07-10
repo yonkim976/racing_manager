@@ -1,0 +1,391 @@
+.timing-board {
+  --timing-grid: 28px minmax(58px, 1fr) 32px 58px 38px 50px 48px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.timing-board__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.timing-board__title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent-red);
+}
+
+.timing-board__driver-count {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.timing-board__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* Column headers */
+.timing-board__columns {
+  display: grid;
+  grid-template-columns: var(--timing-grid);
+  gap: 2px;
+  padding: var(--space-sm) var(--space-md);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.timing-board__columns > span,
+.timing-board__gap-toggle {
+  min-width: 0;
+}
+
+.col-pos,
+.col-status,
+.col-speed,
+.col-tire,
+.col-pit {
+  text-align: center;
+}
+
+.col-last {
+  text-align: right;
+}
+
+.timing-board__gap-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.timing-board__gap-toggle span {
+  opacity: 0.45;
+}
+
+.timing-board__gap-toggle .is-active {
+  opacity: 1;
+  color: var(--text-primary);
+}
+
+.timing-board__gap-toggle:hover .is-active {
+  color: var(--accent-yellow);
+}
+
+/* Scrollable list */
+.timing-board__list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Row styles */
+.timing-row {
+  display: grid;
+  grid-template-columns: var(--timing-grid);
+  gap: 2px;
+  padding: 5px var(--space-md);
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  transition: background-color var(--transition-fast),
+              transform var(--transition-normal);
+  animation: fadeIn 0.3s ease both;
+  animation-delay: calc(var(--row-index) * 20ms);
+  position: relative;
+}
+
+.timing-row:hover {
+  background-color: var(--bg-hover);
+}
+
+/* Player's team highlight */
+.timing-row--player {
+  background: linear-gradient(90deg,
+    rgba(225, 6, 0, 0.08) 0%,
+    rgba(225, 6, 0, 0.03) 40%,
+    transparent 100%
+  );
+  border-left: 2px solid var(--accent-red);
+}
+
+.timing-row--player:hover {
+  background: linear-gradient(90deg,
+    rgba(225, 6, 0, 0.14) 0%,
+    rgba(225, 6, 0, 0.05) 40%,
+    transparent 100%
+  );
+}
+
+/* Leader row */
+.timing-row--leader {
+  background: linear-gradient(90deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    transparent 60%
+  );
+}
+
+.timing-row--leader .timing-row__pos-num {
+  color: var(--text-primary);
+  font-weight: 800;
+}
+
+/* Retired driver */
+.timing-row--retired {
+  opacity: 0.35;
+}
+
+.timing-row--retired .timing-row__name::after {
+  content: 'RET';
+  margin-left: 6px;
+  font-size: 0.6rem;
+  color: var(--accent-red);
+  font-weight: 700;
+}
+
+.timing-row--finished {
+  background: linear-gradient(90deg,
+    rgba(46, 204, 113, 0.12) 0%,
+    rgba(46, 204, 113, 0.04) 45%,
+    transparent 100%
+  );
+}
+
+.timing-row--finished .timing-row__name::after {
+  content: 'FIN';
+  margin-left: 6px;
+  font-size: 0.6rem;
+  color: var(--accent-green);
+  font-weight: 700;
+}
+
+/* In pit row */
+.timing-row--pit {
+  opacity: 0.75;
+}
+
+/* Position number */
+.timing-row__pos {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timing-row__pos-num {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  width: 24px;
+  text-align: center;
+}
+
+/* Driver cell */
+.timing-row__driver {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.timing-row__team-bar {
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.timing-row__name {
+  min-width: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.timing-row__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.timing-row__status-badge {
+  font-size: 0.55rem;
+  font-weight: 800;
+  padding: 1px 3px;
+  border-radius: 2px;
+  letter-spacing: 0.05em;
+  line-height: 1.25;
+}
+
+.timing-row__status-badge--pit {
+  color: var(--accent-yellow);
+  background: rgba(243, 156, 18, 0.15);
+}
+
+.timing-row__status-badge--drs {
+  color: #050508;
+  background: var(--accent-green);
+}
+
+.timing-row__status-badge--air {
+  color: var(--accent-yellow);
+  background: rgba(243, 156, 18, 0.15);
+  border: 1px solid rgba(243, 156, 18, 0.35);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.timing-row__status-badge--sbs {
+  color: #050508;
+  background: var(--accent-blue);
+}
+
+/* Gap / interval */
+.timing-row__gap {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  min-width: 0;
+  text-align: right;
+}
+
+.timing-row__gap-leader {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--accent-yellow);
+  letter-spacing: 0.05em;
+}
+
+.timing-row__gap-finished {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--accent-green);
+  letter-spacing: 0.05em;
+}
+
+/* Last lap time */
+.timing-row__last {
+  font-size: 0.73rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  text-align: right;
+  min-width: 0;
+}
+
+.timing-row__speed {
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  text-align: center;
+  min-width: 0;
+}
+
+.timing-row__speed--drs {
+  color: var(--accent-green);
+}
+
+/* Tire compound */
+.timing-row__tire {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tire-badge {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: #000;
+  flex-shrink: 0;
+}
+
+.tire-badge.tire-soft {
+  background: var(--tire-soft);
+  box-shadow: 0 0 6px rgba(255, 51, 51, 0.4);
+}
+
+.tire-badge.tire-medium {
+  background: var(--tire-medium);
+  box-shadow: 0 0 6px rgba(255, 195, 0, 0.4);
+}
+
+.tire-badge.tire-hard {
+  background: var(--tire-hard);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.3);
+}
+
+.tire-badge.tire-inter {
+  background: var(--tire-inter);
+  box-shadow: 0 0 6px rgba(57, 181, 74, 0.4);
+}
+
+.tire-badge.tire-wet {
+  background: var(--tire-wet);
+  box-shadow: 0 0 6px rgba(43, 127, 212, 0.4);
+}
+
+.tire-life {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 26px;
+}
+
+.tire-life--critical {
+  color: var(--accent-red);
+  font-weight: 800;
+}
+
+/* Pit count */
+.timing-row__pit-count {
+  font-size: 0.68rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.timing-row--pit .timing-row__pit-count {
+  color: var(--accent-yellow);
+  font-weight: 800;
+}

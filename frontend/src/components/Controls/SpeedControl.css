@@ -1,0 +1,97 @@
+.speed-control {
+  flex-shrink: 0;
+}
+
+.speed-control__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-lg);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--accent-red);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.speed-control__status {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+
+.speed-control__status--paused {
+  color: var(--accent-yellow);
+}
+
+.speed-control__speeds {
+  display: flex;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+}
+
+.speed-control__btn {
+  flex: 1;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.speed-control__btn:hover:not(:disabled) {
+  border-color: var(--accent-red);
+  color: var(--accent-red-bright);
+}
+
+.speed-control__btn--active {
+  border-color: var(--accent-red);
+  color: var(--accent-red-bright);
+  background: rgba(225, 6, 0, 0.12);
+}
+
+.speed-control__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.speed-control__pause-row {
+  display: flex;
+  gap: var(--space-sm);
+  padding: 0 var(--space-lg) var(--space-md);
+}
+
+.speed-control__pause,
+.speed-control__resume {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.speed-control__pause:hover:not(:disabled),
+.speed-control__resume:hover:not(:disabled) {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+.speed-control__pause--active,
+.speed-control__resume--active {
+  border-color: var(--accent-yellow);
+  color: var(--accent-yellow);
+}
+
+.speed-control__pause:disabled,
+.speed-control__resume:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

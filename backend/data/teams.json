@@ -1,0 +1,92 @@
+[
+  {
+    "id": 1,
+    "name": "Red Bull Racing",
+    "car_performance": 1.030,
+    "pit_crew_skill": 0.95,
+    "reliability": 0.95,
+    "strategy_style": "aggressive",
+    "color": "#3671C6"
+  },
+  {
+    "id": 2,
+    "name": "Ferrari",
+    "car_performance": 1.015,
+    "pit_crew_skill": 0.90,
+    "reliability": 0.90,
+    "strategy_style": "balanced",
+    "color": "#E8002D"
+  },
+  {
+    "id": 3,
+    "name": "McLaren",
+    "car_performance": 1.020,
+    "pit_crew_skill": 0.92,
+    "reliability": 0.93,
+    "strategy_style": "balanced",
+    "color": "#FF8000"
+  },
+  {
+    "id": 4,
+    "name": "Mercedes",
+    "car_performance": 1.010,
+    "pit_crew_skill": 0.93,
+    "reliability": 0.94,
+    "strategy_style": "conservative",
+    "color": "#27F4D2"
+  },
+  {
+    "id": 5,
+    "name": "Aston Martin",
+    "car_performance": 1.005,
+    "pit_crew_skill": 0.88,
+    "reliability": 0.91,
+    "strategy_style": "conservative",
+    "color": "#229971"
+  },
+  {
+    "id": 6,
+    "name": "Alpine",
+    "car_performance": 0.990,
+    "pit_crew_skill": 0.85,
+    "reliability": 0.87,
+    "strategy_style": "aggressive",
+    "color": "#FF87BC"
+  },
+  {
+    "id": 7,
+    "name": "Williams",
+    "car_performance": 0.985,
+    "pit_crew_skill": 0.84,
+    "reliability": 0.85,
+    "strategy_style": "balanced",
+    "color": "#64C4FF"
+  },
+  {
+    "id": 8,
+    "name": "RB",
+    "car_performance": 0.992,
+    "pit_crew_skill": 0.86,
+    "reliability": 0.88,
+    "strategy_style": "balanced",
+    "color": "#6692FF"
+  },
+  {
+    "id": 9,
+    "name": "Kick Sauber",
+    "car_performance": 0.980,
+    "pit_crew_skill": 0.83,
+    "reliability": 0.86,
+    "strategy_style": "conservative",
+    "color": "#52E252"
+  },
+  {
+    "id": 10,
+    "name": "Haas",
+    "car_performance": 0.988,
+    "pit_crew_skill": 0.84,
+    "reliability": 0.86,
+    "strategy_style": "aggressive",
+    "color": "#B6BABD"
+  }
+]

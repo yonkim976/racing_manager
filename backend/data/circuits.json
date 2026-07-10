@@ -1,0 +1,2364 @@
+[
+  {
+    "id": 1,
+    "name": "F1 Test Oval Circuit",
+    "country": "Virtual",
+    "base_lap_time": 64.0,
+    "total_laps": 30,
+    "pit_loss_time": 18.0,
+    "track_length_m": 4300.0,
+    "overtaking_difficulty": 0.25,
+    "sectors": [
+      {
+        "name": "Sector 1",
+        "type": "main_straight",
+        "speed_factor": 1.05
+      },
+      {
+        "name": "Sector 2",
+        "type": "sweeping_corners",
+        "speed_factor": 0.96
+      },
+      {
+        "name": "Sector 3",
+        "type": "back_straight",
+        "speed_factor": 1.03
+      }
+    ],
+    "layout_segments": [
+      {
+        "type": "straight",
+        "start": [300, 480],
+        "end": [620, 480]
+      },
+      {
+        "type": "bezier",
+        "start": [620, 480],
+        "cp1": [800, 480],
+        "cp2": [800, 120],
+        "end": [620, 120],
+        "samples": 72
+      },
+      {
+        "type": "straight",
+        "start": [620, 120],
+        "end": [180, 120]
+      },
+      {
+        "type": "bezier",
+        "start": [180, 120],
+        "cp1": [0, 120],
+        "cp2": [0, 480],
+        "end": [180, 480],
+        "samples": 72
+      },
+      {
+        "type": "straight",
+        "start": [180, 480],
+        "end": [300, 480]
+      }
+    ],
+    "start_finish_index": 0,
+    "track_coords": [
+      [300, 480],
+      [380, 480],
+      [460, 480],
+      [540, 480],
+      [620, 480],
+      [667, 474],
+      [710, 456],
+      [747, 427],
+      [776, 390],
+      [794, 347],
+      [800, 300],
+      [794, 253],
+      [776, 210],
+      [747, 173],
+      [710, 144],
+      [667, 126],
+      [620, 120],
+      [540, 120],
+      [460, 120],
+      [380, 120],
+      [300, 120],
+      [220, 120],
+      [180, 120],
+      [133, 126],
+      [90, 144],
+      [53, 173],
+      [24, 210],
+      [6, 253],
+      [0, 300],
+      [6, 347],
+      [24, 390],
+      [53, 427],
+      [90, 456],
+      [133, 474],
+      [180, 480],
+      [240, 480],
+      [300, 480]
+    ],
+    "pit_lane_coords": [
+      [220, 480],
+      [260, 540],
+      [340, 555],
+      [480, 555],
+      [580, 540],
+      [630, 480]
+    ],
+    "pit_lane_segments": [
+      {
+        "type": "bezier",
+        "start": [220, 480],
+        "cp1": [242, 522],
+        "cp2": [285, 552],
+        "end": [340, 555],
+        "samples": 24
+      },
+      {
+        "type": "straight",
+        "start": [340, 555],
+        "end": [500, 555]
+      },
+      {
+        "type": "bezier",
+        "start": [500, 555],
+        "cp1": [572, 555],
+        "cp2": [610, 520],
+        "end": [630, 480],
+        "samples": 24
+      }
+    ],
+    "drs_zones": [
+      {
+        "name": "Main Straight",
+        "start": 0.02,
+        "end": 0.13
+      },
+      {
+        "name": "Back Straight",
+        "start": 0.38,
+        "end": 0.57
+      }
+    ],
+    "landmarks": [
+      {
+        "type": "start_finish",
+        "label": "S/F",
+        "track_index": 0,
+        "progress": 0.00
+      },
+      {
+        "type": "pit",
+        "label": "PIT LANE",
+        "track_index": 3,
+        "progress": 0.07
+      },
+      {
+        "type": "corner",
+        "label": "T1",
+        "track_index": 6,
+        "progress": 0.16
+      },
+      {
+        "type": "corner",
+        "label": "T2",
+        "track_index": 12,
+        "progress": 0.34
+      },
+      {
+        "type": "corner",
+        "label": "T3",
+        "track_index": 24,
+        "progress": 0.61
+      },
+      {
+        "type": "corner",
+        "label": "T4",
+        "track_index": 30,
+        "progress": 0.84
+      }
+    ],
+    "segments": [
+      {
+        "name": "Main Straight",
+        "start": 0.00,
+        "end": 0.16,
+        "type": "straight"
+      },
+      {
+        "name": "Turn 1 Sweep",
+        "start": 0.16,
+        "end": 0.34,
+        "type": "sweeping"
+      },
+      {
+        "name": "Back Straight",
+        "start": 0.34,
+        "end": 0.61,
+        "type": "straight"
+      },
+      {
+        "name": "Turn 3 Sweep",
+        "start": 0.61,
+        "end": 0.84,
+        "type": "sweeping"
+      },
+      {
+        "name": "Final Straight",
+        "start": 0.84,
+        "end": 1.00,
+        "type": "straight"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "name": "Technical Park Circuit",
+    "country": "Virtual",
+    "base_lap_time": 72.0,
+    "total_laps": 42,
+    "pit_loss_time": 21.5,
+    "track_length_m": 4600.0,
+    "overtaking_difficulty": 0.58,
+    "sectors": [
+      {
+        "name": "Sector 1",
+        "type": "technical_sweeps",
+        "speed_factor": 0.97
+      },
+      {
+        "name": "Sector 2",
+        "type": "hairpin_and_back_straight",
+        "speed_factor": 1.02
+      },
+      {
+        "name": "Sector 3",
+        "type": "stadium_complex",
+        "speed_factor": 0.94
+      }
+    ],
+    "layout_segments": [
+      {
+        "type": "straight",
+        "start": [360, 520],
+        "end": [540, 510]
+      },
+      {
+        "type": "bezier",
+        "start": [540, 510],
+        "cp1": [625, 500],
+        "cp2": [720, 450],
+        "end": [730, 365],
+        "samples": 48
+      },
+      {
+        "type": "bezier",
+        "start": [730, 365],
+        "cp1": [746, 292],
+        "cp2": [700, 232],
+        "end": [620, 224],
+        "samples": 44
+      },
+      {
+        "type": "bezier",
+        "start": [620, 224],
+        "cp1": [560, 218],
+        "cp2": [505, 292],
+        "end": [438, 304],
+        "samples": 42
+      },
+      {
+        "type": "bezier",
+        "start": [438, 304],
+        "cp1": [378, 318],
+        "cp2": [330, 280],
+        "end": [292, 224],
+        "samples": 36
+      },
+      {
+        "type": "bezier",
+        "start": [292, 224],
+        "cp1": [236, 180],
+        "cp2": [160, 170],
+        "end": [108, 216],
+        "samples": 44
+      },
+      {
+        "type": "bezier",
+        "start": [108, 216],
+        "cp1": [58, 260],
+        "cp2": [56, 358],
+        "end": [98, 410],
+        "samples": 48
+      },
+      {
+        "type": "bezier",
+        "start": [98, 410],
+        "cp1": [132, 474],
+        "cp2": [222, 506],
+        "end": [300, 512],
+        "samples": 42
+      },
+      {
+        "type": "bezier",
+        "start": [300, 512],
+        "cp1": [320, 516],
+        "cp2": [342, 520],
+        "end": [360, 520],
+        "samples": 12
+      }
+    ],
+    "start_finish_index": 0,
+    "track_coords": [
+      [360, 520],
+      [450, 520],
+      [540, 510],
+      [620, 480],
+      [690, 430],
+      [730, 365],
+      [726, 300],
+      [688, 250],
+      [620, 224],
+      [548, 234],
+      [490, 270],
+      [438, 304],
+      [382, 306],
+      [330, 276],
+      [292, 224],
+      [232, 186],
+      [166, 182],
+      [108, 216],
+      [78, 276],
+      [72, 346],
+      [98, 410],
+      [154, 458],
+      [230, 492],
+      [300, 512],
+      [360, 520]
+    ],
+    "pit_lane_coords": [
+      [290, 512],
+      [340, 562],
+      [430, 582],
+      [535, 560],
+      [610, 482]
+    ],
+    "pit_lane_segments": [
+      {
+        "type": "bezier",
+        "start": [290, 512],
+        "cp1": [320, 548],
+        "cp2": [366, 574],
+        "end": [430, 582],
+        "samples": 24
+      },
+      {
+        "type": "bezier",
+        "start": [430, 582],
+        "cp1": [500, 586],
+        "cp2": [570, 538],
+        "end": [610, 482],
+        "samples": 28
+      }
+    ],
+    "drs_zones": [
+      {
+        "name": "Main Straight",
+        "start": 0.02,
+        "end": 0.09
+      },
+      {
+        "name": "Back Straight",
+        "start": 0.28,
+        "end": 0.40
+      }
+    ],
+    "landmarks": [
+      {
+        "type": "start_finish",
+        "label": "S/F",
+        "track_index": 0,
+        "progress": 0.00
+      },
+      {
+        "type": "pit",
+        "label": "PIT LANE",
+        "track_index": 1,
+        "progress": 0.03
+      },
+      {
+        "type": "corner",
+        "label": "T1",
+        "track_index": 4,
+        "progress": 0.14
+      },
+      {
+        "type": "corner",
+        "label": "T2",
+        "track_index": 7,
+        "progress": 0.24
+      },
+      {
+        "type": "corner",
+        "label": "ESSES",
+        "track_index": 11,
+        "progress": 0.42
+      },
+      {
+        "type": "corner",
+        "label": "HAIRPIN",
+        "track_index": 18,
+        "progress": 0.66
+      },
+      {
+        "type": "corner",
+        "label": "T7",
+        "track_index": 21,
+        "progress": 0.80
+      },
+      {
+        "type": "corner",
+        "label": "FINAL",
+        "track_index": 23,
+        "progress": 0.92
+      }
+    ],
+    "segments": [
+      {
+        "name": "Main Straight",
+        "start": 0.00,
+        "end": 0.12,
+        "type": "straight"
+      },
+      {
+        "name": "Opening Braking Zone",
+        "start": 0.12,
+        "end": 0.24,
+        "type": "heavy_braking"
+      },
+      {
+        "name": "Back Straight",
+        "start": 0.24,
+        "end": 0.44,
+        "type": "straight"
+      },
+      {
+        "name": "Middle Complex",
+        "start": 0.44,
+        "end": 0.66,
+        "type": "technical"
+      },
+      {
+        "name": "Traction Loop",
+        "start": 0.66,
+        "end": 0.82,
+        "type": "traction"
+      },
+      {
+        "name": "Final Technical Sector",
+        "start": 0.82,
+        "end": 1.00,
+        "type": "technical"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "name": "Bahrain International Circuit",
+    "country": "Bahrain",
+    "base_lap_time": 84.0,
+    "total_laps": 57,
+    "pit_loss_time": 23.0,
+    "track_length_m": 5412.0,
+    "overtaking_difficulty": 0.48,
+    "geo_file": "circuit_sources/bahrain_osm_geo.json",
+    "sectors": [
+      {
+        "name": "Sector 1",
+        "type": "main_straight_and_heavy_braking",
+        "speed_factor": 1.03
+      },
+      {
+        "name": "Sector 2",
+        "type": "technical_middle_sector",
+        "speed_factor": 0.94
+      },
+      {
+        "name": "Sector 3",
+        "type": "back_straight_and_final_loop",
+        "speed_factor": 1.01
+      }
+    ],
+    "layout_segments": [
+      {
+        "type": "straight",
+        "start": [500, 520],
+        "end": [122, 520]
+      },
+      {
+        "type": "bezier",
+        "start": [122, 520],
+        "cp1": [72, 520],
+        "cp2": [70, 476],
+        "end": [130, 450],
+        "samples": 38
+      },
+      {
+        "type": "bezier",
+        "start": [130, 450],
+        "cp1": [174, 432],
+        "cp2": [108, 420],
+        "end": [116, 382],
+        "samples": 34
+      },
+      {
+        "type": "straight",
+        "start": [116, 382],
+        "end": [172, 118]
+      },
+      {
+        "type": "bezier",
+        "start": [172, 118],
+        "cp1": [180, 58],
+        "cp2": [274, 84],
+        "end": [322, 132],
+        "samples": 52
+      },
+      {
+        "type": "straight",
+        "start": [322, 132],
+        "end": [395, 208]
+      },
+      {
+        "type": "bezier",
+        "start": [395, 208],
+        "cp1": [430, 246],
+        "cp2": [505, 252],
+        "end": [515, 318],
+        "samples": 38
+      },
+      {
+        "type": "bezier",
+        "start": [515, 318],
+        "cp1": [512, 360],
+        "cp2": [536, 392],
+        "end": [578, 410],
+        "samples": 30
+      },
+      {
+        "type": "bezier",
+        "start": [578, 410],
+        "cp1": [612, 426],
+        "cp2": [562, 444],
+        "end": [515, 430],
+        "samples": 24
+      },
+      {
+        "type": "bezier",
+        "start": [515, 430],
+        "cp1": [470, 418],
+        "cp2": [420, 402],
+        "end": [365, 398],
+        "samples": 34
+      },
+      {
+        "type": "bezier",
+        "start": [365, 398],
+        "cp1": [292, 394],
+        "cp2": [270, 462],
+        "end": [326, 455],
+        "samples": 40
+      },
+      {
+        "type": "straight",
+        "start": [326, 455],
+        "end": [645, 455]
+      },
+      {
+        "type": "bezier",
+        "start": [645, 455],
+        "cp1": [708, 456],
+        "cp2": [714, 398],
+        "end": [670, 355],
+        "samples": 44
+      },
+      {
+        "type": "bezier",
+        "start": [670, 355],
+        "cp1": [620, 318],
+        "cp2": [612, 270],
+        "end": [636, 225],
+        "samples": 40
+      },
+      {
+        "type": "bezier",
+        "start": [636, 225],
+        "cp1": [652, 152],
+        "cp2": [722, 70],
+        "end": [735, 115],
+        "samples": 52
+      },
+      {
+        "type": "straight",
+        "start": [735, 115],
+        "end": [805, 428]
+      },
+      {
+        "type": "bezier",
+        "start": [805, 428],
+        "cp1": [832, 488],
+        "cp2": [760, 522],
+        "end": [704, 520],
+        "samples": 52
+      },
+      {
+        "type": "straight",
+        "start": [704, 520],
+        "end": [650, 520]
+      },
+      {
+        "type": "straight",
+        "start": [650, 520],
+        "end": [500, 520]
+      }
+    ],
+    "start_finish_index": 0,
+    "pit_lane": {
+      "entry_progress": 0.898,
+      "exit_progress": 0.102,
+      "lane_offset": 22,
+      "wall_offset": 11,
+      "box_offset": 10,
+      "entry_blend": 0.018,
+      "exit_blend": 0.020,
+      "samples": 64
+    },
+    "track_coords": [
+      [500, 520],
+      [122, 520],
+      [130, 450],
+      [116, 382],
+      [172, 118],
+      [322, 132],
+      [395, 208],
+      [515, 318],
+      [578, 410],
+      [515, 430],
+      [365, 398],
+      [326, 455],
+      [645, 455],
+      [670, 355],
+      [636, 225],
+      [735, 115],
+      [805, 428],
+      [704, 520],
+      [650, 520],
+      [500, 520]
+    ],
+    "pit_lane_coords": [
+      [808, 463],
+      [700, 486],
+      [500, 488],
+      [260, 490],
+      [168, 520]
+    ],
+    "pit_lane_segments": [
+      {
+        "type": "bezier",
+        "start": [808, 463],
+        "cp1": [810, 474],
+        "cp2": [790, 484],
+        "end": [700, 486],
+        "samples": 24
+      },
+      {
+        "type": "bezier",
+        "start": [700, 486],
+        "cp1": [640, 487],
+        "cp2": [570, 488],
+        "end": [500, 488],
+        "samples": 20
+      },
+      {
+        "type": "straight",
+        "start": [500, 488],
+        "end": [260, 490]
+      },
+      {
+        "type": "bezier",
+        "start": [260, 490],
+        "cp1": [210, 492],
+        "cp2": [185, 506],
+        "end": [168, 520],
+        "samples": 24
+      }
+    ],
+    "drs_zones": [
+      {
+        "name": "Main Straight",
+        "start": 0.954,
+        "end": 0.084
+      },
+      {
+        "name": "T3-T4 Climb",
+        "start": 0.184,
+        "end": 0.250
+      },
+      {
+        "name": "Back Straight",
+        "start": 0.564,
+        "end": 0.634
+      },
+      {
+        "name": "T13-T14 Straight",
+        "start": 0.800,
+        "end": 0.884
+      }
+    ],
+    "landmarks": [
+      {
+        "type": "start_finish",
+        "label": "S/F",
+        "track_index": 0,
+        "progress": 0.00
+      },
+      {
+        "type": "pit",
+        "label": "PIT LANE",
+        "track_index": 2,
+        "progress": 0.000
+      },
+      {
+        "type": "corner",
+        "label": "T1",
+        "track_index": 5,
+        "progress": 0.117
+      },
+      {
+        "type": "corner",
+        "label": "T2",
+        "track_index": 6,
+        "progress": 0.151
+      },
+      {
+        "type": "corner",
+        "label": "T3",
+        "track_index": 7,
+        "progress": 0.174
+      },
+      {
+        "type": "corner",
+        "label": "T4",
+        "track_index": 12,
+        "progress": 0.257
+      },
+      {
+        "type": "corner",
+        "label": "T5",
+        "track_index": 16,
+        "progress": 0.345
+      },
+      {
+        "type": "corner",
+        "label": "T6",
+        "track_index": 17,
+        "progress": 0.398
+      },
+      {
+        "type": "corner",
+        "label": "T7",
+        "track_index": 18,
+        "progress": 0.437
+      },
+      {
+        "type": "corner",
+        "label": "T8",
+        "track_index": 19,
+        "progress": 0.465
+      },
+      {
+        "type": "corner",
+        "label": "T9",
+        "track_index": 20,
+        "progress": 0.509
+      },
+      {
+        "type": "corner",
+        "label": "T10",
+        "track_index": 21,
+        "progress": 0.548
+      },
+      {
+        "type": "corner",
+        "label": "T11",
+        "track_index": 23,
+        "progress": 0.645
+      },
+      {
+        "type": "corner",
+        "label": "T12",
+        "track_index": 24,
+        "progress": 0.689
+      },
+      {
+        "type": "corner",
+        "label": "T13",
+        "track_index": 25,
+        "progress": 0.791
+      },
+      {
+        "type": "corner",
+        "label": "T14",
+        "track_index": 26,
+        "progress": 0.888
+      },
+      {
+        "type": "corner",
+        "label": "T15",
+        "track_index": 27,
+        "progress": 0.937
+      }
+    ],
+    "segments": [
+      {
+        "name": "Start/Finish Straight",
+        "start": 0.00,
+        "end": 0.099,
+        "type": "straight",
+        "speed_factor": 1.18
+      },
+      {
+        "name": "T1 Braking",
+        "start": 0.099,
+        "end": 0.164,
+        "type": "heavy_braking",
+        "speed_factor": 0.58
+      },
+      {
+        "name": "T3-T4 Climb",
+        "start": 0.164,
+        "end": 0.254,
+        "type": "straight",
+        "speed_factor": 1.12
+      },
+      {
+        "name": "Middle Technical",
+        "start": 0.254,
+        "end": 0.509,
+        "type": "technical",
+        "speed_factor": 0.78
+      },
+      {
+        "name": "T10 Braking",
+        "start": 0.509,
+        "end": 0.559,
+        "type": "heavy_braking",
+        "speed_factor": 0.62
+      },
+      {
+        "name": "Back Straight",
+        "start": 0.559,
+        "end": 0.642,
+        "type": "straight",
+        "speed_factor": 1.16
+      },
+      {
+        "name": "T11-T13 Sweep",
+        "start": 0.642,
+        "end": 0.791,
+        "type": "traction",
+        "speed_factor": 0.92
+      },
+      {
+        "name": "T13-T14 Straight",
+        "start": 0.791,
+        "end": 0.888,
+        "type": "straight",
+        "speed_factor": 1.12
+      },
+      {
+        "name": "Final Braking Sector",
+        "start": 0.888,
+        "end": 0.918,
+        "type": "heavy_braking",
+        "speed_factor": 0.64
+      },
+      {
+        "name": "Final Traction Zone",
+        "start": 0.918,
+        "end": 0.954,
+        "type": "traction",
+        "speed_factor": 0.84
+      },
+      {
+        "name": "Main Straight Approach",
+        "start": 0.954,
+        "end": 1.00,
+        "type": "straight",
+        "speed_factor": 1.14
+      }
+    ]
+  },
+  {
+    "id": 4,
+    "name": "Red Bull Ring",
+    "country": "Austria",
+    "base_lap_time": 65.0,
+    "total_laps": 71,
+    "pit_loss_time": 18.5,
+    "track_length_m": 4318.0,
+    "overtaking_difficulty": 0.32,
+    "geo_file": "circuit_sources/red_bull_ring_osm_geo.json",
+    "sectors": [
+      {
+        "name": "Sector 1",
+        "type": "main_straight_and_uphill_climb",
+        "speed_factor": 1.06
+      },
+      {
+        "name": "Sector 2",
+        "type": "top_straights_and_hairpins",
+        "speed_factor": 1.02
+      },
+      {
+        "name": "Sector 3",
+        "type": "downhill_sweeps",
+        "speed_factor": 0.98
+      }
+    ],
+    "layout_segments": [
+      {
+        "type": "bezier",
+        "start": [548.3, 470.5],
+        "cp1": [500, 482],
+        "cp2": [400, 512],
+        "end": [344.4, 518.2],
+        "samples": 44
+      },
+      {
+        "type": "bezier",
+        "start": [344.4, 518.2],
+        "cp1": [344.4, 518.2],
+        "cp2": [323.2, 481.1],
+        "end": [297.8, 449.3],
+        "samples": 24
+      },
+      {
+        "type": "straight",
+        "start": [297.8, 449.3],
+        "end": [269.3, 409.1]
+      },
+      {
+        "type": "straight",
+        "start": [269.3, 409.1],
+        "end": [172.5, 216.3]
+      },
+      {
+        "type": "straight",
+        "start": [172.5, 216.3],
+        "end": [68.5, 96.8]
+      },
+      {
+        "type": "bezier",
+        "start": [68.5, 96.8],
+        "cp1": [68.5, 96.8],
+        "cp2": [53.3, 82.2],
+        "end": [74.9, 77.5],
+        "samples": 24
+      },
+      {
+        "type": "straight",
+        "start": [74.9, 77.5],
+        "end": [495, 119.7]
+      },
+      {
+        "type": "bezier",
+        "start": [495, 119.7],
+        "cp1": [520, 125],
+        "cp2": [515, 178],
+        "end": [422.8, 205.7],
+        "samples": 44
+      },
+      {
+        "type": "bezier",
+        "start": [422.8, 205.7],
+        "cp1": [408.4, 210.9],
+        "cp2": [300.7, 183.7],
+        "end": [279.5, 193.8],
+        "samples": 32
+      },
+      {
+        "type": "bezier",
+        "start": [279.5, 193.8],
+        "cp1": [250, 205.6],
+        "cp2": [251.7, 238.1],
+        "end": [257, 255.3],
+        "samples": 28
+      },
+      {
+        "type": "straight",
+        "start": [257, 255.3],
+        "end": [299.6, 334.4]
+      },
+      {
+        "type": "bezier",
+        "start": [299.6, 334.4],
+        "cp1": [324.9, 363.4],
+        "cp2": [340, 365],
+        "end": [359, 341.3],
+        "samples": 32
+      },
+      {
+        "type": "bezier",
+        "start": [359, 341.3],
+        "cp1": [377, 322],
+        "cp2": [406, 292],
+        "end": [447.6, 281.3],
+        "samples": 32
+      },
+      {
+        "type": "straight",
+        "start": [447.6, 281.3],
+        "end": [705, 281.8]
+      },
+      {
+        "type": "bezier",
+        "start": [705, 281.8],
+        "cp1": [724.6, 282.2],
+        "cp2": [742, 320],
+        "end": [755.1, 386.6],
+        "samples": 36
+      },
+      {
+        "type": "bezier",
+        "start": [755.1, 386.6],
+        "cp1": [760.6, 401.8],
+        "cp2": [744.3, 409.8],
+        "end": [694.8, 433.4],
+        "samples": 28
+      },
+      {
+        "type": "bezier",
+        "start": [694.8, 433.4],
+        "cp1": [645.9, 445.8],
+        "cp2": [597.1, 458.1],
+        "end": [548.3, 470.5],
+        "samples": 36
+      }
+    ],
+    "start_finish_index": 0,
+    "pit_lane": {
+      "entry_progress": 0.887,
+      "exit_progress": 0.119,
+      "lane_offset": 28,
+      "wall_offset": 14,
+      "box_offset": 10,
+      "entry_blend": 0.014,
+      "exit_blend": 0.018,
+      "samples": 56
+    },
+    "track_coords": [
+      [548.3, 470.5],
+      [344.4, 518.2],
+      [297.8, 449.3],
+      [269.3, 409.1],
+      [172.5, 216.3],
+      [68.5, 96.8],
+      [74.9, 77.5],
+      [495, 119.7],
+      [422.8, 205.7],
+      [279.5, 193.8],
+      [257, 255.3],
+      [299.6, 334.4],
+      [359, 341.3],
+      [447.6, 281.3],
+      [705, 281.8],
+      [755.1, 386.6],
+      [694.8, 433.4],
+      [548.3, 470.5]
+    ],
+    "pit_lane_segments": [
+      {
+        "type": "straight",
+        "start": [744.4, 343.1],
+        "end": [741.2, 382.7]
+      },
+      {
+        "type": "bezier",
+        "start": [741.2, 382.7],
+        "cp1": [741.2, 382.7],
+        "cp2": [741.6, 390.1],
+        "end": [733, 397.2],
+        "samples": 12
+      },
+      {
+        "type": "bezier",
+        "start": [733, 397.2],
+        "cp1": [733, 397.2],
+        "cp2": [712.1, 411.5],
+        "end": [699, 417.2],
+        "samples": 14
+      },
+      {
+        "type": "straight",
+        "start": [699, 417.2],
+        "end": [368.8, 500.4]
+      },
+      {
+        "type": "bezier",
+        "start": [368.8, 500.4],
+        "cp1": [361.9, 502.5],
+        "cp2": [348.9, 503.1],
+        "end": [340.6, 487.4],
+        "samples": 16
+      },
+      {
+        "type": "bezier",
+        "start": [340.6, 487.4],
+        "cp1": [332.7, 475.1],
+        "cp2": [320.7, 466.7],
+        "end": [301.8, 453.4],
+        "samples": 16
+      }
+    ],
+    "pit_lane_coords": [
+      [744.4, 343.1],
+      [741.2, 382.7],
+      [733, 397.2],
+      [699, 417.2],
+      [368.8, 500.4],
+      [340.6, 487.4],
+      [301.8, 453.4]
+    ],
+    "drs_zones": [
+      {
+        "name": "Main Straight",
+        "start": 0.946,
+        "end": 0.064
+      },
+      {
+        "name": "Uphill DRS Climb",
+        "start": 0.125,
+        "end": 0.275
+      },
+      {
+        "name": "Top Straight",
+        "start": 0.340,
+        "end": 0.460
+      }
+    ],
+    "landmarks": [
+      {
+        "type": "start_finish",
+        "label": "S/F",
+        "track_index": 0,
+        "progress": 0.00
+      },
+      {
+        "type": "pit",
+        "label": "PIT LANE",
+        "track_index": 0,
+        "progress": 0.95
+      },
+      {
+        "type": "corner",
+        "label": "T1",
+        "track_index": 0,
+        "progress": 0.086
+      },
+      {
+        "type": "corner",
+        "label": "T2",
+        "track_index": 0,
+        "progress": 0.232
+      },
+      {
+        "type": "corner",
+        "label": "T3",
+        "track_index": 0,
+        "progress": 0.304
+      },
+      {
+        "type": "corner",
+        "label": "T4",
+        "track_index": 0,
+        "progress": 0.490
+      },
+      {
+        "type": "corner",
+        "label": "T5",
+        "track_index": 0,
+        "progress": 0.543
+      },
+      {
+        "type": "corner",
+        "label": "T6",
+        "track_index": 0,
+        "progress": 0.609
+      },
+      {
+        "type": "corner",
+        "label": "T7",
+        "track_index": 0,
+        "progress": 0.688
+      },
+      {
+        "type": "corner",
+        "label": "T8",
+        "track_index": 0,
+        "progress": 0.735
+      },
+      {
+        "type": "corner",
+        "label": "T9",
+        "track_index": 0,
+        "progress": 0.861
+      },
+      {
+        "type": "corner",
+        "label": "T10",
+        "track_index": 0,
+        "progress": 0.907
+      }
+    ],
+    "segments": [
+      {
+        "name": "Main Straight",
+        "start": 0.00,
+        "end": 0.070,
+        "type": "straight",
+        "speed_factor": 1.20
+      },
+      {
+        "name": "T1 Braking",
+        "start": 0.070,
+        "end": 0.105,
+        "type": "heavy_braking",
+        "speed_factor": 0.70
+      },
+      {
+        "name": "Uphill DRS Climb",
+        "start": 0.105,
+        "end": 0.285,
+        "type": "straight",
+        "speed_factor": 1.16
+      },
+      {
+        "name": "T3 Hairpin",
+        "start": 0.285,
+        "end": 0.325,
+        "type": "heavy_braking",
+        "speed_factor": 0.58
+      },
+      {
+        "name": "Remus-Schlossgold Straight",
+        "start": 0.325,
+        "end": 0.470,
+        "type": "straight",
+        "speed_factor": 1.14
+      },
+      {
+        "name": "T4 Braking",
+        "start": 0.470,
+        "end": 0.515,
+        "type": "heavy_braking",
+        "speed_factor": 0.64
+      },
+      {
+        "name": "Rauch Downhill Sweep",
+        "start": 0.515,
+        "end": 0.625,
+        "type": "traction",
+        "speed_factor": 0.96
+      },
+      {
+        "name": "Wurth Complex",
+        "start": 0.625,
+        "end": 0.750,
+        "type": "technical",
+        "speed_factor": 0.80
+      },
+      {
+        "name": "Rindt Straight",
+        "start": 0.750,
+        "end": 0.850,
+        "type": "straight",
+        "speed_factor": 1.12
+      },
+      {
+        "name": "Rindt Sweep",
+        "start": 0.850,
+        "end": 0.885,
+        "type": "sweeping",
+        "speed_factor": 1.08
+      },
+      {
+        "name": "Final Complex",
+        "start": 0.885,
+        "end": 0.915,
+        "type": "sweeping",
+        "speed_factor": 0.98
+      },
+      {
+        "name": "T10 Traction",
+        "start": 0.915,
+        "end": 0.946,
+        "type": "traction",
+        "speed_factor": 0.84
+      },
+      {
+        "name": "Main Straight Approach",
+        "start": 0.946,
+        "end": 1.00,
+        "type": "straight",
+        "speed_factor": 1.12
+      }
+    ]
+  },
+  {
+    "id": 5,
+    "name": "Silverstone Circuit",
+    "country": "United Kingdom",
+    "base_lap_time": 87.1,
+    "total_laps": 52,
+    "pit_loss_time": 23.5,
+    "track_length_m": 5891.0,
+    "overtaking_difficulty": 0.42,
+    "geo_file": "circuit_sources/silverstone_osm_geo.json",
+    "sectors": [
+      {
+        "name": "Sector 1",
+        "type": "abbey_village_loop_wellington",
+        "speed_factor": 1.01
+      },
+      {
+        "name": "Sector 2",
+        "type": "brooklands_copse_maggotts_becketts",
+        "speed_factor": 1.03
+      },
+      {
+        "name": "Sector 3",
+        "type": "hangar_stowe_vale_club",
+        "speed_factor": 0.98
+      }
+    ],
+    "editor": {
+      "backgroundImage": "/circuit-references/silverstone-reference.webp",
+      "backgroundOpacity": 0.42,
+      "view": {
+        "offsetX": 0,
+        "offsetY": 0,
+        "scale": 1
+      },
+      "centerlineControlPoints": [
+        { "x": 555, "y": 482 },
+        { "x": 470, "y": 402 },
+        { "x": 460, "y": 320 },
+        { "x": 420, "y": 258 },
+        { "x": 518, "y": 242 },
+        { "x": 382, "y": 220 },
+        { "x": 235, "y": 420 },
+        { "x": 292, "y": 472 },
+        { "x": 282, "y": 515 },
+        { "x": 150, "y": 430 },
+        { "x": 128, "y": 205 },
+        { "x": 315, "y": 125 },
+        { "x": 382, "y": 104 },
+        { "x": 470, "y": 118 },
+        { "x": 555, "y": 94 },
+        { "x": 612, "y": 170 },
+        { "x": 770, "y": 286 },
+        { "x": 748, "y": 382 },
+        { "x": 660, "y": 460 },
+        { "x": 665, "y": 520 }
+      ],
+      "pitLaneControlPoints": [
+        { "x": 708, "y": 418 },
+        { "x": 610, "y": 470 },
+        { "x": 560, "y": 505 },
+        { "x": 470, "y": 420 },
+        { "x": 460, "y": 326 }
+      ],
+      "trackWidth": 22,
+      "sampleSpacing": 14
+    },
+    "layout_segments": [
+      {
+        "type": "straight",
+        "start": [555, 482],
+        "end": [470, 402]
+      },
+      {
+        "type": "bezier",
+        "start": [470, 402],
+        "cp1": [452, 385],
+        "cp2": [452, 348],
+        "end": [460, 320],
+        "samples": 30
+      },
+      {
+        "type": "bezier",
+        "start": [460, 320],
+        "cp1": [465, 292],
+        "cp2": [430, 280],
+        "end": [420, 258],
+        "samples": 28
+      },
+      {
+        "type": "bezier",
+        "start": [420, 258],
+        "cp1": [418, 225],
+        "cp2": [500, 220],
+        "end": [518, 242],
+        "samples": 34
+      },
+      {
+        "type": "bezier",
+        "start": [518, 242],
+        "cp1": [535, 230],
+        "cp2": [430, 198],
+        "end": [382, 220],
+        "samples": 42
+      },
+      {
+        "type": "straight",
+        "start": [382, 220],
+        "end": [235, 420]
+      },
+      {
+        "type": "bezier",
+        "start": [235, 420],
+        "cp1": [220, 455],
+        "cp2": [250, 476],
+        "end": [292, 472],
+        "samples": 32
+      },
+      {
+        "type": "bezier",
+        "start": [292, 472],
+        "cp1": [325, 470],
+        "cp2": [326, 530],
+        "end": [282, 515],
+        "samples": 32
+      },
+      {
+        "type": "straight",
+        "start": [282, 515],
+        "end": [150, 430]
+      },
+      {
+        "type": "straight",
+        "start": [150, 430],
+        "end": [128, 205]
+      },
+      {
+        "type": "bezier",
+        "start": [128, 205],
+        "cp1": [122, 165],
+        "cp2": [220, 135],
+        "end": [315, 125],
+        "samples": 44
+      },
+      {
+        "type": "bezier",
+        "start": [315, 125],
+        "cp1": [345, 122],
+        "cp2": [355, 100],
+        "end": [382, 104],
+        "samples": 30
+      },
+      {
+        "type": "bezier",
+        "start": [382, 104],
+        "cp1": [410, 110],
+        "cp2": [435, 128],
+        "end": [470, 118],
+        "samples": 30
+      },
+      {
+        "type": "bezier",
+        "start": [470, 118],
+        "cp1": [510, 104],
+        "cp2": [525, 82],
+        "end": [555, 94],
+        "samples": 34
+      },
+      {
+        "type": "bezier",
+        "start": [555, 94],
+        "cp1": [588, 108],
+        "cp2": [578, 145],
+        "end": [612, 170],
+        "samples": 36
+      },
+      {
+        "type": "straight",
+        "start": [612, 170],
+        "end": [770, 286]
+      },
+      {
+        "type": "bezier",
+        "start": [770, 286],
+        "cp1": [812, 318],
+        "cp2": [790, 365],
+        "end": [748, 382],
+        "samples": 34
+      },
+      {
+        "type": "straight",
+        "start": [748, 382],
+        "end": [660, 460]
+      },
+      {
+        "type": "bezier",
+        "start": [660, 460],
+        "cp1": [640, 478],
+        "cp2": [700, 490],
+        "end": [665, 520],
+        "samples": 30
+      },
+      {
+        "type": "bezier",
+        "start": [665, 520],
+        "cp1": [630, 548],
+        "cp2": [578, 544],
+        "end": [555, 482],
+        "samples": 42
+      }
+    ],
+    "start_finish_index": 0,
+    "track_coords": [
+      [555, 482],
+      [470, 402],
+      [460, 320],
+      [420, 258],
+      [518, 242],
+      [382, 220],
+      [235, 420],
+      [292, 472],
+      [282, 515],
+      [150, 430],
+      [128, 205],
+      [315, 125],
+      [382, 104],
+      [470, 118],
+      [555, 94],
+      [612, 170],
+      [770, 286],
+      [748, 382],
+      [660, 460],
+      [665, 520],
+      [555, 482]
+    ],
+    "pit_lane": {
+      "entry_progress": 0.887,
+      "exit_progress": 0.078,
+      "lane_offset": 0,
+      "wall_offset": -10,
+      "box_offset": 10,
+      "entry_blend": 0.010,
+      "exit_blend": 0.010,
+      "samples": 50
+    },
+    "pit_lane_coords": [
+      [708, 418],
+      [610, 470],
+      [560, 505],
+      [470, 420],
+      [460, 326]
+    ],
+    "pit_lane_segments": [
+      {
+        "type": "bezier",
+        "start": [708, 418],
+        "cp1": [690, 430],
+        "cp2": [650, 448],
+        "end": [610, 470],
+        "samples": 18
+      },
+      {
+        "type": "bezier",
+        "start": [610, 470],
+        "cp1": [592, 482],
+        "cp2": [575, 503],
+        "end": [560, 505],
+        "samples": 16
+      },
+      {
+        "type": "straight",
+        "start": [560, 505],
+        "end": [470, 420]
+      },
+      {
+        "type": "bezier",
+        "start": [470, 420],
+        "cp1": [458, 392],
+        "cp2": [456, 352],
+        "end": [460, 326],
+        "samples": 22
+      }
+    ],
+    "drs_zones": [
+      {
+        "name": "Wellington Straight",
+        "detection": 0.196,
+        "start": 0.215,
+        "end": 0.295
+      },
+      {
+        "name": "Hangar Straight",
+        "detection": 0.735,
+        "start": 0.755,
+        "end": 0.815
+      }
+    ],
+    "landmarks": [
+      {
+        "type": "start_finish",
+        "label": "S/F",
+        "track_index": 0,
+        "progress": 0.000
+      },
+      {
+        "type": "pit",
+        "label": "PIT IN",
+        "track_index": 0,
+        "progress": 0.887
+      },
+      {
+        "type": "pit",
+        "label": "PIT OUT",
+        "track_index": 0,
+        "progress": 0.078
+      },
+      {
+        "type": "corner",
+        "label": "T1 Abbey",
+        "track_index": 0,
+        "progress": 0.044
+      },
+      {
+        "type": "corner",
+        "label": "T2 Farm",
+        "track_index": 0,
+        "progress": 0.081
+      },
+      {
+        "type": "corner",
+        "label": "T3 Village",
+        "track_index": 0,
+        "progress": 0.112
+      },
+      {
+        "type": "corner",
+        "label": "T4 The Loop",
+        "track_index": 0,
+        "progress": 0.149
+      },
+      {
+        "type": "corner",
+        "label": "T5 Aintree",
+        "track_index": 0,
+        "progress": 0.203
+      },
+      {
+        "type": "corner",
+        "label": "T6 Brooklands",
+        "track_index": 0,
+        "progress": 0.304
+      },
+      {
+        "type": "corner",
+        "label": "T7 Luffield",
+        "track_index": 0,
+        "progress": 0.341
+      },
+      {
+        "type": "corner",
+        "label": "T8 Woodcote",
+        "track_index": 0,
+        "progress": 0.434
+      },
+      {
+        "type": "corner",
+        "label": "T9 Copse",
+        "track_index": 0,
+        "progress": 0.521
+      },
+      {
+        "type": "corner",
+        "label": "T10 Maggotts",
+        "track_index": 0,
+        "progress": 0.608
+      },
+      {
+        "type": "corner",
+        "label": "T11 Maggotts",
+        "track_index": 0,
+        "progress": 0.639
+      },
+      {
+        "type": "corner",
+        "label": "T12 Becketts",
+        "track_index": 0,
+        "progress": 0.670
+      },
+      {
+        "type": "corner",
+        "label": "T13 Becketts",
+        "track_index": 0,
+        "progress": 0.708
+      },
+      {
+        "type": "corner",
+        "label": "T14 Chapel",
+        "track_index": 0,
+        "progress": 0.745
+      },
+      {
+        "type": "corner",
+        "label": "T15 Stowe",
+        "track_index": 0,
+        "progress": 0.826
+      },
+      {
+        "type": "corner",
+        "label": "T16 Vale",
+        "track_index": 0,
+        "progress": 0.920
+      },
+      {
+        "type": "corner",
+        "label": "T17 Vale",
+        "track_index": 0,
+        "progress": 0.944
+      },
+      {
+        "type": "corner",
+        "label": "T18 Club",
+        "track_index": 0,
+        "progress": 0.975
+      }
+    ],
+    "segments": [
+      {
+        "name": "Hamilton Straight to Abbey",
+        "start": 0.000,
+        "end": 0.050,
+        "type": "straight",
+        "speed_factor": 1.16
+      },
+      {
+        "name": "Abbey-Farm Sweep",
+        "start": 0.050,
+        "end": 0.085,
+        "type": "sweeping",
+        "speed_factor": 1.08
+      },
+      {
+        "name": "Village Braking",
+        "start": 0.085,
+        "end": 0.125,
+        "type": "heavy_braking",
+        "speed_factor": 0.70
+      },
+      {
+        "name": "Loop-Aintree Complex",
+        "start": 0.125,
+        "end": 0.205,
+        "type": "technical",
+        "speed_factor": 0.80
+      },
+      {
+        "name": "T5-T6 Straight",
+        "start": 0.205,
+        "end": 0.305,
+        "type": "straight",
+        "speed_factor": 1.15
+      },
+      {
+        "name": "Brooklands Entry",
+        "start": 0.305,
+        "end": 0.345,
+        "type": "heavy_braking",
+        "speed_factor": 0.68
+      },
+      {
+        "name": "Luffield-Woodcote",
+        "start": 0.345,
+        "end": 0.435,
+        "type": "traction",
+        "speed_factor": 0.82
+      },
+      {
+        "name": "T8-T9 Straight",
+        "start": 0.435,
+        "end": 0.525,
+        "type": "straight",
+        "speed_factor": 1.12
+      },
+      {
+        "name": "Copse Approach",
+        "start": 0.525,
+        "end": 0.610,
+        "type": "straight",
+        "speed_factor": 1.10
+      },
+      {
+        "name": "Maggotts-Becketts-Chapel",
+        "start": 0.610,
+        "end": 0.745,
+        "type": "technical",
+        "speed_factor": 0.86
+      },
+      {
+        "name": "Hangar Straight",
+        "start": 0.745,
+        "end": 0.825,
+        "type": "straight",
+        "speed_factor": 1.17
+      },
+      {
+        "name": "Stowe Braking",
+        "start": 0.825,
+        "end": 0.865,
+        "type": "heavy_braking",
+        "speed_factor": 0.66
+      },
+      {
+        "name": "Vale",
+        "start": 0.865,
+        "end": 0.930,
+        "type": "traction",
+        "speed_factor": 0.82
+      },
+      {
+        "name": "Club Complex",
+        "start": 0.930,
+        "end": 0.970,
+        "type": "technical",
+        "speed_factor": 0.84
+      },
+      {
+        "name": "Club Exit to Start",
+        "start": 0.970,
+        "end": 1.000,
+        "type": "straight",
+        "speed_factor": 1.12
+      }
+    ]
+  },
+  {
+    "id": 6,
+    "name": "Circuit de Spa-Francorchamps",
+    "country": "Belgium",
+    "base_lap_time": 106.3,
+    "total_laps": 44,
+    "pit_loss_time": 23.5,
+    "track_length_m": 7004.0,
+    "overtaking_difficulty": 0.36,
+    "geo_file": "circuit_sources/spa_francorchamps_osm_geo.json",
+    "sectors": [
+      {
+        "name": "Sector 1",
+        "type": "la_source_raidillon_kemmel",
+        "speed_factor": 1.04
+      },
+      {
+        "name": "Sector 2",
+        "type": "les_combes_pouhon_fagnes",
+        "speed_factor": 0.96
+      },
+      {
+        "name": "Sector 3",
+        "type": "campus_blanchimont_bus_stop",
+        "speed_factor": 1.02
+      }
+    ],
+    "pit_lane": {
+      "wall_offset": 12,
+      "box_offset": 10
+    },
+    "drs_zones": [
+      {
+        "name": "Kemmel Straight",
+        "start": 0.217,
+        "end": 0.302
+      },
+      {
+        "name": "Main Straight",
+        "start": 0.954,
+        "end": 0.030
+      }
+    ],
+    "landmarks": [
+      {
+        "type": "start_finish",
+        "label": "S/F",
+        "progress": 0.000
+      },
+      {
+        "type": "pit",
+        "label": "PIT LANE",
+        "progress": 0.925
+      },
+      {
+        "type": "corner",
+        "label": "T1 La Source",
+        "progress": 0.039
+      },
+      {
+        "type": "corner",
+        "label": "T2 Eau Rouge",
+        "progress": 0.128
+      },
+      {
+        "type": "corner",
+        "label": "T3 Eau Rouge",
+        "progress": 0.135
+      },
+      {
+        "type": "corner",
+        "label": "T4 Raidillon",
+        "progress": 0.156
+      },
+      {
+        "type": "corner",
+        "label": "T5 Les Combes",
+        "progress": 0.328
+      },
+      {
+        "type": "corner",
+        "label": "T6 Les Combes",
+        "progress": 0.340
+      },
+      {
+        "type": "corner",
+        "label": "T7 Malmedy",
+        "progress": 0.364
+      },
+      {
+        "type": "corner",
+        "label": "T8 Bruxelles",
+        "progress": 0.422
+      },
+      {
+        "type": "corner",
+        "label": "T9 Speakers Corner",
+        "progress": 0.458
+      },
+      {
+        "type": "corner",
+        "label": "T10 Pouhon",
+        "progress": 0.535
+      },
+      {
+        "type": "corner",
+        "label": "T11 Pouhon",
+        "progress": 0.560
+      },
+      {
+        "type": "corner",
+        "label": "T12 Fagnes",
+        "progress": 0.620
+      },
+      {
+        "type": "corner",
+        "label": "T13 Fagnes",
+        "progress": 0.643
+      },
+      {
+        "type": "corner",
+        "label": "T14 Campus",
+        "progress": 0.690
+      },
+      {
+        "type": "corner",
+        "label": "T15 Paul Frere",
+        "progress": 0.722
+      },
+      {
+        "type": "corner",
+        "label": "T16 Blanchimont",
+        "progress": 0.815
+      },
+      {
+        "type": "corner",
+        "label": "T17 Blanchimont",
+        "progress": 0.855
+      },
+      {
+        "type": "corner",
+        "label": "T18 Bus Stop",
+        "progress": 0.946
+      },
+      {
+        "type": "corner",
+        "label": "T19 Bus Stop",
+        "progress": 0.950
+      }
+    ],
+    "segments": [
+      {
+        "name": "Start/Finish Straight",
+        "start": 0.000,
+        "end": 0.030,
+        "type": "straight",
+        "speed_factor": 1.14
+      },
+      {
+        "name": "La Source Braking",
+        "start": 0.030,
+        "end": 0.060,
+        "type": "heavy_braking",
+        "speed_factor": 0.54
+      },
+      {
+        "name": "Eau Rouge Approach",
+        "start": 0.060,
+        "end": 0.125,
+        "type": "straight",
+        "speed_factor": 1.10
+      },
+      {
+        "name": "Eau Rouge and Raidillon",
+        "start": 0.125,
+        "end": 0.173,
+        "type": "sweeping",
+        "speed_factor": 1.08
+      },
+      {
+        "name": "Kemmel Straight",
+        "start": 0.173,
+        "end": 0.315,
+        "type": "straight",
+        "speed_factor": 1.20
+      },
+      {
+        "name": "Les Combes",
+        "start": 0.315,
+        "end": 0.355,
+        "type": "heavy_braking",
+        "speed_factor": 0.66
+      },
+      {
+        "name": "Malmedy and Bruxelles",
+        "start": 0.355,
+        "end": 0.445,
+        "type": "traction",
+        "speed_factor": 0.86
+      },
+      {
+        "name": "Speakers Corner",
+        "start": 0.445,
+        "end": 0.500,
+        "type": "technical",
+        "speed_factor": 0.80
+      },
+      {
+        "name": "Pouhon",
+        "start": 0.500,
+        "end": 0.580,
+        "type": "sweeping",
+        "speed_factor": 1.02
+      },
+      {
+        "name": "Fagnes",
+        "start": 0.580,
+        "end": 0.665,
+        "type": "technical",
+        "speed_factor": 0.82
+      },
+      {
+        "name": "Campus and Paul Frere",
+        "start": 0.665,
+        "end": 0.750,
+        "type": "traction",
+        "speed_factor": 0.90
+      },
+      {
+        "name": "Blanchimont Approach",
+        "start": 0.750,
+        "end": 0.795,
+        "type": "straight",
+        "speed_factor": 1.16
+      },
+      {
+        "name": "Blanchimont",
+        "start": 0.795,
+        "end": 0.885,
+        "type": "sweeping",
+        "speed_factor": 1.10
+      },
+      {
+        "name": "Bus Stop Approach",
+        "start": 0.885,
+        "end": 0.920,
+        "type": "straight",
+        "speed_factor": 1.18
+      },
+      {
+        "name": "Bus Stop Chicane",
+        "start": 0.920,
+        "end": 0.952,
+        "type": "heavy_braking",
+        "speed_factor": 0.58
+      },
+      {
+        "name": "Main Straight Approach",
+        "start": 0.952,
+        "end": 1.000,
+        "type": "straight",
+        "speed_factor": 1.12
+      }
+    ]
+  },
+  {
+    "id": 7,
+    "name": "Hungaroring",
+    "country": "Hungary",
+    "base_lap_time": 76.6,
+    "total_laps": 70,
+    "pit_loss_time": 22.0,
+    "track_length_m": 4381.0,
+    "overtaking_difficulty": 0.62,
+    "geo_file": "circuit_sources/hungaroring_osm_geo.json",
+    "sectors": [
+      {
+        "name": "Sector 1",
+        "type": "main_straight_turns_1_to_3",
+        "speed_factor": 1.01
+      },
+      {
+        "name": "Sector 2",
+        "type": "turns_4_to_11",
+        "speed_factor": 0.96
+      },
+      {
+        "name": "Sector 3",
+        "type": "turns_12_to_14",
+        "speed_factor": 0.98
+      }
+    ],
+    "pit_lane": {
+      "wall_offset": 11,
+      "box_offset": 10
+    },
+    "drs_zones": [
+      {
+        "name": "Main Straight",
+        "start": 0.955,
+        "end": 0.118
+      },
+      {
+        "name": "T1-T2 Straight",
+        "start": 0.1504,
+        "end": 0.235
+      }
+    ],
+    "landmarks": [
+      {
+        "type": "start_finish",
+        "label": "S/F",
+        "progress": 0.000
+      },
+      {
+        "type": "pit",
+        "label": "PIT LANE",
+        "progress": 0.883
+      },
+      {
+        "type": "corner",
+        "label": "T1",
+        "progress": 0.149
+      },
+      {
+        "type": "corner",
+        "label": "T2",
+        "progress": 0.265
+      },
+      {
+        "type": "corner",
+        "label": "T3",
+        "progress": 0.306
+      },
+      {
+        "type": "corner",
+        "label": "T4",
+        "progress": 0.414
+      },
+      {
+        "type": "corner",
+        "label": "T5",
+        "progress": 0.469
+      },
+      {
+        "type": "corner",
+        "label": "T6",
+        "progress": 0.544
+      },
+      {
+        "type": "corner",
+        "label": "T7",
+        "progress": 0.554
+      },
+      {
+        "type": "corner",
+        "label": "T8",
+        "progress": 0.597
+      },
+      {
+        "type": "corner",
+        "label": "T9",
+        "progress": 0.626
+      },
+      {
+        "type": "corner",
+        "label": "T10",
+        "progress": 0.667
+      },
+      {
+        "type": "corner",
+        "label": "T11",
+        "progress": 0.712
+      },
+      {
+        "type": "corner",
+        "label": "T12",
+        "progress": 0.808
+      },
+      {
+        "type": "corner",
+        "label": "T13",
+        "progress": 0.869
+      },
+      {
+        "type": "corner",
+        "label": "T14",
+        "progress": 0.946
+      }
+    ],
+    "segments": [
+      {
+        "name": "Start/Finish Straight",
+        "start": 0.000,
+        "end": 0.120,
+        "type": "straight",
+        "speed_factor": 1.16
+      },
+      {
+        "name": "Turn 1 Braking",
+        "start": 0.120,
+        "end": 0.150,
+        "type": "heavy_braking",
+        "speed_factor": 0.56
+      },
+      {
+        "name": "T1-T2 Straight",
+        "start": 0.150,
+        "end": 0.240,
+        "type": "straight",
+        "speed_factor": 1.12
+      },
+      {
+        "name": "Turn 2",
+        "start": 0.240,
+        "end": 0.290,
+        "type": "traction",
+        "speed_factor": 0.73
+      },
+      {
+        "name": "Turn 3",
+        "start": 0.290,
+        "end": 0.330,
+        "type": "traction",
+        "speed_factor": 0.84
+      },
+      {
+        "name": "T3-T4 Climb",
+        "start": 0.330,
+        "end": 0.390,
+        "type": "straight",
+        "speed_factor": 1.10
+      },
+      {
+        "name": "Turn 4",
+        "start": 0.390,
+        "end": 0.435,
+        "type": "sweeping",
+        "speed_factor": 1.02
+      },
+      {
+        "name": "Turn 5",
+        "start": 0.435,
+        "end": 0.495,
+        "type": "traction",
+        "speed_factor": 0.83
+      },
+      {
+        "name": "Turns 6-7 Chicane",
+        "start": 0.495,
+        "end": 0.570,
+        "type": "technical",
+        "speed_factor": 0.72
+      },
+      {
+        "name": "Turns 8-9",
+        "start": 0.570,
+        "end": 0.645,
+        "type": "technical",
+        "speed_factor": 0.82
+      },
+      {
+        "name": "Turn 10",
+        "start": 0.645,
+        "end": 0.690,
+        "type": "sweeping",
+        "speed_factor": 1.03
+      },
+      {
+        "name": "Turn 11",
+        "start": 0.690,
+        "end": 0.740,
+        "type": "sweeping",
+        "speed_factor": 0.98
+      },
+      {
+        "name": "T11-T12 Straight",
+        "start": 0.740,
+        "end": 0.780,
+        "type": "straight",
+        "speed_factor": 1.08
+      },
+      {
+        "name": "Turn 12 Braking",
+        "start": 0.780,
+        "end": 0.830,
+        "type": "heavy_braking",
+        "speed_factor": 0.64
+      },
+      {
+        "name": "Turn 13",
+        "start": 0.830,
+        "end": 0.900,
+        "type": "traction",
+        "speed_factor": 0.76
+      },
+      {
+        "name": "Turn 14",
+        "start": 0.900,
+        "end": 0.955,
+        "type": "traction",
+        "speed_factor": 0.74
+      },
+      {
+        "name": "Main Straight Approach",
+        "start": 0.955,
+        "end": 1.000,
+        "type": "straight",
+        "speed_factor": 1.12
+      }
+    ]
+  }
+]

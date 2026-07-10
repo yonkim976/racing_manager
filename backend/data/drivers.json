@@ -1,0 +1,302 @@
+[
+  {
+    "id": 1,
+    "name": "Max Verstappen",
+    "abbreviation": "VER",
+    "number": 1,
+    "team_id": 1,
+    "stats": {
+      "pace": 0.98,
+      "consistency": 0.96,
+      "tire_management": 0.93,
+      "wet_skill": 0.97,
+      "overtaking": 0.96,
+      "defending": 0.95
+    }
+  },
+  {
+    "id": 2,
+    "name": "Sergio Perez",
+    "abbreviation": "PER",
+    "number": 11,
+    "team_id": 1,
+    "stats": {
+      "pace": 0.88,
+      "consistency": 0.82,
+      "tire_management": 0.90,
+      "wet_skill": 0.84,
+      "overtaking": 0.83,
+      "defending": 0.86
+    }
+  },
+  {
+    "id": 3,
+    "name": "Charles Leclerc",
+    "abbreviation": "LEC",
+    "number": 16,
+    "team_id": 2,
+    "stats": {
+      "pace": 0.95,
+      "consistency": 0.88,
+      "tire_management": 0.86,
+      "wet_skill": 0.90,
+      "overtaking": 0.90,
+      "defending": 0.88
+    }
+  },
+  {
+    "id": 4,
+    "name": "Carlos Sainz",
+    "abbreviation": "SAI",
+    "number": 55,
+    "team_id": 2,
+    "stats": {
+      "pace": 0.92,
+      "consistency": 0.90,
+      "tire_management": 0.88,
+      "wet_skill": 0.85,
+      "overtaking": 0.87,
+      "defending": 0.89
+    }
+  },
+  {
+    "id": 5,
+    "name": "Lando Norris",
+    "abbreviation": "NOR",
+    "number": 4,
+    "team_id": 3,
+    "stats": {
+      "pace": 0.94,
+      "consistency": 0.89,
+      "tire_management": 0.87,
+      "wet_skill": 0.91,
+      "overtaking": 0.91,
+      "defending": 0.85
+    }
+  },
+  {
+    "id": 6,
+    "name": "Oscar Piastri",
+    "abbreviation": "PIA",
+    "number": 81,
+    "team_id": 3,
+    "stats": {
+      "pace": 0.91,
+      "consistency": 0.87,
+      "tire_management": 0.85,
+      "wet_skill": 0.83,
+      "overtaking": 0.86,
+      "defending": 0.84
+    }
+  },
+  {
+    "id": 7,
+    "name": "Lewis Hamilton",
+    "abbreviation": "HAM",
+    "number": 44,
+    "team_id": 4,
+    "stats": {
+      "pace": 0.93,
+      "consistency": 0.91,
+      "tire_management": 0.95,
+      "wet_skill": 0.96,
+      "overtaking": 0.92,
+      "defending": 0.91
+    }
+  },
+  {
+    "id": 8,
+    "name": "George Russell",
+    "abbreviation": "RUS",
+    "number": 63,
+    "team_id": 4,
+    "stats": {
+      "pace": 0.92,
+      "consistency": 0.89,
+      "tire_management": 0.87,
+      "wet_skill": 0.88,
+      "overtaking": 0.88,
+      "defending": 0.87
+    }
+  },
+  {
+    "id": 9,
+    "name": "Fernando Alonso",
+    "abbreviation": "ALO",
+    "number": 14,
+    "team_id": 5,
+    "stats": {
+      "pace": 0.90,
+      "consistency": 0.93,
+      "tire_management": 0.94,
+      "wet_skill": 0.93,
+      "overtaking": 0.89,
+      "defending": 0.93
+    }
+  },
+  {
+    "id": 10,
+    "name": "Lance Stroll",
+    "abbreviation": "STR",
+    "number": 18,
+    "team_id": 5,
+    "stats": {
+      "pace": 0.83,
+      "consistency": 0.79,
+      "tire_management": 0.82,
+      "wet_skill": 0.80,
+      "overtaking": 0.78,
+      "defending": 0.80
+    }
+  },
+  {
+    "id": 11,
+    "name": "Pierre Gasly",
+    "abbreviation": "GAS",
+    "number": 10,
+    "team_id": 6,
+    "stats": {
+      "pace": 0.87,
+      "consistency": 0.85,
+      "tire_management": 0.84,
+      "wet_skill": 0.83,
+      "overtaking": 0.84,
+      "defending": 0.83
+    }
+  },
+  {
+    "id": 12,
+    "name": "Esteban Ocon",
+    "abbreviation": "OCO",
+    "number": 31,
+    "team_id": 6,
+    "stats": {
+      "pace": 0.85,
+      "consistency": 0.83,
+      "tire_management": 0.83,
+      "wet_skill": 0.82,
+      "overtaking": 0.80,
+      "defending": 0.85
+    }
+  },
+  {
+    "id": 13,
+    "name": "Alexander Albon",
+    "abbreviation": "ALB",
+    "number": 23,
+    "team_id": 7,
+    "stats": {
+      "pace": 0.87,
+      "consistency": 0.86,
+      "tire_management": 0.86,
+      "wet_skill": 0.84,
+      "overtaking": 0.85,
+      "defending": 0.84
+    }
+  },
+  {
+    "id": 14,
+    "name": "Logan Sargeant",
+    "abbreviation": "SAR",
+    "number": 2,
+    "team_id": 7,
+    "stats": {
+      "pace": 0.78,
+      "consistency": 0.74,
+      "tire_management": 0.76,
+      "wet_skill": 0.72,
+      "overtaking": 0.73,
+      "defending": 0.74
+    }
+  },
+  {
+    "id": 15,
+    "name": "Yuki Tsunoda",
+    "abbreviation": "TSU",
+    "number": 22,
+    "team_id": 8,
+    "stats": {
+      "pace": 0.86,
+      "consistency": 0.82,
+      "tire_management": 0.81,
+      "wet_skill": 0.80,
+      "overtaking": 0.83,
+      "defending": 0.81
+    }
+  },
+  {
+    "id": 16,
+    "name": "Daniel Ricciardo",
+    "abbreviation": "RIC",
+    "number": 3,
+    "team_id": 8,
+    "stats": {
+      "pace": 0.84,
+      "consistency": 0.81,
+      "tire_management": 0.83,
+      "wet_skill": 0.85,
+      "overtaking": 0.88,
+      "defending": 0.82
+    }
+  },
+  {
+    "id": 17,
+    "name": "Valtteri Bottas",
+    "abbreviation": "BOT",
+    "number": 77,
+    "team_id": 9,
+    "stats": {
+      "pace": 0.84,
+      "consistency": 0.85,
+      "tire_management": 0.84,
+      "wet_skill": 0.81,
+      "overtaking": 0.79,
+      "defending": 0.82
+    }
+  },
+  {
+    "id": 18,
+    "name": "Guanyu Zhou",
+    "abbreviation": "ZHO",
+    "number": 24,
+    "team_id": 9,
+    "stats": {
+      "pace": 0.82,
+      "consistency": 0.80,
+      "tire_management": 0.80,
+      "wet_skill": 0.78,
+      "overtaking": 0.77,
+      "defending": 0.79
+    }
+  },
+  {
+    "id": 19,
+    "name": "Kevin Magnussen",
+    "abbreviation": "MAG",
+    "number": 20,
+    "team_id": 10,
+    "stats": {
+      "pace": 0.84,
+      "consistency": 0.82,
+      "tire_management": 0.80,
+      "wet_skill": 0.82,
+      "overtaking": 0.82,
+      "defending": 0.87
+    }
+  },
+  {
+    "id": 20,
+    "name": "Nico Hulkenberg",
+    "abbreviation": "HUL",
+    "number": 27,
+    "team_id": 10,
+    "stats": {
+      "pace": 0.85,
+      "consistency": 0.84,
+      "tire_management": 0.83,
+      "wet_skill": 0.83,
+      "overtaking": 0.81,
+      "defending": 0.84
+    }
+  }
+]
