@@ -60,6 +60,13 @@
   animation: pulse 1.6s infinite;
 }
 
+.race-header__sc-time {
+  margin-left: 7px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
 .race-header__pit-window {
   font-size: 0.65rem;
   font-weight: 700;

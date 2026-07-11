@@ -15,6 +15,8 @@ const MARKER_ROUTE_JUMP_THRESHOLD = 0.22;
 const FOLLOW_PAN_LERP = 0.055;
 const FOLLOW_DEADZONE_PX = 26;
 const SMOOTH_PATH_SEGMENT_STEPS = 6;
+const SAFETY_CAR_MARKER_KEY = '__safety_car__';
+const SAFETY_CAR_LEAD_PROGRESS = 0.012;
 
 function computeBounds(allCoords) {
   let minX = Infinity;
@@ -799,6 +801,60 @@ function createDriverMarker() {
   return marker;
 }
 
+function createSafetyCarMarker() {
+  const marker = new Container();
+  const halo = new Graphics();
+  const vehicle = new Container();
+  const body = new Graphics();
+  const wheels = new Graphics();
+  const lightBar = new Graphics();
+  const labelBg = new Graphics();
+  const label = new Text({
+    text: 'SAFETY CAR',
+    style: {
+      fontFamily: 'Inter, Arial, sans-serif',
+      fontSize: 9,
+      fontWeight: '900',
+      fill: 0xf7d038,
+      letterSpacing: 0.4,
+    },
+  });
+
+  halo.circle(0, 0, 10);
+  halo.fill({ color: 0xf39c12, alpha: 0.14 });
+  halo.stroke({ width: 1.5, color: 0xf7d038, alpha: 0.85 });
+
+  body.roundRect(-9, -4.5, 18, 9, 2.5);
+  body.fill({ color: 0xf7d038, alpha: 1 });
+  body.stroke({ width: 1, color: 0xffffff, alpha: 0.8 });
+  body.roundRect(-2.5, -3.5, 7, 7, 1.5);
+  body.fill({ color: 0x20232a, alpha: 0.95 });
+
+  wheels.roundRect(-6.5, -5.5, 4, 2, 0.6);
+  wheels.roundRect(3, -5.5, 4, 2, 0.6);
+  wheels.roundRect(-6.5, 3.5, 4, 2, 0.6);
+  wheels.roundRect(3, 3.5, 4, 2, 0.6);
+  wheels.fill({ color: 0x050508, alpha: 1 });
+
+  lightBar.circle(0, -4.8, 1.5);
+  lightBar.circle(0, 4.8, 1.5);
+  lightBar.fill({ color: 0xffa600, alpha: 1 });
+
+  vehicle.addChild(wheels, body, lightBar);
+  labelBg.roundRect(10, -21, label.width + 8, 14, 3);
+  labelBg.fill({ color: 0x050508, alpha: 0.82 });
+  labelBg.stroke({ width: 1, color: 0xf7d038, alpha: 0.65 });
+  label.x = 14;
+  label.y = -19;
+
+  marker.addChild(halo, labelBg, label, vehicle);
+  marker.dot = vehicle;
+  marker.lightBar = lightBar;
+  marker.routeAnimation = null;
+  marker.zIndex = 1000;
+  return marker;
+}
+
 export default function TrackCanvas({
   trackCoords,
   pitLaneCoords,
@@ -813,6 +869,13 @@ export default function TrackCanvas({
   playerDriverIds,
   speedMultiplier = 1,
   paused = false,
+  racePhase = 'green',
+  safetyCarStage = 'inactive',
+  safetyCarVisible = false,
+  safetyCarRoute = 'track',
+  safetyCarProgress = null,
+  safetyCarProgressRate = 0,
+  safetyCarPitLaneProgress = 0,
 }) {
   const containerRef = useRef(null);
   const appRef = useRef(null);
@@ -1102,6 +1165,9 @@ export default function TrackCanvas({
           if (transition && transitionProgress >= 1) {
             animation.routeTransition = null;
           }
+          if (marker.lightBar) {
+            marker.lightBar.alpha = Math.floor(now / 180) % 2 === 0 ? 1 : 0.3;
+          }
         });
 
         if (followedPose && appInstance && !pausedRef.current) {
@@ -1324,6 +1390,96 @@ export default function TrackCanvas({
         alpha: driver.in_pit ? 0.9 : 0.55,
       });
     });
+
+    const existingSafetyCar = dotsRef.current.get(SAFETY_CAR_MARKER_KEY);
+    if (racePhase !== 'sc' || !safetyCarVisible) {
+      if (existingSafetyCar) {
+        world.removeChild(existingSafetyCar);
+        existingSafetyCar.destroy({ children: true });
+        dotsRef.current.delete(SAFETY_CAR_MARKER_KEY);
+      }
+    } else {
+      const onTrackLeader = orderedPositions.find(
+        (driver) => !driver.retired && !driver.finished && !driver.in_pit,
+      );
+      const serverSafetyCarProgress = Number(safetyCarProgress);
+      const hasServerSafetyCarProgress = safetyCarProgress !== null
+        && Number.isFinite(serverSafetyCarProgress);
+      if (hasServerSafetyCarProgress || onTrackLeader || safetyCarRoute === 'pit') {
+        let safetyCar = existingSafetyCar;
+        const isNewSafetyCar = !safetyCar;
+        if (!safetyCar) {
+          safetyCar = createSafetyCarMarker();
+          world.addChild(safetyCar);
+          dotsRef.current.set(SAFETY_CAR_MARKER_KEY, safetyCar);
+        }
+
+        const routeType = safetyCarRoute === 'pit' && pitRoute ? 'pit' : 'track';
+        const fallbackProgress = Number(onTrackLeader?.progress || 0) + SAFETY_CAR_LEAD_PROGRESS;
+        const rawRouteProgress = routeType === 'pit'
+          ? Number(safetyCarPitLaneProgress || 0)
+          : (hasServerSafetyCarProgress ? serverSafetyCarProgress : fallbackProgress);
+        const routeProgress = routeType === 'pit'
+          ? Math.min(1, Math.max(0, rawRouteProgress))
+          : ((rawRouteProgress % 1) + 1) % 1;
+        const serverProgressRate = routeType === 'pit'
+          ? 0
+          : (hasServerSafetyCarProgress
+            ? Number(safetyCarProgressRate || 0)
+            : Number(onTrackLeader?.progress_rate || 0));
+        const displayProgressRate = (Number.isFinite(serverProgressRate) ? serverProgressRate : 0)
+          * (paused ? 0 : speedMultiplier);
+        const previousAnimation = safetyCar.routeAnimation;
+        const previousProgress = previousAnimation
+          ? progressAtTime(previousAnimation, now)
+          : routeProgress;
+        const closed = routeType !== 'pit';
+        const routeChanged = Boolean(previousAnimation && previousAnimation.routeType !== routeType);
+        const progressJump = Math.abs(routeProgressDelta(previousProgress, routeProgress, closed));
+        const progressDiscontinuous = !routeChanged && progressJump > MARKER_ROUTE_JUMP_THRESHOLD;
+        const resetProgress = isNewSafetyCar || routeChanged || progressDiscontinuous;
+        const previousTransition = previousAnimation?.routeTransition;
+        const transitionStillActive = previousTransition
+          && now < previousTransition.startTime + previousTransition.duration;
+        let routeTransition = transitionStillActive && !viewChanged ? previousTransition : null;
+        if (routeChanged && !viewChanged) {
+          routeTransition = {
+            fromX: safetyCar.x,
+            fromY: safetyCar.y,
+            fromAngle: safetyCar.dot.rotation,
+            startTime: now,
+            duration: MARKER_ROUTE_TRANSITION_MS,
+          };
+        }
+        const fromProgress = resetProgress ? routeProgress : previousProgress;
+
+        safetyCar.routeAnimation = {
+          routeType,
+          fromProgress,
+          toProgress: routeProgress,
+          startTime: now,
+          duration: resetProgress ? 1 : MARKER_INTERPOLATION_MS,
+          closed,
+          progressRate: displayProgressRate,
+          routeTransition,
+        };
+
+        if (isNewSafetyCar || progressDiscontinuous || viewChanged) {
+          const { x, y, angle } = markerPoseForRoute(
+            routeType,
+            fromProgress,
+            transform,
+            smoothedTrackCoords,
+            trackMetrics,
+            pitRoute,
+            pitMetrics,
+          );
+          safetyCar.x = x;
+          safetyCar.y = y;
+          safetyCar.dot.rotation = angle;
+        }
+      }
+    }
   }, [
     appReady,
     normalizedTrackCoords,
@@ -1337,6 +1493,13 @@ export default function TrackCanvas({
     zoomPercent,
     speedMultiplier,
     paused,
+    racePhase,
+    safetyCarStage,
+    safetyCarVisible,
+    safetyCarRoute,
+    safetyCarProgress,
+    safetyCarProgressRate,
+    safetyCarPitLaneProgress,
   ]);
 
   useEffect(() => {

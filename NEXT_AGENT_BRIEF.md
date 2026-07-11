@@ -39,9 +39,9 @@ npm run build
 | 1 | **거리기반 그리드 동시 출발** — 순차 0.3초 출발 제거, `GRID_SLOT_PROGRESS_GAP=0.0028` | `race_engine._init_grid`, `TrackCanvas.jsx` |
 | 2 | **Q1/Q2/Q3 녹아웃 예선** + track evolution(Q1=1.0, Q2=0.997, Q3=0.994) | `qualifying.py`, `RaceSetup.jsx`, `schemas.py` |
 | 3 | **사고 분류 2축** (원인×심각도) + **SC/VSC 상태머신** | `incidents.py`, `race_engine.py` |
-| 4 | **SC 필드 번칭업** + SC/VSC 중 순위 고정·배틀/추월 억제 | `race_engine._bunch_up_field`, `_update_positions` |
-| 5 | **랩 기준 SC 해제** (`SC_DURATION_LAPS=3`), VSC는 시간 기준(25s) 유지 | `race_engine._tick_race_phase` |
-| 6 | **SC 명시적 피트 기회** (`pit_window_open`) + AI 공짜 피트 + **백마커 언랩** | `_ai_sc_pit_decisions`, `_unlap_backmarkers` |
+| 4 | **SC 물리 출동/철수** + 10대 길이(56m) 합류 판정, 7대 길이(39.2m) 목표 간격 | `_advance_safety_car`, `_sync_safety_car_queue` |
+| 5 | **사고 처리+대열 상태 기반 SC 해제**, VSC는 시간 기준(25s) 유지 | `_tick_safety_car_after_cars`, `_tick_race_phase` |
+| 6 | **SC 피트 기회** + AI 공짜 피트 + 실제 추가 랩 **백마커 언랩/리스타트** | `_ai_sc_pit_decisions`, `_start_sc_unlapping`, `_begin_sc_in_this_lap` |
 | 7 | **피트 3단계 자연화** — `in`/`stop`/`out`, 핏레인 경로 이동, 시간 증가형 표시 | `pit_stop.py`, `_tick_in_pit`, `TrackCanvas.jsx` |
 | 8 | **서킷 기하 검증** — 4개 서킷 모두 `validate_circuit_geometry` 통과 (임시 plot 도구는 삭제됨) | `track_geometry.py`, `circuits.json` |
 
@@ -49,8 +49,8 @@ npm run build
 
 ```text
 그리드:     GRID_SLOT_PROGRESS_GAP = 0.0028
-SC/VSC:     VSC ×1.4 / SC ×1.8, VSC 25s, SC 리더+3랩
-번칭업:     SC_BUNCH_PROGRESS_GAP = 0.0045
+SC/VSC:     VSC ×1.4 / SC 대열 ×1.8 / 미합류 거리별 ×1.08~×1.25, VSC 25s
+SC 간격:    10 car lengths × 5.6m를 서킷 길이에 맞춰 progress로 환산
 SC 피트:    pit_window_open (SC만), AI wear≥0.30 & prob 0.4
 피트:       in → stop → out, pit_loss_time(레인) + tire_change(정지)
             pit_lane_progress 0→1, pit_elapsed / pit_stop_elapsed (증가형)
@@ -59,21 +59,20 @@ SC 피트:    pit_window_open (SC만), AI wear≥0.30 & prob 0.4
 
 ## 알려진 한계 / 미완성 (다음 에이전트가 알아야 할 것)
 
-1. **피트 시작/종료 위치**: 피트는 여전히 **랩 완료(결승선)** 시점에 트리거됩니다. 핏레인 `entry_progress`/`exit_progress`와 트랙 `progress`가 연동되지 않아, 입·출구에서 트랙 위치와 약간 어긋날 수 있습니다.
-2. **피트 lane vs track progress**: SC 중 피트 차량은 트랙에서 멈추고, 핏레인 애니메이션만 별도로 진행됩니다.
-3. **Git 없음**: 루트는 git repo가 아니고 `backend/.git`도 비정상. `git status`/`diff`에 의존하지 마십시오.
-4. **pytest 미설치**: `.venv`에 pytest 없음. 테스트는 `python -m unittest discover -s tests`로 실행.
+1. **SC Race Director 선택지**: 저시야 20대 길이 간격 및 `OVERTAKING WILL NOT BE PERMITTED` 분기는 아직 없습니다.
+2. **VSC 종료 예고**: 현재 25초 뒤 바로 green이며 실제 FIA의 `VSC ENDING` 후 10~15초 랜덤 재개는 아직 없습니다.
+3. **SC 리스타트 AI**: 리더 가속 지점은 구현됐지만 팀/드라이버 성향별 재출발 전술은 없습니다.
+4. **테스트 실행**: `backend/.venv/bin/python -m unittest discover -s tests`를 사용합니다.
 
 ## 추천 다음 작업 (우선순위)
 
 ### P1 — 레이스/피트 고도화
-- [ ] **피트 entry/exit progress 연동**: `circuit.pit_lane.entry_progress`/`exit_progress` 기준으로 피트인·아웃 트리거 및 트랙 복귀 위치 정렬
 - [ ] **undercut/overcut**, traffic-aware pit timing
 - [ ] **더블 스태킹 / 피트 출구 정체** 모델
 
 ### P2 — SC/VSC 잔여
 - [ ] **적색기(red flag)**
-- [ ] **SC 재출발(restart)**: 리더 컨트롤, 대시 효과, 재출발 가속 구간
+- [ ] **VSC ENDING 10~15초 랜덤 재개**, 저시야/언랩 금지 Race Director 분기
 
 ### P3 — UI/셋업
 - [ ] **Race Setup 서킷 미리보기** (driver marker 없는 `CircuitPreview` 컴포넌트)

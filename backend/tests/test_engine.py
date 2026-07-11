@@ -32,8 +32,13 @@ from simulation.race_engine import (
     DEFENDER_LINE_DEFENSIVE,
     DEFENDER_LINE_RACING,
     PIT_LANE_SPEED_LIMIT_KPH,
-    SC_BUNCH_PROGRESS_GAP,
-    SC_DURATION_LAPS,
+    SC_CAR_LENGTH_M,
+    SC_CATCH_UP_FAST_LAP_TIME_FACTOR,
+    SC_CATCH_UP_NEAR_LAP_TIME_FACTOR,
+    SC_CLEANUP_SECONDS,
+    SC_MAX_GAP_CAR_LENGTHS,
+    SC_QUEUE_TARGET_CAR_LENGTHS,
+    VSC_DURATION_SECONDS,
     RaceEngine,
 )
 from simulation.track_geometry import (
@@ -948,16 +953,50 @@ class RaceEngineTests(unittest.TestCase):
         self.assertEqual(engine.race_phase, "vsc")
         self.assertAlmostEqual(engine._phase_lap_time_factor(), 1.4)
         self.assertTrue(any(e.type == "vsc_start" for e in events))
-        self.assertEqual(engine.build_tick_state().race_phase, "vsc")
+        tick = engine.build_tick_state()
+        self.assertEqual(tick.race_phase, "vsc")
+        self.assertEqual(tick.race_phase_remaining_seconds, VSC_DURATION_SECONDS)
+        self.assertEqual(tick.race_phase_remaining_laps, 0)
 
     def test_trigger_safety_car_sets_phase_and_factor(self) -> None:
-        engine = _make_engine()
+        engine = _make_engine_for_circuit(3)
         events: list = []
         engine._trigger_safety_car(events)
         self.assertEqual(engine.race_phase, "sc")
         self.assertTrue(engine.safety_car)
-        self.assertAlmostEqual(engine._phase_lap_time_factor(), 1.8)
+        self.assertAlmostEqual(
+            engine._phase_lap_time_factor(),
+            SC_CATCH_UP_FAST_LAP_TIME_FACTOR,
+        )
         self.assertTrue(any(e.type == "sc_start" for e in events))
+        tick = engine.build_tick_state()
+        self.assertEqual(tick.race_phase_remaining_seconds, 0.0)
+        self.assertEqual(tick.race_phase_remaining_laps, 0)
+        self.assertEqual(tick.safety_car_stage, "deploying")
+        self.assertTrue(tick.safety_car_visible)
+        self.assertEqual(tick.safety_car_route, "pit")
+        self.assertAlmostEqual(tick.safety_car_pit_lane_progress, 0.82)
+        self.assertGreaterEqual(engine._sc_cleanup_until, SC_CLEANUP_SECONDS)
+
+    def test_development_race_control_can_force_and_clear_phase(self) -> None:
+        engine = _make_engine()
+
+        vsc_events = engine.set_race_control_phase_for_testing("vsc")
+        self.assertEqual(engine.race_phase, "vsc")
+        self.assertTrue(any(e.type == "vsc_start" for e in vsc_events))
+
+        sc_events = engine.set_race_control_phase_for_testing("sc")
+        self.assertEqual(engine.race_phase, "sc")
+        self.assertTrue(any(e.type == "sc_start" for e in sc_events))
+
+        green_events = engine.set_race_control_phase_for_testing("green")
+        self.assertEqual(engine.race_phase, "sc")
+        self.assertTrue(engine.safety_car)
+        self.assertEqual(engine.safety_car_stage, "in_this_lap")
+        self.assertTrue(any(e.type == "sc_in_this_lap" for e in green_events))
+
+        with self.assertRaises(ValueError):
+            engine.set_race_control_phase_for_testing("red")
 
     def test_safety_car_upgrades_and_outranks_vsc(self) -> None:
         engine = _make_engine()
@@ -975,7 +1014,7 @@ class RaceEngineTests(unittest.TestCase):
         engine._trigger_vsc(events)
         engine.race_elapsed = engine._phase_until + 1.0
         end_events: list = []
-        engine._tick_race_phase(end_events)
+        engine._tick_race_phase(GAME_TICK_SECONDS, end_events)
         self.assertEqual(engine.race_phase, "green")
         self.assertFalse(engine.safety_car)
         self.assertTrue(any(e.type == "vsc_end" for e in end_events))
@@ -1033,15 +1072,44 @@ class RaceEngineTests(unittest.TestCase):
         self.assertGreater(engine.driver_states[target].total_time, before)
         self.assertTrue(any(e.type == "incident" for e in events))
 
-    def test_safety_car_bunches_up_field(self) -> None:
+    def test_safety_car_forms_queue_without_instantly_moving_field(self) -> None:
         engine = _make_engine()
         for _ in range(120):
             engine.tick(GAME_TICK_SECONDS)
 
+        # Exercise a field spread over roughly three quarters of a lap.
+        spread_field = sorted(
+            engine.driver_states.values(),
+            key=lambda state: state.position,
+        )
+        leader_total = spread_field[0].total_progress
+        for index, state in enumerate(spread_field):
+            engine._set_state_total_progress(state, leader_total - index * 0.04)
+
+        progress_before = {
+            state.driver_id: state.total_progress for state in engine.driver_states.values()
+        }
         order_before = [
             s.driver_id for s in sorted(engine.driver_states.values(), key=lambda s: s.position)
         ]
         engine._trigger_safety_car([])
+        deployed_at = engine.race_elapsed
+
+        self.assertEqual(
+            progress_before,
+            {state.driver_id: state.total_progress for state in engine.driver_states.values()},
+        )
+
+        engine._sc_cleanup_until = float("inf")
+        for _ in range(3000):
+            engine.tick(GAME_TICK_SECONDS)
+            if engine._safety_car_queue_formed:
+                break
+        self.assertTrue(engine._safety_car_queue_formed)
+        self.assertLessEqual(
+            engine.race_elapsed - deployed_at,
+            engine.circuit.base_lap_time * 2.0,
+        )
 
         running = sorted(
             (
@@ -1051,16 +1119,65 @@ class RaceEngineTests(unittest.TestCase):
             ),
             key=lambda s: s.position,
         )
-        # 인접 차량 간 간격이 번칭업 간격으로 균일하게 압축된다.
+        max_gap = engine._sc_max_gap_progress()
         for ahead, behind in zip(running, running[1:]):
             gap = ahead.total_progress - behind.total_progress
-            self.assertAlmostEqual(gap, SC_BUNCH_PROGRESS_GAP, places=4)
+            self.assertLessEqual(gap, max_gap + 1e-6)
 
-        # 번칭업은 순위를 바꾸지 않는다.
+        # Once joined, cars continue closing gently toward the seven-car target.
+        for _ in range(240):
+            engine.tick(GAME_TICK_SECONDS)
+        running = sorted(
+            (
+                s
+                for s in engine.driver_states.values()
+                if not s.retired and not s.finished and not s.in_pit
+            ),
+            key=lambda s: s.position,
+        )
+        target_gap_m = SC_CAR_LENGTH_M * SC_QUEUE_TARGET_CAR_LENGTHS
+        for ahead, behind in zip(running, running[1:]):
+            gap_m = (ahead.total_progress - behind.total_progress) * engine.track_length_m
+            self.assertLessEqual(gap_m, target_gap_m + SC_CAR_LENGTH_M)
+
         order_after = [
             s.driver_id for s in sorted(engine.driver_states.values(), key=lambda s: s.position)
         ]
         self.assertEqual(order_before, order_after)
+
+    def test_safety_car_queue_gap_distances_and_variable_catch_up_pace(self) -> None:
+        engine = _make_engine()
+        engine._trigger_safety_car([])
+        running = sorted(engine.driver_states.values(), key=lambda state: state.position)
+        leader = running[0]
+
+        self.assertAlmostEqual(
+            engine._sc_target_gap_progress() * engine.track_length_m,
+            SC_CAR_LENGTH_M * SC_QUEUE_TARGET_CAR_LENGTHS,
+        )
+        self.assertAlmostEqual(
+            engine._sc_max_gap_progress() * engine.track_length_m,
+            SC_CAR_LENGTH_M * SC_MAX_GAP_CAR_LENGTHS,
+        )
+
+        engine.safety_car_stage = "collecting"
+        engine._safety_car_total_progress = leader.total_progress + 0.5
+        far_factor = engine._phase_lap_time_factor(leader)
+        engine._safety_car_total_progress = (
+            leader.total_progress + engine._sc_max_gap_progress()
+        )
+        near_factor = engine._phase_lap_time_factor(leader)
+
+        self.assertAlmostEqual(far_factor, SC_CATCH_UP_FAST_LAP_TIME_FACTOR)
+        self.assertAlmostEqual(near_factor, SC_CATCH_UP_NEAR_LAP_TIME_FACTOR)
+        self.assertLess(far_factor, near_factor)
+
+        engine._sc_caught_driver_ids.add(leader.driver_id)
+        engine._safety_car_total_progress = (
+            leader.total_progress + engine._sc_max_gap_progress() + 0.01
+        )
+        engine._sync_safety_car_queue([])
+        self.assertNotIn(leader.driver_id, engine._sc_caught_driver_ids)
 
     def test_safety_car_keeps_order_frozen(self) -> None:
         engine = _make_engine()
@@ -1077,26 +1194,159 @@ class RaceEngineTests(unittest.TestCase):
         ]
         self.assertEqual(order_at_deploy, order_under_sc)
 
-    def test_safety_car_releases_on_lap_basis(self) -> None:
-        engine = _make_engine()
-        for _ in range(120):
-            engine.tick(GAME_TICK_SECONDS)
+    def test_safety_car_pit_lane_distance_updates_order_without_track_overtakes(self) -> None:
+        engine = _make_engine_for_circuit(3)
         engine._trigger_safety_car([])
-        self.assertEqual(engine.race_phase, "sc")
-        self.assertEqual(engine._sc_end_lap, engine._leader_lap() + SC_DURATION_LAPS)
 
-        # 리더가 해제 기준 랩에 도달하기 전에는 SC가 유지된다.
-        engine._tick_race_phase([])
+        ordered = sorted(engine.driver_states.values(), key=lambda state: state.position)
+        pitting_car = ordered[0]
+        next_on_track = ordered[1]
+        frozen_on_track_order = [state.driver_id for state in ordered[1:]]
+
+        pitting_car.in_pit = True
+        pitting_car.total_progress = next_on_track.total_progress - 0.001
+        engine._update_positions()
+
+        self.assertLess(next_on_track.position, pitting_car.position)
+        self.assertEqual(
+            frozen_on_track_order,
+            [
+                state.driver_id
+                for state in sorted(engine.driver_states.values(), key=lambda state: state.position)
+                if state is not pitting_car
+            ],
+        )
+
+        position_at_pit_exit = pitting_car.position
+        pitting_car.in_pit = False
+        engine._update_positions()
+        self.assertEqual(pitting_car.position, position_at_pit_exit)
+
+    def test_safety_car_progress_does_not_jump_back_when_leader_pits(self) -> None:
+        engine = _make_engine_for_circuit(3)
+        engine._trigger_safety_car([])
+        engine._tick_race_phase(3.0, [])
+        progress_before = engine._safety_car_total_progress
+        self.assertIsNotNone(progress_before)
+        self.assertEqual(engine.safety_car_stage, "collecting")
+
+        leader = engine._on_track_leader()
+        self.assertIsNotNone(leader)
+        leader.in_pit = True
+        engine._update_positions()
+        replacement_leader = engine._on_track_leader()
+        self.assertIsNotNone(replacement_leader)
+        self.assertIsNot(leader, replacement_leader)
+
+        engine._tick_race_phase(GAME_TICK_SECONDS, [])
+        self.assertGreater(engine._safety_car_total_progress, progress_before)
+        self.assertGreater(engine._safety_car_progress_rate, 0.0)
+        self.assertAlmostEqual(
+            engine.build_tick_state().safety_car_progress,
+            engine._safety_car_total_progress % 1.0,
+            places=6,
+        )
+
+    def test_safety_car_deploys_from_configured_pit_exit_on_real_circuits(self) -> None:
+        for circuit_id in (3, 4, 5, 6, 7):
+            engine = _make_engine_for_circuit(circuit_id)
+            leader = engine._on_track_leader()
+            exit_progress = engine.circuit.pit_lane.exit_progress
+            self.assertIsNotNone(leader)
+            self.assertIsNotNone(exit_progress)
+
+            engine._trigger_safety_car([])
+            expected_total = engine._total_progress_at_or_after(
+                leader.total_progress,
+                exit_progress,
+            )
+            self.assertAlmostEqual(engine._safety_car_total_progress, expected_total)
+            self.assertEqual(engine._safety_car_route, "pit")
+            self.assertEqual(engine.safety_car_stage, "deploying")
+
+            engine._tick_race_phase(3.0, [])
+            self.assertEqual(engine._safety_car_route, "track")
+            self.assertEqual(engine.safety_car_stage, "collecting")
+            self.assertAlmostEqual(
+                engine.build_tick_state().safety_car_progress,
+                exit_progress,
+                places=4,
+            )
+
+    def test_safety_car_leader_loses_places_during_complete_pit_cycle(self) -> None:
+        engine = _make_engine_for_circuit(3)
+        leader = min(engine.driver_states.values(), key=lambda state: state.position)
+        entry = engine.circuit.pit_lane.entry_progress
+        self.assertIsNotNone(entry)
+        for index, state in enumerate(
+            sorted(engine.driver_states.values(), key=lambda item: item.position)
+        ):
+            engine._set_state_total_progress(state, entry - 0.001 - index * 0.004)
+        leader.pit_request = TireCompound.HARD
+        engine._trigger_safety_car([])
+
+        entered_pit = False
+        positions_while_in_pit: list[int] = []
+        for _ in range(2000):
+            engine.tick(GAME_TICK_SECONDS)
+            if leader.in_pit:
+                entered_pit = True
+                positions_while_in_pit.append(leader.position)
+            if entered_pit and not leader.in_pit:
+                break
+
+        self.assertTrue(entered_pit)
+        self.assertEqual(leader.pit_count, 1)
+        self.assertGreater(max(positions_while_in_pit), 1)
+        self.assertGreater(leader.position, 1)
         self.assertEqual(engine.race_phase, "sc")
 
-        # 리더가 SC_DURATION_LAPS만큼 더 주행하면 그린으로 복귀한다.
-        leader = max(engine.driver_states.values(), key=lambda s: s.total_progress)
-        leader.current_lap = engine._sc_end_lap
-        end_events: list = []
-        engine._tick_race_phase(end_events)
+    def test_safety_car_pits_then_waits_for_restart_line_before_green(self) -> None:
+        engine = _make_engine_for_circuit(3)
+        engine._trigger_safety_car([])
+        engine._tick_race_phase(3.0, [])
+        events: list = []
+        engine._begin_sc_in_this_lap(events)
+        self.assertEqual(engine.safety_car_stage, "in_this_lap")
+        self.assertTrue(any(event.type == "sc_in_this_lap" for event in events))
+
+        engine._safety_car_total_progress = engine._sc_withdraw_target - 0.001
+        engine._tick_race_phase(1.0, events)
+        self.assertEqual(engine.safety_car_stage, "restart")
+        self.assertEqual(engine.race_phase, "sc")
+        self.assertEqual(engine._safety_car_route, "pit")
+
+        leader = engine._on_track_leader()
+        self.assertIsNotNone(leader)
+        leader.total_progress = engine._sc_restart_target
+        engine._tick_safety_car_after_cars(events)
         self.assertEqual(engine.race_phase, "green")
         self.assertFalse(engine.safety_car)
-        self.assertTrue(any(e.type == "sc_end" for e in end_events))
+        self.assertTrue(any(event.type == "sc_end" for event in events))
+
+    def test_safety_car_completes_full_physical_lifecycle(self) -> None:
+        engine = _make_engine_for_circuit(3)
+        engine._trigger_safety_car([])
+        engine._sc_cleanup_until = 0.0
+        event_types: set[str] = set()
+        stages = {engine.safety_car_stage}
+
+        for _ in range(5000):
+            events = engine.tick(GAME_TICK_SECONDS)
+            event_types.update(event.type for event in events)
+            stages.add(engine.safety_car_stage)
+            if engine.race_phase == "green":
+                break
+
+        self.assertEqual(engine.race_phase, "green")
+        self.assertIn("deploying", stages)
+        self.assertIn("collecting", stages)
+        self.assertIn("restart", stages)
+        self.assertIn("sc_track_join", event_types)
+        self.assertIn("sc_queue", event_types)
+        self.assertIn("sc_in_this_lap", event_types)
+        self.assertIn("sc_pit", event_types)
+        self.assertIn("sc_end", event_types)
 
     def test_safety_car_opens_and_closes_pit_window(self) -> None:
         engine = _make_engine()
@@ -1107,9 +1357,7 @@ class RaceEngineTests(unittest.TestCase):
         self.assertTrue(engine.build_tick_state().pit_window_open)
         self.assertTrue(any(e.type == "pit_window" for e in events))
 
-        leader = max(engine.driver_states.values(), key=lambda s: s.total_progress)
-        leader.current_lap = engine._sc_end_lap
-        engine._tick_race_phase([])
+        engine._finish_race_phase("sc", [])
         self.assertFalse(engine.pit_window_open)
         self.assertFalse(engine.build_tick_state().pit_window_open)
 
@@ -1147,41 +1395,32 @@ class RaceEngineTests(unittest.TestCase):
         ]
         self.assertGreater(len(pit_requests), 0)
 
-    def test_unlap_backmarkers_recovers_lapped_car(self) -> None:
-        engine = _make_engine()
-        for _ in range(120):
+    def test_safety_car_unlapping_driver_physically_completes_extra_lap(self) -> None:
+        engine = _make_engine_for_circuit(3)
+        for _ in range(500):
             engine.tick(GAME_TICK_SECONDS)
-        leader_lap = engine._leader_lap()
+        leader = engine._on_track_leader()
+        backmarker = max(engine.driver_states.values(), key=lambda state: state.position)
+        self.assertIsNotNone(leader)
+        engine._set_state_total_progress(backmarker, leader.total_progress - 1.0)
 
-        # 꼴찌 차량을 인위적으로 한 바퀴 뒤처지게 만든다.
-        backmarker = min(engine.driver_states.values(), key=lambda s: s.total_progress)
-        backmarker.current_lap = leader_lap - 1
-        backmarker.total_progress = backmarker.current_lap + backmarker.progress
-        self.assertLess(backmarker.current_lap, leader_lap)
-
+        engine._trigger_safety_car([])
+        engine._tick_race_phase(3.0, [])
         events: list = []
-        engine._unlap_backmarkers(events)
+        engine._start_sc_unlapping([backmarker], events)
+        unlap_target = engine._sc_unlap_targets[backmarker.driver_id]
+        max_observed = backmarker.total_progress
 
-        # 랩을 회복하고 unlap 이벤트가 발생한다.
-        self.assertGreaterEqual(backmarker.current_lap, leader_lap)
-        self.assertTrue(any(e.type == "unlap" for e in events))
+        for _ in range(3000):
+            tick_events = engine.tick(GAME_TICK_SECONDS)
+            events.extend(tick_events)
+            max_observed = max(max_observed, backmarker.total_progress)
+            if any(event.type == "unlap" for event in tick_events):
+                break
 
-        # 메인 그룹보다 뒤(작은 total_progress)에 정렬되어 순위 역전은 없다.
-        main_min = min(
-            s.total_progress
-            for s in engine.driver_states.values()
-            if s is not backmarker and not s.retired and not s.finished and not s.in_pit
-            and s.current_lap >= leader_lap
-        )
-        self.assertLessEqual(backmarker.total_progress, main_min)
-
-    def test_unlap_noop_when_no_backmarkers(self) -> None:
-        engine = _make_engine()
-        for _ in range(60):
-            engine.tick(GAME_TICK_SECONDS)
-        events: list = []
-        engine._unlap_backmarkers(events)
-        self.assertEqual(events, [])
+        self.assertGreaterEqual(max_observed, unlap_target - 1e-6)
+        self.assertTrue(any(event.type == "unlap" for event in events))
+        self.assertEqual(engine.safety_car_stage, "in_this_lap")
 
     def test_safety_car_slows_field(self) -> None:
         engine = _make_engine()

@@ -459,6 +459,17 @@ class RaceTickState(BaseModel):
     weather: str = "dry"
     safety_car: bool = False
     race_phase: str = "green"  # green | vsc | sc
+    race_phase_remaining_seconds: float = 0.0
+    race_phase_remaining_laps: int = 0
+    safety_car_stage: str = "inactive"
+    safety_car_visible: bool = False
+    safety_car_route: str = "track"  # track | pit
+    safety_car_progress: float = 0.0
+    safety_car_progress_rate: float = 0.0
+    safety_car_pit_lane_progress: float = 0.0
+    safety_car_queue_formed: bool = False
+    overtaking_allowed: bool = True
+    restart_line_progress: float = 0.0
     pit_window_open: bool = False
     race_elapsed: float = 0.0
     speed_multiplier: int = 1

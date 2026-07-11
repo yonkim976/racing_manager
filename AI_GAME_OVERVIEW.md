@@ -231,11 +231,13 @@ side-by-side와 forced-wide는 짧은 지속 상태를 가진다. 이후 코너 
 SC/VSC 동작:
 
 - VSC는 시간 기준 25초 유지
-- SC는 리더가 `SC_DURATION_LAPS = 3`랩을 완료하면 해제
-- SC 중에는 필드가 `SC_BUNCH_PROGRESS_GAP = 0.0045` 간격으로 bunch up
+- SC는 피트 출구에서 출동해 `deploying → collecting → queued → unlapping → in_this_lap → restart` 단계를 거친다
+- SC 종료는 고정 랩이 아니라 사고 처리 시간과 대열 완성 여부로 결정된다
+- 차량은 순간이동하지 않고 거리별 추격 속도로 10대 차량 길이(56m) 안에서 합류하며, 이후 7대 차량 길이(39.2m) 목표 간격으로 점진적으로 대열을 압축한다
 - SC가 나오면 `pit_window_open = true`
 - AI는 타이어 마모가 0.30 이상이면 일정 확률로 SC 피트 기회를 잡는다
-- SC 해제 직전 lapped car unlap 처리도 있다
+- lapped car는 실제 추가 한 랩을 주행해 대열 뒤에 합류한다
+- SC가 피트로 들어간 뒤 리더가 시작/결승선을 통과해야 GREEN이 된다
 
 ### 피트스톱
 

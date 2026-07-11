@@ -3,6 +3,7 @@ import TimingBoard from './components/Dashboard/TimingBoard';
 import StrategyPanel from './components/Dashboard/StrategyPanel';
 import SpeedControl from './components/Controls/SpeedControl';
 import EventFeed from './components/Controls/EventFeed';
+import DevRaceControl from './components/DevRaceControl/DevRaceControl';
 import TrackCanvas from './components/TrackView/TrackCanvas';
 import RaceSetup from './components/RaceSetup';
 import { useRaceWebSocket } from './hooks/useRaceWebSocket';
@@ -12,12 +13,26 @@ const CIRCUIT_DISPLAY_ROTATION_OVERRIDES = {
   3: 270,
   6: 270,
 };
+const DEV_RACE_CONTROLS_ENABLED = import.meta.env.DEV
+  || import.meta.env.VITE_ENABLE_RACE_DEV_CONTROLS === 'true';
 
 function formatRaceTime(seconds) {
   if (!seconds || seconds <= 0) return '—';
   const mins = Math.floor(seconds / 60);
   const secs = (seconds % 60).toFixed(3).padStart(6, '0');
   return `${mins}:${secs}`;
+}
+
+function formatSafetyCarStage(stage) {
+  const labels = {
+    deploying: 'DEPLOYED',
+    collecting: 'CATCHING FIELD',
+    queued: 'FIELD QUEUED',
+    unlapping: 'LAPPED CARS OVERTAKING',
+    in_this_lap: 'IN THIS LAP',
+    restart: 'RESTART',
+  };
+  return labels[stage] || 'DEPLOYED';
 }
 
 function formatResultTime(result, winnerTime) {
@@ -196,10 +211,20 @@ export default function App() {
                 LAP {Math.min(raceState.lap, raceState.total_laps)}/{raceState.total_laps}
               </span>
               {raceState.race_phase === 'sc' && (
-                <span className="race-header__sc">SAFETY CAR</span>
+                <span className="race-header__sc">
+                  SAFETY CAR
+                  <span className="race-header__sc-time">
+                    {formatSafetyCarStage(raceState.safety_car_stage)}
+                  </span>
+                </span>
               )}
               {raceState.race_phase === 'vsc' && (
-                <span className="race-header__sc race-header__sc--vsc">VSC</span>
+                <span className="race-header__sc race-header__sc--vsc">
+                  VSC
+                  <span className="race-header__sc-time">
+                    {Math.max(0, Math.ceil(raceState.race_phase_remaining_seconds || 0))}s
+                  </span>
+                </span>
               )}
               {raceState.pit_window_open && (
                 <span className="race-header__pit-window">PIT WINDOW OPEN</span>
@@ -276,6 +301,13 @@ export default function App() {
             playerDriverIds={playerDriverIds}
             speedMultiplier={raceState?.speed_multiplier || 1}
             paused={raceState?.paused || false}
+            racePhase={raceState?.race_phase || 'green'}
+            safetyCarStage={raceState?.safety_car_stage || 'inactive'}
+            safetyCarVisible={raceState?.safety_car_visible || false}
+            safetyCarRoute={raceState?.safety_car_route || 'track'}
+            safetyCarProgress={raceState?.safety_car_progress}
+            safetyCarProgressRate={raceState?.safety_car_progress_rate || 0}
+            safetyCarPitLaneProgress={raceState?.safety_car_pit_lane_progress || 0}
           />
           <EventFeed events={events} playerDriverCodes={playerDriverCodes} />
         </section>
@@ -289,6 +321,19 @@ export default function App() {
             onPause={() => sendCommand({ type: 'pause' })}
             onResume={() => sendCommand({ type: 'resume' })}
           />
+          {DEV_RACE_CONTROLS_ENABLED && (
+            <DevRaceControl
+              connected={connected}
+              racePhase={raceState?.race_phase || 'green'}
+              safetyCarStage={raceState?.safety_car_stage || 'inactive'}
+              remainingSeconds={raceState?.race_phase_remaining_seconds || 0}
+              remainingLaps={raceState?.race_phase_remaining_laps || 0}
+              onSetPhase={(nextPhase) => sendCommand({
+                type: 'dev_set_race_phase',
+                phase: nextPhase,
+              })}
+            />
+          )}
           <StrategyPanel
             drivers={playerPositions}
             pitWindowOpen={raceState?.pit_window_open || false}

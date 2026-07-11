@@ -1,0 +1,95 @@
+.dev-race-control {
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+.dev-race-control__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 34px;
+  padding: 0 var(--space-lg);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.dev-race-control__badge {
+  padding: 2px 5px;
+  border: 1px solid rgba(243, 156, 18, 0.32);
+  border-radius: 3px;
+  color: var(--accent-yellow);
+  font-size: 0.52rem;
+  letter-spacing: 0.05em;
+}
+
+.dev-race-control__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 var(--space-lg);
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.dev-race-control__status-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 8px rgba(39, 174, 96, 0.55);
+}
+
+.dev-race-control__status--vsc,
+.dev-race-control__status--sc {
+  color: var(--accent-yellow);
+}
+
+.dev-race-control__status--vsc .dev-race-control__status-dot,
+.dev-race-control__status--sc .dev-race-control__status-dot {
+  background: var(--accent-yellow);
+  box-shadow: 0 0 8px rgba(243, 156, 18, 0.6);
+}
+
+.dev-race-control__buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  padding: 0 var(--space-lg) var(--space-md);
+}
+
+.dev-race-control__button {
+  min-width: 0;
+  height: 28px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dev-race-control__button:hover:not(:disabled) {
+  border-color: rgba(243, 156, 18, 0.5);
+  color: var(--text-primary);
+  background: rgba(243, 156, 18, 0.08);
+}
+
+.dev-race-control__button--active {
+  border-color: var(--accent-yellow);
+  color: #050508;
+  background: var(--accent-yellow);
+}
+
+.dev-race-control__button:disabled:not(.dev-race-control__button--active) {
+  opacity: 0.35;
+  cursor: not-allowed;
+}

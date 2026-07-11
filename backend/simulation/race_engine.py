@@ -64,10 +64,20 @@ DRS_SPEED_MULTIPLIER = 1.04
 DRS_MAX_RACING_SPEED_MPS = 105.0
 GRID_SLOT_PROGRESS_GAP = 0.0028
 VSC_DURATION_SECONDS = 25.0
-SC_DURATION_LAPS = 3  # leader laps completed behind the SC before it pulls in
 VSC_LAP_TIME_FACTOR = 1.4
 SC_LAP_TIME_FACTOR = 1.8
-SC_BUNCH_PROGRESS_GAP = 0.0045  # lap-fraction spacing between cars behind the SC
+SC_CATCH_UP_FAST_LAP_TIME_FACTOR = 1.08
+SC_CATCH_UP_NEAR_LAP_TIME_FACTOR = 1.25
+SC_CAUGHT_RECOVERY_LAP_TIME_FACTOR = 1.55
+SC_UNLAP_LAP_TIME_FACTOR = 1.1
+SC_LEAD_PROGRESS_GAP = 0.012  # lap-fraction gap between the SC and the on-track leader
+SC_CAR_LENGTH_M = 5.6
+SC_MAX_GAP_CAR_LENGTHS = 10.0
+SC_QUEUE_TARGET_CAR_LENGTHS = 7.0
+SC_DEPLOY_PIT_SECONDS = 2.5
+SC_WITHDRAW_PIT_SECONDS = 3.0
+SC_CLEANUP_SECONDS = 35.0
+SC_ADDITIONAL_INCIDENT_SECONDS = 18.0
 SC_PIT_WEAR_THRESHOLD = 0.30  # AI takes the "free" SC pit once tires are this worn
 SC_PIT_PROBABILITY = 0.4  # per-eligible-driver chance to dive in under SC (avoids all-stop)
 PIT_BOX_LANE_FRACTION = 0.5  # where along the pit lane (0..1) the box / stop sits
@@ -206,7 +216,18 @@ class RaceEngine:
         self.safety_car = False
         self.race_phase = "green"  # green | vsc | sc
         self._phase_until = 0.0  # race_elapsed deadline for VSC
-        self._sc_end_lap = 0  # leader lap at which the SC pulls in
+        self.safety_car_stage = "inactive"
+        self._safety_car_visible = False
+        self._safety_car_route = "track"
+        self._safety_car_pit_lane_progress = 0.0
+        self._safety_car_queue_formed = False
+        self._sc_cleanup_until = 0.0
+        self._sc_caught_driver_ids: set[int] = set()
+        self._sc_unlap_driver_ids: set[int] = set()
+        self._sc_unlap_targets: dict[int, float] = {}
+        self._sc_withdraw_target: float | None = None
+        self._sc_restart_target: float | None = None
+        self._sc_restart_accel_progress: float | None = None
         self.pit_window_open = False
         self.finished = False
         self.speed_multiplier = 1
@@ -223,6 +244,8 @@ class RaceEngine:
         self._lap_random: dict[int, float] = {}
         self._tire_random: dict[int, float] = {}
         self._progress_rate: dict[int, float] = {}
+        self._safety_car_total_progress: float | None = None
+        self._safety_car_progress_rate = 0.0
         # Multi-phase pit stop state (keyed by driver_id while in_pit).
         self._pit_phase: dict[int, str] = {}  # "in" | "stop" | "out"
         self._pit_phase_remaining: dict[int, float] = {}
@@ -1470,12 +1493,34 @@ class RaceEngine:
             default=0,
         )
 
-    def _phase_lap_time_factor(self) -> float:
+    def _phase_lap_time_factor(self, state: DriverRaceState | None = None) -> float:
         if self.race_phase == "sc":
-            return SC_LAP_TIME_FACTOR
+            if state is not None and state.driver_id in self._sc_unlap_driver_ids:
+                return SC_UNLAP_LAP_TIME_FACTOR
+            if self.safety_car_stage == "restart":
+                leader = self._on_track_leader()
+                if (
+                    leader is not None
+                    and self._sc_restart_accel_progress is not None
+                    and leader.total_progress >= self._sc_restart_accel_progress
+                ):
+                    return 1.0
+            if state is None:
+                return SC_CATCH_UP_FAST_LAP_TIME_FACTOR
+            return self._sc_lap_time_factor_for_gap(state)
         if self.race_phase == "vsc":
             return VSC_LAP_TIME_FACTOR
         return 1.0
+
+    def _race_phase_remaining_seconds(self) -> float:
+        if self.race_phase != "vsc":
+            return 0.0
+        return max(0.0, self._phase_until - self.race_elapsed)
+
+    def _race_phase_remaining_laps(self) -> int:
+        if self.race_phase != "sc":
+            return 0
+        return 1 if self.safety_car_stage in {"in_this_lap", "restart"} else 0
 
     def _trigger_vsc(self, events: list[RaceEvent]) -> None:
         """Deploy a virtual safety car (skipped if a full SC is already out)."""
@@ -1500,17 +1545,19 @@ class RaceEngine:
         already_sc = self.race_phase == "sc"
         self.race_phase = "sc"
         self.safety_car = True
-        end_lap = self._leader_lap() + SC_DURATION_LAPS
-        self._sc_end_lap = max(self._sc_end_lap, end_lap) if already_sc else end_lap
+        cleanup_target = self.race_elapsed + (
+            SC_ADDITIONAL_INCIDENT_SECONDS if already_sc else SC_CLEANUP_SECONDS
+        )
+        self._sc_cleanup_until = max(self._sc_cleanup_until, cleanup_target)
         if not already_sc:
             self.pit_window_open = True
-            self._bunch_up_field()
+            self._initialize_safety_car_progress()
             self._ai_sc_pit_decisions()
             events.append(
                 RaceEvent(
                     type="sc_start",
-                    message="Safety Car deployed — the field bunches up",
-                    message_ko="세이프티카가 발동되어 차량 간격이 좁혀집니다",
+                    message="Safety Car deployed — it is leaving the pits",
+                    message_ko="세이프티카가 피트에서 출동합니다",
                 )
             )
             events.append(
@@ -1521,55 +1568,231 @@ class RaceEngine:
                 )
             )
 
-    def _bunch_up_field(self) -> None:
-        """Compress the running order behind the safety car at even spacing.
+    def set_race_control_phase_for_testing(self, phase: str) -> list[RaceEvent]:
+        """Force a race-control phase for the removable development UI."""
+        requested_phase = str(phase).lower()
+        events: list[RaceEvent] = []
 
-        Keeps the current order but pulls trailing cars up to ``SC_BUNCH_PROGRESS_GAP``
-        behind the car ahead. Pitting/retired/finished cars are left untouched.
-        """
+        if requested_phase == "vsc":
+            self._trigger_vsc(events)
+            return events
+        if requested_phase == "sc":
+            self._trigger_safety_car(events)
+            return events
+        if requested_phase != "green":
+            raise ValueError(f"Unsupported race phase: {phase}")
+
+        ended = self.race_phase
+        if ended == "green":
+            return events
+        if ended == "sc":
+            self._sc_cleanup_until = self.race_elapsed
+            self._sc_unlap_driver_ids.clear()
+            self._sc_unlap_targets.clear()
+            self._begin_sc_in_this_lap(events)
+            return events
+        self._finish_race_phase(ended, events)
+        return events
+
+    def _on_track_leader(self) -> DriverRaceState | None:
         running = [
-            s
-            for s in self.driver_states.values()
-            if not s.retired and not s.finished and not s.in_pit
+            state
+            for state in self.driver_states.values()
+            if not state.retired and not state.finished and not state.in_pit
         ]
-        running.sort(key=lambda s: (-s.total_progress, s.total_time))
         if not running:
+            return None
+        return min(running, key=lambda state: state.position)
+
+    def _initialize_safety_car_progress(self) -> None:
+        leader = self._on_track_leader()
+        if leader is None:
+            self._safety_car_total_progress = None
+            self._safety_car_progress_rate = 0.0
+            return
+        exit_progress = self._pit_exit_progress()
+        if exit_progress is None:
+            exit_progress = (leader.progress + SC_LEAD_PROGRESS_GAP) % 1.0
+        self._safety_car_total_progress = self._total_progress_at_or_after(
+            leader.total_progress,
+            exit_progress,
+        )
+        self._safety_car_progress_rate = 0.0
+        self.safety_car_stage = "deploying"
+        self._safety_car_visible = True
+        self._safety_car_route = "pit"
+        self._safety_car_pit_lane_progress = 0.82
+        self._safety_car_queue_formed = False
+        self._sc_caught_driver_ids.clear()
+        self._sc_unlap_driver_ids.clear()
+        self._sc_unlap_targets.clear()
+        self._sc_withdraw_target = None
+        self._sc_restart_target = None
+        self._sc_restart_accel_progress = None
+
+    def _total_progress_at_or_after(self, reference: float, progress: float) -> float:
+        target = int(reference // 1.0) + (progress % 1.0)
+        if target <= reference + PROGRESS_EPSILON:
+            target += 1.0
+        return target
+
+    def _sc_max_gap_progress(self) -> float:
+        return (SC_CAR_LENGTH_M * SC_MAX_GAP_CAR_LENGTHS) / self.track_length_m
+
+    def _sc_target_gap_progress(self) -> float:
+        return (SC_CAR_LENGTH_M * SC_QUEUE_TARGET_CAR_LENGTHS) / self.track_length_m
+
+    def _sc_queue_predecessor(self, state: DriverRaceState) -> DriverRaceState | None:
+        """Return the next eligible car ahead in the frozen SC running order."""
+        running = sorted(
+            (
+                candidate
+                for candidate in self.driver_states.values()
+                if not candidate.retired
+                and not candidate.finished
+                and not candidate.in_pit
+                and candidate.driver_id not in self._sc_unlap_driver_ids
+            ),
+            key=lambda candidate: candidate.position,
+        )
+        for index, candidate in enumerate(running):
+            if candidate.driver_id != state.driver_id:
+                continue
+            return running[index - 1] if index > 0 else None
+        return None
+
+    def _sc_lap_time_factor_for_gap(self, state: DriverRaceState) -> float:
+        """Choose a smooth catch-up pace from the gap to the queued car ahead."""
+        predecessor = self._sc_queue_predecessor(state)
+        if predecessor is None:
+            ahead_total = self._safety_car_total_progress
+            ahead_is_queued = True
+        else:
+            ahead_total = predecessor.total_progress
+            ahead_is_queued = predecessor.driver_id in self._sc_caught_driver_ids
+
+        if ahead_total is None:
+            return SC_CATCH_UP_FAST_LAP_TIME_FACTOR
+
+        gap = max(0.0, ahead_total - state.total_progress)
+        target_gap = self._sc_target_gap_progress()
+        max_gap = self._sc_max_gap_progress()
+        caught = state.driver_id in self._sc_caught_driver_ids and ahead_is_queued
+
+        if caught:
+            if gap <= target_gap + PROGRESS_EPSILON:
+                return SC_LAP_TIME_FACTOR
+            recovery_range = max(PROGRESS_EPSILON, max_gap - target_gap)
+            recovery_ratio = min(1.0, (gap - target_gap) / recovery_range)
+            return SC_LAP_TIME_FACTOR - (
+                (SC_LAP_TIME_FACTOR - SC_CAUGHT_RECOVERY_LAP_TIME_FACTOR)
+                * recovery_ratio
+            )
+
+        if not ahead_is_queued:
+            return SC_CATCH_UP_FAST_LAP_TIME_FACTOR
+
+        far_gap = max(max_gap, 0.5)
+        approach_range = max(PROGRESS_EPSILON, far_gap - max_gap)
+        far_ratio = min(1.0, max(0.0, gap - max_gap) / approach_range)
+        return SC_CATCH_UP_NEAR_LAP_TIME_FACTOR - (
+            (SC_CATCH_UP_NEAR_LAP_TIME_FACTOR - SC_CATCH_UP_FAST_LAP_TIME_FACTOR)
+            * far_ratio
+        )
+
+    def _set_state_total_progress(self, state: DriverRaceState, total: float) -> None:
+        lap = int(total // 1.0)
+        state.current_lap = lap
+        state.progress = total - lap
+        state.total_progress = total
+
+    def _advance_safety_car(self, delta: float, events: list[RaceEvent]) -> None:
+        if self.race_phase != "sc" or self._safety_car_total_progress is None:
+            self._safety_car_progress_rate = 0.0
             return
 
-        leader_total = running[0].total_progress
-        for rank, state in enumerate(running):
-            if rank == 0:
-                continue  # leader stays put; everyone closes up behind
-            target = leader_total - rank * SC_BUNCH_PROGRESS_GAP
-            new_lap = int(target // 1)
-            state.current_lap = new_lap
-            state.progress = target - new_lap
-            state.total_progress = target
-            state._lap_start_time = state.total_time  # type: ignore[attr-defined]
-
-    def _tick_race_phase(self, events: list[RaceEvent]) -> None:
-        """End an active VSC/SC period once its release condition is met.
-
-        VSC clears on a wall-clock timer; the full SC clears once the leader has
-        completed ``SC_DURATION_LAPS`` behind it (lap-based release).
-        """
-        if self.race_phase == "green":
+        if self.safety_car_stage == "deploying":
+            remaining = 1.0 - self._safety_car_pit_lane_progress
+            advance = delta * 0.18 / SC_DEPLOY_PIT_SECONDS
+            self._safety_car_pit_lane_progress = min(1.0, self._safety_car_pit_lane_progress + advance)
+            self._safety_car_progress_rate = 0.0
+            if remaining <= advance + PROGRESS_EPSILON:
+                self._safety_car_route = "track"
+                self.safety_car_stage = "collecting"
+                events.append(
+                    RaceEvent(
+                        type="sc_track_join",
+                        message="Safety Car joins the track from the Pit Lane exit",
+                        message_ko="세이프티카가 피트 출구에서 트랙에 합류합니다",
+                    )
+                )
             return
-        if self.race_phase == "sc":
-            if self._leader_lap() < self._sc_end_lap:
-                return
-            # SC pulling in: wave lapped cars past before the green flag.
-            self._unlap_backmarkers(events)
-            ended = "sc"
-        else:  # vsc
-            if self.race_elapsed < self._phase_until:
-                return
-            ended = "vsc"
 
+        if self.safety_car_stage == "restart":
+            self._safety_car_progress_rate = 0.0
+            self._safety_car_pit_lane_progress = min(
+                1.0,
+                self._safety_car_pit_lane_progress + delta / SC_WITHDRAW_PIT_SECONDS,
+            )
+            if self._safety_car_pit_lane_progress >= 0.35:
+                self._safety_car_visible = False
+            return
+
+        previous = self._safety_car_total_progress
+        self._safety_car_progress_rate = 1.0 / max(
+            self.circuit.base_lap_time * SC_LAP_TIME_FACTOR,
+            1.0,
+        )
+        self._safety_car_total_progress += self._safety_car_progress_rate * delta
+
+        if (
+            self.safety_car_stage == "in_this_lap"
+            and self._sc_withdraw_target is not None
+            and previous < self._sc_withdraw_target <= self._safety_car_total_progress
+        ):
+            self._safety_car_total_progress = self._sc_withdraw_target
+            self._safety_car_progress_rate = 0.0
+            self._safety_car_route = "pit"
+            self._safety_car_pit_lane_progress = 0.0
+            self.safety_car_stage = "restart"
+            leader = self._on_track_leader()
+            if leader is not None:
+                self._sc_restart_target = self._total_progress_at_or_after(
+                    leader.total_progress,
+                    0.0,
+                )
+                restart_distance = self.rng.uniform(0.04, 0.09)
+                self._sc_restart_accel_progress = max(
+                    leader.total_progress,
+                    self._sc_restart_target - restart_distance,
+                )
+            events.append(
+                RaceEvent(
+                    type="sc_pit",
+                    message="Safety Car enters the Pit Lane — the leader controls the restart",
+                    message_ko="세이프티카가 피트로 들어가며 선두가 재출발을 통제합니다",
+                )
+            )
+
+    def _finish_race_phase(self, ended: str, events: list[RaceEvent]) -> None:
+        """Reset phase state and publish the matching green-flag event."""
         self.race_phase = "green"
         self.safety_car = False
         self._phase_until = 0.0
-        self._sc_end_lap = 0
+        self._safety_car_total_progress = None
+        self._safety_car_progress_rate = 0.0
+        self.safety_car_stage = "inactive"
+        self._safety_car_visible = False
+        self._safety_car_route = "track"
+        self._safety_car_pit_lane_progress = 0.0
+        self._safety_car_queue_formed = False
+        self._sc_cleanup_until = 0.0
+        self._sc_caught_driver_ids.clear()
+        self._sc_unlap_driver_ids.clear()
+        self._sc_unlap_targets.clear()
+        self._sc_withdraw_target = None
+        self._sc_restart_target = None
+        self._sc_restart_accel_progress = None
         self.pit_window_open = False
         if ended == "sc":
             events.append(
@@ -1588,49 +1811,218 @@ class RaceEngine:
                 )
             )
 
-    def _unlap_backmarkers(self, events: list[RaceEvent]) -> None:
-        """Wave lapped cars past so they rejoin the leader's lap behind the pack.
+    def _tick_race_phase(self, delta: float, events: list[RaceEvent]) -> None:
+        """Advance VSC timing or the physical Safety Car route."""
+        if self.race_phase == "green":
+            return
+        if self.race_phase == "sc":
+            self._advance_safety_car(delta, events)
+            return
+        if self.race_elapsed >= self._phase_until:
+            self._finish_race_phase("vsc", events)
 
-        Lapped cars recover to the leader's lap and are lined up at the tail of the
-        main group. They keep a lower ``total_progress`` than the cars they were
-        behind, so race positions are preserved while the restart pack is clean.
-        """
-        leader_lap = self._leader_lap()
-        running = [
-            s
-            for s in self.driver_states.values()
-            if not s.retired and not s.finished and not s.in_pit
-        ]
-        lapped = [s for s in running if s.current_lap < leader_lap]
-        if not lapped:
+    def _sync_safety_car_queue(self, events: list[RaceEvent]) -> None:
+        if self.race_phase != "sc" or self.safety_car_stage in {"deploying", "restart"}:
+            return
+        if self._safety_car_total_progress is None:
             return
 
-        main_group = [s for s in running if s.current_lap >= leader_lap]
-        main_group.sort(key=lambda s: (-s.total_progress, s.total_time))
-        base_total = (
-            main_group[-1].total_progress if main_group else float(leader_lap)
+        running = sorted(
+            (
+                state
+                for state in self.driver_states.values()
+                if not state.retired and not state.finished and not state.in_pit
+            ),
+            key=lambda state: state.position,
         )
-        # Guarantee every waved-past car genuinely recovers onto the leader's lap,
-        # even if the pack's tail just crossed the line.
-        base_total = max(base_total, float(leader_lap) + len(lapped) * SC_BUNCH_PROGRESS_GAP)
+        active_ids = {state.driver_id for state in running}
+        self._sc_caught_driver_ids.intersection_update(active_ids)
 
-        lapped.sort(key=lambda s: (-s.total_progress, s.total_time))
-        for i, state in enumerate(lapped, start=1):
-            target = base_total - i * SC_BUNCH_PROGRESS_GAP
-            new_lap = int(target // 1)
-            state.current_lap = new_lap
-            state.progress = target - new_lap
-            state.total_progress = target
+        max_gap = self._sc_max_gap_progress()
+        target_gap = self._sc_target_gap_progress()
+        ahead_total = self._safety_car_total_progress
+        ahead_is_queued = True
+
+        for state in running:
+            if state.driver_id in self._sc_unlap_driver_ids:
+                continue
+
+            gap = ahead_total - state.total_progress
+            caught = state.driver_id in self._sc_caught_driver_ids
+            if caught and (not ahead_is_queued or gap > max_gap + PROGRESS_EPSILON):
+                self._sc_caught_driver_ids.discard(state.driver_id)
+                caught = False
+
+            if ahead_is_queued and gap <= max_gap + PROGRESS_EPSILON:
+                self._sc_caught_driver_ids.add(state.driver_id)
+                maximum_total = ahead_total - target_gap
+                if state.total_progress > maximum_total:
+                    self._set_state_total_progress(state, maximum_total)
+                caught = True
+            else:
+                caught = False
+
+            ahead_total = state.total_progress
+            ahead_is_queued = caught
+
+        queue_ids = {
+            state.driver_id
+            for state in running
+            if state.driver_id not in self._sc_unlap_driver_ids
+        }
+        formed = bool(queue_ids) and queue_ids.issubset(self._sc_caught_driver_ids)
+        was_formed = self._safety_car_queue_formed
+        self._safety_car_queue_formed = formed
+
+        if formed and not was_formed and self.safety_car_stage == "collecting":
+            self.safety_car_stage = "queued"
+            events.append(
+                RaceEvent(
+                    type="sc_queue",
+                    message="The field is queued behind the Safety Car",
+                    message_ko="전체 차량이 세이프티카 뒤에 대열을 형성했습니다",
+                )
+            )
+        elif not formed and self.safety_car_stage == "queued":
+            self.safety_car_stage = "collecting"
+
+    def _eligible_sc_unlap_drivers(self) -> list[DriverRaceState]:
+        leader = self._on_track_leader()
+        if leader is None or leader.current_lap >= self.total_laps - 1:
+            return []
+        return sorted(
+            (
+                state
+                for state in self.driver_states.values()
+                if not state.retired
+                and not state.finished
+                and not state.in_pit
+                and state.driver_id != leader.driver_id
+                and state.current_lap < leader.current_lap
+            ),
+            key=lambda state: state.position,
+        )
+
+    def _start_sc_unlapping(
+        self,
+        drivers: list[DriverRaceState],
+        events: list[RaceEvent],
+    ) -> None:
+        self.safety_car_stage = "unlapping"
+        self._safety_car_queue_formed = False
+        self._sc_unlap_driver_ids = {state.driver_id for state in drivers}
+        self._sc_unlap_targets = {
+            state.driver_id: state.total_progress + 1.0 for state in drivers
+        }
+        self._sc_caught_driver_ids.difference_update(self._sc_unlap_driver_ids)
+        events.append(
+            RaceEvent(
+                type="unlap_start",
+                message="Lapped cars may now overtake",
+                message_ko="랩 다운 차량의 추월이 허용됩니다",
+            )
+        )
+
+    def _complete_sc_unlapping(self, events: list[RaceEvent]) -> None:
+        unlapping = [
+            self.driver_states[driver_id]
+            for driver_id in self._sc_unlap_driver_ids
+            if driver_id in self.driver_states
+            and not self.driver_states[driver_id].retired
+            and not self.driver_states[driver_id].finished
+        ]
+        main_queue = sorted(
+            (
+                state
+                for state in self.driver_states.values()
+                if not state.retired
+                and not state.finished
+                and not state.in_pit
+                and state.driver_id not in self._sc_unlap_driver_ids
+            ),
+            key=lambda state: state.position,
+        )
+        tail_total = (
+            main_queue[-1].total_progress
+            if main_queue
+            else (self._safety_car_total_progress or 0.0) - self._sc_target_gap_progress()
+        )
+        gap = self._sc_target_gap_progress()
+        for index, state in enumerate(sorted(unlapping, key=lambda item: item.position), start=1):
+            self._set_state_total_progress(state, tail_total - index * gap)
             state._lap_start_time = state.total_time  # type: ignore[attr-defined]
+            self._sc_caught_driver_ids.add(state.driver_id)
             meta = self._driver_meta[state.driver_id]
             events.append(
                 RaceEvent(
                     type="unlap",
                     driver=meta["abbreviation"],
-                    message=f"{meta['full_name']} is waved past to unlap",
-                    message_ko=f"{meta['full_name']}가 추월 허가를 받아 랩을 회복합니다",
+                    message=f"{meta['full_name']} rejoins at the back of the Safety Car queue",
+                    message_ko=f"{meta['full_name']}가 랩을 회복하고 대열 뒤에 합류합니다",
                 )
             )
+        self._sc_unlap_driver_ids.clear()
+        self._sc_unlap_targets.clear()
+        self._safety_car_queue_formed = True
+
+    def _begin_sc_in_this_lap(self, events: list[RaceEvent]) -> None:
+        if self.race_phase != "sc" or self.safety_car_stage in {"in_this_lap", "restart"}:
+            return
+        if self._safety_car_total_progress is None:
+            self._initialize_safety_car_progress()
+        if self._safety_car_total_progress is None:
+            return
+        if self.safety_car_stage == "deploying":
+            self._safety_car_route = "track"
+            self._safety_car_pit_lane_progress = 1.0
+        entry_progress = self._pit_entry_progress()
+        if entry_progress is None:
+            entry_progress = 0.98
+        self.safety_car_stage = "in_this_lap"
+        self._sc_withdraw_target = self._total_progress_at_or_after(
+            self._safety_car_total_progress,
+            entry_progress,
+        )
+        events.append(
+            RaceEvent(
+                type="sc_in_this_lap",
+                message="Safety Car in this lap",
+                message_ko="이번 랩에 세이프티카가 들어갑니다",
+            )
+        )
+
+    def _tick_safety_car_after_cars(self, events: list[RaceEvent]) -> None:
+        if self.race_phase != "sc":
+            return
+
+        self._sync_safety_car_queue(events)
+
+        if (
+            self.safety_car_stage == "queued"
+            and self._safety_car_queue_formed
+            and self.race_elapsed >= self._sc_cleanup_until
+        ):
+            lapped = self._eligible_sc_unlap_drivers()
+            if lapped:
+                self._start_sc_unlapping(lapped, events)
+            else:
+                self._begin_sc_in_this_lap(events)
+
+        if self.safety_car_stage == "unlapping" and self._sc_unlap_targets:
+            completed = all(
+                self.driver_states[driver_id].total_progress
+                >= target - PROGRESS_EPSILON
+                for driver_id, target in self._sc_unlap_targets.items()
+                if driver_id in self.driver_states
+            )
+            if completed:
+                self._complete_sc_unlapping(events)
+                self._begin_sc_in_this_lap(events)
+
+        if self.safety_car_stage == "restart" and self._sc_restart_target is not None:
+            leader = self._on_track_leader()
+            if leader is not None and leader.total_progress >= self._sc_restart_target:
+                self._finish_race_phase("sc", events)
 
     def _apply_incident(self, incident: Incident, events: list[RaceEvent]) -> None:
         """Apply an incident's effect and trigger SC/VSC for severe outcomes."""
@@ -1827,7 +2219,7 @@ class RaceEngine:
             driver_id: state.position
             for driver_id, state in self.driver_states.items()
         }
-        self._tick_race_phase(events)
+        self._tick_race_phase(delta, events)
         racing = self.race_phase == "green"
         self._tick_battle_cooldowns(delta)
         if racing:
@@ -1903,7 +2295,7 @@ class RaceEngine:
                         continue
             lap_time += self._battle_effect_lap_time_delta(state)
 
-            lap_time *= self._phase_lap_time_factor()
+            lap_time *= self._phase_lap_time_factor(state)
 
             previous_progress = state.progress
             progress_delta = self._distance_based_progress_delta(state, lap_time, delta)
@@ -1940,6 +2332,8 @@ class RaceEngine:
                 events.extend(lap_events)
 
         self._run_ai_strategy()
+        self._update_positions()
+        self._tick_safety_car_after_cars(events)
         self._update_positions()
         self._prune_side_by_side_battles()
         if racing:
@@ -2237,8 +2631,29 @@ class RaceEngine:
         if self.race_phase == "green":
             active.sort(key=lambda s: (-s.total_progress, s.total_time))
         else:
-            # Under SC/VSC the order is frozen; only retirements reshuffle the field.
-            active.sort(key=lambda s: s.position)
+            # Cars on track cannot overtake under SC/VSC, but a pit-lane car can
+            # gain or lose places according to its live race distance.
+            on_track = sorted((s for s in active if not s.in_pit), key=lambda s: s.position)
+            in_pit = sorted(
+                (s for s in active if s.in_pit),
+                key=lambda s: (-s.total_progress, s.position),
+            )
+            active = on_track
+            for pit_car in in_pit:
+                insert_at = len(active)
+                for index, other in enumerate(active):
+                    ahead_by_distance = pit_car.total_progress > (
+                        other.total_progress + PROGRESS_EPSILON
+                    )
+                    tied_ahead_by_order = (
+                        abs(pit_car.total_progress - other.total_progress)
+                        <= PROGRESS_EPSILON
+                        and pit_car.position < other.position
+                    )
+                    if ahead_by_distance or tied_ahead_by_order:
+                        insert_at = index
+                        break
+                active.insert(insert_at, pit_car)
         finished.sort(
             key=lambda s: (
                 self._finish_order.index(s.driver_id)
@@ -2382,6 +2797,20 @@ class RaceEngine:
             weather=self.weather,
             safety_car=self.safety_car,
             race_phase=self.race_phase,
+            race_phase_remaining_seconds=round(self._race_phase_remaining_seconds(), 1),
+            race_phase_remaining_laps=self._race_phase_remaining_laps(),
+            safety_car_stage=self.safety_car_stage,
+            safety_car_visible=self._safety_car_visible,
+            safety_car_route=self._safety_car_route,
+            safety_car_progress=round(
+                (self._safety_car_total_progress or 0.0) % 1.0,
+                6,
+            ),
+            safety_car_progress_rate=round(self._safety_car_progress_rate, 6),
+            safety_car_pit_lane_progress=round(self._safety_car_pit_lane_progress, 6),
+            safety_car_queue_formed=self._safety_car_queue_formed,
+            overtaking_allowed=self.race_phase == "green",
+            restart_line_progress=0.0,
             pit_window_open=self.pit_window_open,
             race_elapsed=round(self.race_elapsed, 3),
             speed_multiplier=self.speed_multiplier,

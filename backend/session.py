@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 from typing import Any
 
@@ -14,6 +15,11 @@ from simulation.pit_stop import parse_tire_choice
 from simulation.race_engine import RaceEngine
 
 BROADCAST_INTERVAL = 0.2  # seconds (real time)
+DEV_RACE_CONTROLS_ENABLED = os.getenv("F1_ENABLE_DEV_CONTROLS", "1").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 
 
 class RaceSession:
@@ -204,6 +210,43 @@ class RaceSession:
                 "command": "resume",
                 "message": "Race resumed",
                 "message_ko": "레이스를 재개했습니다",
+            }
+
+        # DEV RACE CONTROL: remove this block with frontend/components/DevRaceControl.
+        if cmd_type == "dev_set_race_phase":
+            if not DEV_RACE_CONTROLS_ENABLED:
+                return {
+                    "type": "command_error",
+                    "message": "Development race controls are disabled",
+                    "message_ko": "개발용 레이스 컨트롤이 비활성화되어 있습니다",
+                }
+
+            requested_phase = str(data.get("phase", "")).lower()
+            try:
+                events = self.engine.set_race_control_phase_for_testing(requested_phase)
+            except ValueError as exc:
+                return {
+                    "type": "command_error",
+                    "message": str(exc),
+                    "message_ko": f"지원하지 않는 레이스 상태입니다: {requested_phase}",
+                }
+
+            await self._broadcast(self.engine.build_tick_state(events).model_dump())
+            active_phase = self.engine.race_phase.upper()
+            if requested_phase == "green" and self.engine.race_phase == "sc":
+                return {
+                    "type": "command_ack",
+                    "command": "dev_set_race_phase",
+                    "race_phase": self.engine.race_phase,
+                    "message": "Safety Car withdrawal requested",
+                    "message_ko": "세이프티카 철수를 요청했습니다",
+                }
+            return {
+                "type": "command_ack",
+                "command": "dev_set_race_phase",
+                "race_phase": self.engine.race_phase,
+                "message": f"Development race control set to {active_phase}",
+                "message_ko": f"개발용 레이스 컨트롤을 {active_phase}(으)로 변경했습니다",
             }
 
         return {

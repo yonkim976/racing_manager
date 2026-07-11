@@ -339,13 +339,15 @@ BATTLE_EVENT_COOLDOWN_SECONDS = 14.0
 SC/VSC 상태머신(`race_engine`):
 
 - `self.race_phase`: `green` | `vsc` | `sc`. `self.safety_car`는 `sc`와 동기화되는 하위호환 플래그입니다.
-- lap time 배수: VSC `×1.4`(`VSC_LAP_TIME_FACTOR`), SC `×1.8`(`SC_LAP_TIME_FACTOR`). gap 계산에도 동일 적용.
-- 해제 조건: VSC는 시간 기준(`VSC_DURATION_SECONDS=25`, `_phase_until` 만료), **SC는 랩 기준**(`SC_DURATION_LAPS=3` — 리더가 발동 시점 랩 + 3을 완료하면 `_sc_end_lap` 도달 → green). `_leader_lap()`로 판단.
-- SC는 VSC를 업그레이드/우선하며, 활성 중 추가 사고는 `_sc_end_lap`을 더 뒤로 연장합니다.
-- SC 발동 시 `_bunch_up_field`가 순위를 유지한 채 차량 간격을 `SC_BUNCH_PROGRESS_GAP=0.0045`(lap fraction)로 압축합니다(피트/리타이어/완주 차량 제외).
-- SC/VSC 중에는 `_update_positions`가 순위를 고정하고(리타이어만 반영), 배틀 tick·battle 이벤트·`pass` 이벤트·신규 사고 roll을 억제합니다.
-- 이벤트 타입: `incident`, `retirement`, `vsc_start`, `vsc_end`, `sc_start`, `sc_end`, `pit_window`, `unlap`.
-- `RaceTickState.race_phase`, `RaceTickState.pit_window_open`으로 프론트에 전달됩니다.
+- VSC는 `×1.4`(`VSC_LAP_TIME_FACTOR`) 델타로 감속하며 현재는 `VSC_DURATION_SECONDS=25` 시간 기준입니다.
+- SC 내부 단계는 `deploying` → `collecting` → `queued` → 선택적 `unlapping` → `in_this_lap` → `restart` → `green`입니다.
+- SC는 각 서킷의 `pit_exit_progress`에서 실제로 출동하고 독립 진행도로 트랙을 주행한 뒤, `pit_entry_progress`에서 피트레인으로 들어갑니다.
+- 고정 3랩과 즉시 번칭을 제거했습니다. 사고 처리 타이머와 대열 완성 여부가 모두 충족돼야 철수 절차를 시작하며 추가 사고는 처리 시간을 연장합니다.
+- 미합류 차량은 앞 대열과의 거리에 따라 `×1.08~×1.25`, SC 대열 차량은 기본 `×1.8`로 주행합니다. 10대 차량 길이(56m) 안에서 합류로 판정하고, 합류 후에는 7대 차량 길이(39.2m) 목표 간격까지 완만하게 압축합니다. 다시 56m 밖으로 벌어지면 자동으로 추격 상태로 복귀합니다.
+- 트랙 위 순서는 동결하지만 피트 차량은 실제 `total_progress`로 대열에 삽입되어 SC/VSC 중에도 정상적으로 순위를 잃거나 얻습니다.
+- `SAFETY CAR IN THIS LAP` 이후 SC가 피트로 들어가도 즉시 green이 되지 않습니다. 리더가 재시작 가속을 통제하고 시작/결승선을 통과해야 `sc_end`가 발생합니다.
+- 이벤트 타입에는 `sc_track_join`, `sc_queue`, `unlap_start`, `unlap`, `sc_in_this_lap`, `sc_pit`, `sc_end`가 포함됩니다.
+- `RaceTickState`는 `safety_car_stage`, `safety_car_route`, `safety_car_visible`, queue/restart 상태와 SC 진행도를 프론트에 전달합니다.
 
 명시적 피트 기회(SC 한정):
 
@@ -356,7 +358,7 @@ SC/VSC 상태머신(`race_engine`):
 
 백마커 언랩:
 
-- SC 해제 직전 `_unlap_backmarkers`가 리더보다 랩 다운된 차량을 식별해 리더 랩으로 회복시키고 메인 그룹 꼬리에 정렬합니다(`unlap` 이벤트). total_progress는 메인 그룹보다 작게 유지되어 순위 역전은 없습니다.
+- `unlapping` 단계에서 대상 차량이 실제로 추가 한 랩을 주행합니다. 완료 후 기존 순서를 유지한 채 SC 대열 뒤에 합류하며 두 랩 이상 뒤처졌다면 한 랩만 회복합니다.
 
 검증된 발생 빈도(Bahrain 57랩, 20명, 12회 풀 시뮬레이션):
 
@@ -364,7 +366,7 @@ SC/VSC 상태머신(`race_engine`):
 
 아직 하지 않은 것:
 
-- 적색기(red flag), 더블 스태킹/피트 출구 정체 모델, SC 재출발(restart) 시 리더 컨트롤·대시 효과
+- 적색기(red flag), 더블 스태킹/피트 출구 정체 모델, 저시야 20대 길이 간격, Race Director의 `OVERTAKING WILL NOT BE PERMITTED` 선택
 
 ## 9. 프론트엔드 상태
 
@@ -437,9 +439,9 @@ SC/VSC 상태머신(`race_engine`):
 - `simulation/incidents.py`: 원인×심각도 2축, 게임초당 rate
 - `race_phase` (green/vsc/sc), VSC ×1.4 / SC ×1.8
 - `car_stopped`→VSC, `crash`→SC, 배틀 contact 에스컬레이션
-- SC 번칭업 (`_bunch_up_field`), SC/VSC 중 순위 고정·배틀/추월/신규 사고 억제
-- 랩 기준 SC 해제 (`SC_DURATION_LAPS=3`), VSC 25초 시간 해제
-- SC 피트 윈도우 (`pit_window_open`), AI 공짜 피트, 백마커 언랩 (`_unlap_backmarkers`)
+- SC 물리 동선과 단계별 대열 형성, SC/VSC 중 온트랙 순위 고정·피트 순위 변동
+- 사고 처리 시간+대열 완성 기반 SC 철수, VSC 25초 시간 해제
+- SC 피트 윈도우, AI 공짜 피트, 실제 추가 랩 방식 백마커 언랩, 리스타트 라인 GREEN
 - 프론트: SC/VSC/pit window 배너, EventFeed 스타일
 - SC 발생 빈도: Bahrain 57랩 12회 시뮬 — SC ~0.42/레이스, VSC ~0.92/레이스
 
