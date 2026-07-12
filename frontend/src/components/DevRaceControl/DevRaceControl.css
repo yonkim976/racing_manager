@@ -93,3 +93,21 @@
   opacity: 0.35;
   cursor: not-allowed;
 }
+
+.dev-race-control__physics {
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.dev-race-control__physics > span {
+  display: block;
+  padding: 0 var(--space-lg) var(--space-sm);
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.dev-race-control__physics .dev-race-control__buttons {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}

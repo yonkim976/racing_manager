@@ -6,15 +6,17 @@ import './TrackCanvas.css';
 const PADDING = 48;
 const LABEL_MARGIN = 6;
 const LABEL_COLLISION_PADDING = 5;
-const ZOOM_LEVELS = [100, 125, 150, 175, 200, 250, 300];
+const DETAIL_ZOOM_PERCENT = 2000;
+const PHYSICAL_ZOOM_MIN_PERCENT = 1500;
+const ZOOM_LEVELS = [100, 250, 500, PHYSICAL_ZOOM_MIN_PERCENT, DETAIL_ZOOM_PERCENT];
 const MARKER_INTERPOLATION_MS = 140;
 const MARKER_ROUTE_TRANSITION_MS = 240;
 const MARKER_PREDICTION_MAX_MS = 450;
 const MARKER_ROTATION_LERP = 0.18;
 const MARKER_ROUTE_JUMP_THRESHOLD = 0.22;
-const FOLLOW_PAN_LERP = 0.055;
 const FOLLOW_DEADZONE_PX = 26;
-const SMOOTH_PATH_SEGMENT_STEPS = 6;
+const SMOOTH_PATH_SEGMENT_STEPS = 12;
+const RACING_LINE_SAMPLE_SPACING_M = 2;
 const SAFETY_CAR_MARKER_KEY = '__safety_car__';
 const SAFETY_CAR_LEAD_PROGRESS = 0.012;
 
@@ -158,14 +160,6 @@ function applyZoomToTransform(transform, bounds, viewWidth, viewHeight, zoomPerc
   };
 }
 
-function applyPanToTransform(transform, panOffset) {
-  return {
-    ...transform,
-    offsetX: transform.offsetX + (panOffset?.x || 0),
-    offsetY: transform.offsetY + (panOffset?.y || 0),
-  };
-}
-
 function toCanvasPoint(x, y, transform) {
   return {
     x: x * transform.scale + transform.offsetX,
@@ -217,12 +211,47 @@ function progressAtTime(animation, now) {
   return ((predicted % 1) + 1) % 1;
 }
 
-function markerPoseForRoute(routeType, progress, transform, coords, trackMetrics, pit, pitMetrics) {
+function lateralOffsetAtTime(animation, now) {
+  if (!animation) return 0;
+  const elapsed = Math.max(0, now - animation.startTime);
+  const t = animation.duration > 0
+    ? Math.min(1, elapsed / animation.duration)
+    : 1;
+  const from = Number(animation.fromLateralOffsetM || 0);
+  const to = Number(animation.toLateralOffsetM || 0);
+  const lateralSpeed = Number(animation.lateralSpeedMps || 0);
+  const interpolated = from + (to - from) * t;
+  const predictionElapsed = Math.min(
+    MARKER_PREDICTION_MAX_MS,
+    Math.max(0, elapsed - animation.duration),
+  );
+  return interpolated + lateralSpeed * (predictionElapsed / 1000);
+}
+
+function markerPoseForRoute(
+  routeType,
+  progress,
+  transform,
+  coords,
+  trackMetrics,
+  pit,
+  pitMetrics,
+  lateralOffsetM = 0,
+  trackLengthM = 5000,
+) {
   if (routeType === 'pit' && pit?.length >= 2) {
     return pathPointAndAngle(pit, progress, transform, pitMetrics, false);
   }
 
-  return pathPointAndAngle(coords, progress, transform, trackMetrics);
+  const pose = pathPointAndAngle(coords, progress, transform, trackMetrics);
+  const pixelsPerMeter = (
+    (trackMetrics?.totalLength || 0) / Math.max(1, trackLengthM)
+  ) * transform.scale;
+  return {
+    ...pose,
+    x: pose.x - Math.sin(pose.angle) * lateralOffsetM * pixelsPerMeter,
+    y: pose.y + Math.cos(pose.angle) * lateralOffsetM * pixelsPerMeter,
+  };
 }
 
 function buildPathMetrics(coords) {
@@ -414,6 +443,73 @@ function drawProgressPath(graphics, coords, startProgress, endProgress, transfor
   graphics.stroke(strokeStyle);
 }
 
+function drawMetricRacingLine(
+  graphics,
+  coords,
+  transform,
+  metrics,
+  trackLengthM,
+  racingLineProfile,
+) {
+  if (!racingLineProfile?.length || !metrics?.totalLength) return;
+  const pixelsPerMeter = (metrics.totalLength / Math.max(1, trackLengthM)) * transform.scale;
+  const profile = racingLineProfile
+    .map(([progress, offsetM]) => [
+      ((Number(progress) % 1) + 1) % 1,
+      Number(offsetM || 0),
+    ])
+    .sort((a, b) => a[0] - b[0]);
+  const offsetAtProgress = (progress) => {
+    let index = profile.length - 1;
+    for (let candidate = 0; candidate < profile.length; candidate += 1) {
+      if (profile[candidate][0] > progress) break;
+      index = candidate;
+    }
+    const nextIndex = (index + 1) % profile.length;
+    const previousIndex = (index - 1 + profile.length) % profile.length;
+    const followingIndex = (nextIndex + 1) % profile.length;
+    const startProgress = profile[index][0];
+    let endProgress = profile[nextIndex][0];
+    if (nextIndex === 0) endProgress += 1;
+    const targetProgress = progress < startProgress ? progress + 1 : progress;
+    const t = Math.min(1, Math.max(
+      0,
+      (targetProgress - startProgress) / Math.max(1e-9, endProgress - startProgress),
+    ));
+    const curved = catmullRomPoint(
+      [0, profile[previousIndex][1]],
+      [0, profile[index][1]],
+      [0, profile[nextIndex][1]],
+      [0, profile[followingIndex][1]],
+      t,
+    )[1];
+    return Math.min(
+      Math.max(profile[index][1], profile[nextIndex][1]),
+      Math.max(Math.min(profile[index][1], profile[nextIndex][1]), curved),
+    );
+  };
+  const steps = Math.max(
+    256,
+    Math.min(5000, Math.ceil(trackLengthM / RACING_LINE_SAMPLE_SPACING_M)),
+  );
+  const points = [];
+  for (let index = 0; index <= steps; index += 1) {
+    const progress = index / steps;
+    const pose = pathPointAndAngle(coords, progress, transform, metrics);
+    points.push(offsetCanvasPoint(
+      pose,
+      offsetAtProgress(progress % 1) * pixelsPerMeter,
+    ));
+  }
+  drawPolylinePath(graphics, points, {
+    width: 1.15,
+    color: 0xb2b2c0,
+    alpha: 0.78,
+    cap: 'round',
+    join: 'round',
+  });
+}
+
 function drawKerbs(graphics, coords, transform, metrics) {
   const kerbSegments = [
     [0.14, 0.24],
@@ -586,6 +682,10 @@ function drawTrackScene(
   trackMetrics,
   pitMetrics,
   viewport,
+  trackLengthM,
+  trackWidthM,
+  racingLineProfile,
+  physicalScale,
 ) {
   trackGfx.clear();
   markersContainer.removeChildren();
@@ -593,18 +693,24 @@ function drawTrackScene(
   const activeRouteCoords = routeCoords?.length >= 2 ? routeCoords : coords;
   const activePitRouteCoords = pitRouteCoords?.length >= 2 ? pitRouteCoords : pitCoords;
 
+  const pixelsPerMeter = (
+    (trackMetrics?.totalLength || 0) / Math.max(1, trackLengthM)
+  ) * transform.scale;
+  const physicalTrackWidth = Math.max(4, trackWidthM * pixelsPerMeter);
+  const surfaceWidth = physicalScale ? physicalTrackWidth : 18;
+
   drawPath(trackGfx, activeRouteCoords, transform, {
-    width: 24,
+    width: surfaceWidth + (physicalScale ? 3 : 6),
     color: 0x07070b,
     alpha: 0.95,
     cap: 'round',
     join: 'round',
   });
 
-  drawKerbs(trackGfx, activeRouteCoords, transform, trackMetrics);
+  if (!physicalScale) drawKerbs(trackGfx, activeRouteCoords, transform, trackMetrics);
 
   drawPath(trackGfx, activeRouteCoords, transform, {
-    width: 18,
+    width: surfaceWidth,
     color: 0x1e1e2e,
     alpha: 0.95,
     cap: 'round',
@@ -612,29 +718,44 @@ function drawTrackScene(
   });
 
   drawPath(trackGfx, activeRouteCoords, transform, {
-    width: 10,
+    width: physicalScale ? Math.max(2, surfaceWidth - 3) : 10,
     color: 0x2a2a38,
     alpha: 1,
     cap: 'round',
     join: 'round',
   });
 
-  drawPath(trackGfx, activeRouteCoords, transform, {
-    width: 2,
-    color: 0x777790,
-    alpha: 0.65,
-    cap: 'round',
-    join: 'round',
-  });
-
-  (drsZones || []).forEach((zone) => {
-    drawProgressPath(trackGfx, activeRouteCoords, Number(zone.start), Number(zone.end), transform, trackMetrics, {
-      width: 5,
-      color: 0x2ecc71,
-      alpha: 0.82,
-      cap: 'butt',
+  if (!physicalScale) {
+    drawPath(trackGfx, activeRouteCoords, transform, {
+      width: 2,
+      color: 0x777790,
+      alpha: 0.65,
+      cap: 'round',
       join: 'round',
     });
+  }
+
+  if (physicalScale) {
+    drawMetricRacingLine(
+      trackGfx,
+      activeRouteCoords,
+      transform,
+      trackMetrics,
+      trackLengthM,
+      racingLineProfile,
+    );
+  }
+
+  (drsZones || []).forEach((zone) => {
+    if (!physicalScale) {
+      drawProgressPath(trackGfx, activeRouteCoords, Number(zone.start), Number(zone.end), transform, trackMetrics, {
+        width: 5,
+        color: 0x2ecc71,
+        alpha: 0.82,
+        cap: 'butt',
+        join: 'round',
+      });
+    }
     const labelProgress = midpointProgress(zone.start, zone.end);
     const labelPoint = interpolatePath(activeRouteCoords, labelProgress, transform, trackMetrics);
     addPlacedLabel(markersContainer, placedLabels, 'DRS', labelPoint, 0x2ecc71, [
@@ -857,6 +978,11 @@ function createSafetyCarMarker() {
 
 export default function TrackCanvas({
   trackCoords,
+  trackLengthM = 5000,
+  trackWidthM = 12,
+  carWidthM = 1.9,
+  carLengthM = 5.0,
+  racingLineProfile = [],
   pitLaneCoords,
   pitBoxOffset = 11,
   drsZones = [],
@@ -916,6 +1042,9 @@ export default function TrackCanvas({
     viewBounds,
     trackMetrics,
     pitMetrics,
+    trackLengthM,
+    trackWidthM,
+    racingLineProfile,
   });
   const [appReady, setAppReady] = useState(false);
   const [zoomPercent, setZoomPercent] = useState(100);
@@ -926,6 +1055,7 @@ export default function TrackCanvas({
   const panRef = useRef({ x: 0, y: 0 });
   const followDriverIdRef = useRef(null);
   const pausedRef = useRef(false);
+  const lastPausedStateRef = useRef(paused);
   const dragRef = useRef(null);
   const lastViewKeyRef = useRef('');
   const playerDrivers = useMemo(
@@ -951,6 +1081,9 @@ export default function TrackCanvas({
     viewBounds,
     trackMetrics,
     pitMetrics,
+    trackLengthM,
+    trackWidthM,
+    racingLineProfile,
   };
   zoomRef.current = zoomPercent;
   followDriverIdRef.current = followDriverId;
@@ -961,6 +1094,17 @@ export default function TrackCanvas({
       panRef.current = panOffset;
     }
   }, [panOffset]);
+
+  const applyCameraPan = useCallback((pan = panRef.current) => {
+    const world = worldRef.current;
+    if (!world) return;
+    world.x = Number(pan?.x || 0);
+    world.y = Number(pan?.y || 0);
+  }, []);
+
+  useEffect(() => {
+    applyCameraPan(panOffset);
+  }, [applyCameraPan, panOffset]);
 
   const applyViewport = useCallback(() => {
     const app = appRef.current;
@@ -990,7 +1134,7 @@ export default function TrackCanvas({
       app.screen.height,
       zoomRef.current,
     );
-    const transform = applyPanToTransform(zoomedTransform, panRef.current);
+    const transform = zoomedTransform;
     transformRef.current = transform;
 
     drawTrackScene(
@@ -1008,11 +1152,26 @@ export default function TrackCanvas({
       mainMetrics,
       laneMetrics,
       { width: app.screen.width, height: app.screen.height },
+      trackLengthM,
+      trackWidthM,
+      racingLineProfile,
+      zoomRef.current >= PHYSICAL_ZOOM_MIN_PERCENT,
     );
+    applyCameraPan();
     return transform;
-  }, []);
+  }, [applyCameraPan, racingLineProfile, trackLengthM, trackWidthM]);
 
   const handleZoomChange = useCallback((level) => {
+    if (level >= PHYSICAL_ZOOM_MIN_PERCENT) {
+      const targetDriverId = followDriverIdRef.current ?? playerDrivers[0]?.driver_id ?? null;
+      if (targetDriverId === null) return;
+      panRef.current = { x: 0, y: 0 };
+      setPanOffset({ x: 0, y: 0 });
+      setFollowDriverId(targetDriverId);
+      setZoomPercent(level);
+      return;
+    }
+
     setFollowDriverId(null);
     setPanOffset(panRef.current);
     setZoomPercent(level);
@@ -1020,7 +1179,7 @@ export default function TrackCanvas({
       panRef.current = { x: 0, y: 0 };
       setPanOffset({ x: 0, y: 0 });
     }
-  }, []);
+  }, [playerDrivers]);
 
   const resetView = useCallback(() => {
     setFollowDriverId(null);
@@ -1096,6 +1255,7 @@ export default function TrackCanvas({
       const world = new Container();
       worldRef.current = world;
       app.stage.addChild(world);
+      applyCameraPan();
 
       const trackGfx = new Graphics();
       trackGfxRef.current = trackGfx;
@@ -1105,14 +1265,18 @@ export default function TrackCanvas({
       markersRef.current = markers;
       world.addChild(markers);
 
+      let previousFrameTime = performance.now();
       const animateMarkers = () => {
         const now = performance.now();
+        const frameSeconds = Math.min(0.05, Math.max(0.001, (now - previousFrameTime) / 1000));
+        previousFrameTime = now;
         const appInstance = appRef.current;
         const {
           smoothedTrackCoords: routeCoords,
           smoothedPitLaneCoords: pitRoute,
           trackMetrics: mainMetrics,
           pitMetrics: laneMetrics,
+          trackLengthM: routeLengthM,
         } = metaRef.current;
         const transform = transformRef.current;
         let followedPose = null;
@@ -1122,6 +1286,7 @@ export default function TrackCanvas({
           if (!animation || !routeCoords?.length) return;
 
           const progress = progressAtTime(animation, now);
+          const lateralOffsetM = lateralOffsetAtTime(animation, now);
           const targetPose = markerPoseForRoute(
             animation.routeType,
             progress,
@@ -1130,6 +1295,8 @@ export default function TrackCanvas({
             mainMetrics,
             pitRoute,
             laneMetrics,
+            lateralOffsetM,
+            routeLengthM,
           );
 
           const transition = animation.routeTransition;
@@ -1147,7 +1314,10 @@ export default function TrackCanvas({
           marker.x = x;
           marker.y = y;
           if (driverId === followDriverIdRef.current) {
-            followedPose = { x, y };
+            followedPose = {
+              x: x + Number(worldRef.current?.x || 0),
+              y: y + Number(worldRef.current?.y || 0),
+            };
           }
           if (Number.isFinite(targetPose.angle)) {
             if (transition) {
@@ -1171,30 +1341,34 @@ export default function TrackCanvas({
         });
 
         if (followedPose && appInstance && !pausedRef.current) {
+          const physicalScale = zoomRef.current >= PHYSICAL_ZOOM_MIN_PERCENT;
+          const deadzonePx = physicalScale ? 0 : FOLLOW_DEADZONE_PX;
           const errorX = appInstance.screen.width / 2 - followedPose.x;
           const errorY = appInstance.screen.height / 2 - followedPose.y;
           const targetPan = {
             x: panRef.current.x + (
-              Math.abs(errorX) > FOLLOW_DEADZONE_PX
-                ? errorX - Math.sign(errorX) * FOLLOW_DEADZONE_PX
+              Math.abs(errorX) > deadzonePx
+                ? errorX - Math.sign(errorX) * deadzonePx
                 : 0
             ),
             y: panRef.current.y + (
-              Math.abs(errorY) > FOLLOW_DEADZONE_PX
-                ? errorY - Math.sign(errorY) * FOLLOW_DEADZONE_PX
+              Math.abs(errorY) > deadzonePx
+                ? errorY - Math.sign(errorY) * deadzonePx
                 : 0
             ),
           };
+          const followStrength = physicalScale ? 14 : 4;
+          const followBlend = 1 - Math.exp(-followStrength * frameSeconds);
           const nextPan = {
-            x: panRef.current.x + (targetPan.x - panRef.current.x) * FOLLOW_PAN_LERP,
-            y: panRef.current.y + (targetPan.y - panRef.current.y) * FOLLOW_PAN_LERP,
+            x: panRef.current.x + (targetPan.x - panRef.current.x) * followBlend,
+            y: panRef.current.y + (targetPan.y - panRef.current.y) * followBlend,
           };
           if (
             Math.abs(nextPan.x - panRef.current.x) > 0.1
             || Math.abs(nextPan.y - panRef.current.y) > 0.1
           ) {
             panRef.current = nextPan;
-            applyViewport();
+            applyCameraPan(nextPan);
           }
         }
       };
@@ -1224,7 +1398,7 @@ export default function TrackCanvas({
         appRef.current = null;
       }
     };
-  }, [applyViewport]);
+  }, [applyCameraPan, applyViewport]);
 
   useEffect(() => {
     if (!appReady || !normalizedTrackCoords?.length) return;
@@ -1243,7 +1417,6 @@ export default function TrackCanvas({
     trackMetrics,
     pitMetrics,
     zoomPercent,
-    panOffset,
     applyViewport,
   ]);
 
@@ -1259,6 +1432,7 @@ export default function TrackCanvas({
     const viewChanged = lastViewKeyRef.current !== viewKey;
     lastViewKeyRef.current = viewKey;
     const now = performance.now();
+    const justResumed = lastPausedStateRef.current && !paused;
 
     orderedPositions.forEach((driver) => {
       if (driver.retired) {
@@ -1294,9 +1468,18 @@ export default function TrackCanvas({
       const previousProgress = previousAnimation
         ? progressAtTime(previousAnimation, now)
         : routeProgress;
+      const routeLateralOffsetM = routeType === 'pit'
+        ? 0
+        : Number(driver.lateral_offset_m || 0);
+      const previousLateralOffsetM = previousAnimation
+        ? lateralOffsetAtTime(previousAnimation, now)
+        : routeLateralOffsetM;
       const routeChanged = Boolean(previousAnimation && previousAnimation.routeType !== routeType);
       const progressJump = Math.abs(routeProgressDelta(previousProgress, routeProgress, closed));
-      const progressDiscontinuous = !routeChanged && progressJump > MARKER_ROUTE_JUMP_THRESHOLD;
+      const progressDiscontinuous = !paused
+        && !justResumed
+        && !routeChanged
+        && progressJump > MARKER_ROUTE_JUMP_THRESHOLD;
       const resetRouteProgress = isNewMarker || routeChanged || progressDiscontinuous;
       const previousTransition = previousAnimation?.routeTransition;
       const transitionStillActive = previousTransition
@@ -1313,16 +1496,26 @@ export default function TrackCanvas({
         };
       }
 
-      const fromProgress = resetRouteProgress ? routeProgress : previousProgress;
+      const holdVisualProgress = paused || justResumed;
+      const fromProgress = holdVisualProgress
+        ? previousProgress
+        : (resetRouteProgress ? routeProgress : previousProgress);
 
       marker.routeAnimation = {
         routeType,
         fromProgress,
-        toProgress: routeProgress,
+        toProgress: holdVisualProgress ? previousProgress : routeProgress,
         startTime: now,
-        duration: resetRouteProgress ? 1 : MARKER_INTERPOLATION_MS,
+        duration: holdVisualProgress || resetRouteProgress ? 1 : MARKER_INTERPOLATION_MS,
         closed,
         progressRate: displayProgressRate,
+        fromLateralOffsetM: previousLateralOffsetM,
+        toLateralOffsetM: holdVisualProgress
+          ? previousLateralOffsetM
+          : routeLateralOffsetM,
+        lateralSpeedMps: paused
+          ? 0
+          : Number(driver.lateral_speed_mps || 0) * speedMultiplier,
         routeTransition,
       };
 
@@ -1335,6 +1528,8 @@ export default function TrackCanvas({
           trackMetrics,
           pitRoute,
           pitMetrics,
+          previousLateralOffsetM,
+          trackLengthM,
         );
         marker.x = x;
         marker.y = y;
@@ -1357,11 +1552,27 @@ export default function TrackCanvas({
       }
 
       marker.dot.clear();
-      marker.dot.moveTo(radius + 3, 0);
-      marker.dot.lineTo(-radius, -radius * 0.72);
-      marker.dot.lineTo(-radius * 0.55, 0);
-      marker.dot.lineTo(-radius, radius * 0.72);
-      marker.dot.closePath();
+      const physicalScale = zoomPercent >= PHYSICAL_ZOOM_MIN_PERCENT && !driver.in_pit;
+      const pixelsPerMeter = (
+        (trackMetrics?.totalLength || 0) / Math.max(1, trackLengthM)
+      ) * transform.scale;
+      if (physicalScale) {
+        const physicalLengthPx = Math.max(2, Number(driver.car_length_m || carLengthM) * pixelsPerMeter);
+        const physicalWidthPx = Math.max(1, Number(driver.car_width_m || carWidthM) * pixelsPerMeter);
+        marker.dot.roundRect(
+          -physicalLengthPx / 2,
+          -physicalWidthPx / 2,
+          physicalLengthPx,
+          physicalWidthPx,
+          Math.min(2, physicalWidthPx * 0.3),
+        );
+      } else {
+        marker.dot.moveTo(radius + 3, 0);
+        marker.dot.lineTo(-radius, -radius * 0.72);
+        marker.dot.lineTo(-radius * 0.55, 0);
+        marker.dot.lineTo(-radius, radius * 0.72);
+        marker.dot.closePath();
+      }
       marker.dot.fill({ color, alpha: driver.in_pit ? 0.75 : 1 });
       marker.dot.stroke({ width: 1, color: 0xffffff, alpha: 0.45 });
 
@@ -1436,7 +1647,10 @@ export default function TrackCanvas({
         const closed = routeType !== 'pit';
         const routeChanged = Boolean(previousAnimation && previousAnimation.routeType !== routeType);
         const progressJump = Math.abs(routeProgressDelta(previousProgress, routeProgress, closed));
-        const progressDiscontinuous = !routeChanged && progressJump > MARKER_ROUTE_JUMP_THRESHOLD;
+        const progressDiscontinuous = !paused
+          && !justResumed
+          && !routeChanged
+          && progressJump > MARKER_ROUTE_JUMP_THRESHOLD;
         const resetProgress = isNewSafetyCar || routeChanged || progressDiscontinuous;
         const previousTransition = previousAnimation?.routeTransition;
         const transitionStillActive = previousTransition
@@ -1451,14 +1665,17 @@ export default function TrackCanvas({
             duration: MARKER_ROUTE_TRANSITION_MS,
           };
         }
-        const fromProgress = resetProgress ? routeProgress : previousProgress;
+        const holdVisualProgress = paused || justResumed;
+        const fromProgress = holdVisualProgress
+          ? previousProgress
+          : (resetProgress ? routeProgress : previousProgress);
 
         safetyCar.routeAnimation = {
           routeType,
           fromProgress,
-          toProgress: routeProgress,
+          toProgress: holdVisualProgress ? previousProgress : routeProgress,
           startTime: now,
-          duration: resetProgress ? 1 : MARKER_INTERPOLATION_MS,
+          duration: holdVisualProgress || resetProgress ? 1 : MARKER_INTERPOLATION_MS,
           closed,
           progressRate: displayProgressRate,
           routeTransition,
@@ -1480,6 +1697,7 @@ export default function TrackCanvas({
         }
       }
     }
+    lastPausedStateRef.current = paused;
   }, [
     appReady,
     normalizedTrackCoords,
@@ -1500,6 +1718,9 @@ export default function TrackCanvas({
     safetyCarProgress,
     safetyCarProgressRate,
     safetyCarPitLaneProgress,
+    trackLengthM,
+    carWidthM,
+    carLengthM,
   ]);
 
   useEffect(() => {
@@ -1552,8 +1773,14 @@ export default function TrackCanvas({
                 className={`track-canvas__zoom-btn ${zoomPercent === level ? 'track-canvas__zoom-btn--active' : ''}`}
                 onClick={() => handleZoomChange(level)}
                 aria-pressed={zoomPercent === level}
+                aria-label={level >= PHYSICAL_ZOOM_MIN_PERCENT
+                  ? `${level}% physical 1.9 by 5.0 metre car view`
+                  : `${level}% track zoom`}
+                data-testid={level === DETAIL_ZOOM_PERCENT ? 'track-detail-view' : undefined}
+                disabled={level >= PHYSICAL_ZOOM_MIN_PERCENT && playerDrivers.length === 0}
+                title={level >= PHYSICAL_ZOOM_MIN_PERCENT ? 'Physical 1.9×5.0m car view' : undefined}
               >
-                {level}
+                {level}%
               </button>
             ))}
             <button
@@ -1568,6 +1795,9 @@ export default function TrackCanvas({
             <span className="track-canvas__legend-item track-canvas__legend-item--sf">S/F</span>
             <span className="track-canvas__legend-item track-canvas__legend-item--pit">PIT</span>
             <span className="track-canvas__legend-item track-canvas__legend-item--drs">DRS</span>
+            {zoomPercent >= PHYSICAL_ZOOM_MIN_PERCENT && (
+              <span className="track-canvas__legend-item">PHYSICAL SCALE</span>
+            )}
           </span>
         </div>
       </div>

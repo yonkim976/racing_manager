@@ -26,6 +26,7 @@ export default function DevRaceControl({
   safetyCarStage = 'inactive',
   remainingSeconds = 0,
   remainingLaps = 0,
+  physicsHz = 50,
   onSetPhase,
 }) {
   const controls = [
@@ -67,6 +68,9 @@ export default function DevRaceControl({
             {control.label}
           </button>
         ))}
+      </div>
+      <div className="dev-race-control__physics">
+        <span>PHYSICS V2 · {physicsHz}HZ</span>
       </div>
     </section>
   );

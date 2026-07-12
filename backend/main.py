@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -17,6 +18,7 @@ from simulation.track_compiler import compile_circuit_layout
 from simulation.track_geometry import validate_circuit_geometry_detailed
 
 FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="F1 Race Manager", version="0.1.0")
 
@@ -121,7 +123,15 @@ async def race_websocket(ws: WebSocket):
     try:
         while True:
             data = await ws.receive_json()
-            response = await session.handle_command(data)
+            try:
+                response = await session.handle_command(data)
+            except Exception:
+                logger.exception("Race WebSocket command failed")
+                response = {
+                    "type": "command_error",
+                    "message": "Command failed; the race connection remains active",
+                    "message_ko": "명령 처리에 실패했지만 레이스 연결은 유지됩니다",
+                }
             await ws.send_json(response)
     except WebSocketDisconnect:
         session.remove_client(ws)

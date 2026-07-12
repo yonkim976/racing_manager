@@ -50,6 +50,13 @@ class RaceSession:
             player_team_color=self.player_team.color,
             player_drivers=[d.id for d in self.player_drivers],
             track_length_m=self.circuit.track_length_m,
+            track_width_m=self.circuit.track_width_m,
+            car_width_m=1.9,
+            car_length_m=5.0,
+            racing_line_profile=[
+                [sample.progress, sample.racing_line_offset_m]
+                for sample in self.engine._track_physics.samples
+            ],
             track_coords=self.circuit.track_coords,
             start_finish_index=self.circuit.start_finish_index,
             pit_lane_coords=self.circuit.pit_lane_coords,
@@ -195,7 +202,8 @@ class RaceSession:
             }
 
         if cmd_type == "pause":
-            self.engine.pause()
+            self.engine.pause_race()
+            await self._broadcast(self.engine.build_tick_state().model_dump())
             return {
                 "type": "command_ack",
                 "command": "pause",
@@ -204,7 +212,8 @@ class RaceSession:
             }
 
         if cmd_type == "resume":
-            self.engine.resume()
+            self.engine.resume_race()
+            await self._broadcast(self.engine.build_tick_state().model_dump())
             return {
                 "type": "command_ack",
                 "command": "resume",

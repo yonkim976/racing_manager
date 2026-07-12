@@ -12,7 +12,13 @@ F1 매니지먼트/레이스 시뮬레이션 프로토타입. 레이스 셋업 �
 - Backend: FastAPI + WebSocket + 인메모리 단일 레이스 세션
 - Frontend: React + Vite + Pixi.js
 - 데이터: 20명 드라이버, 10개 팀, 4개 서킷
-- **최근 검증: Backend tests 106 OK, frontend lint/build OK**
+- **최근 검증: Backend tests 158 OK, frontend lint/build 및 고배율 브라우저 검증 OK**
+
+## Physics V2 현재 상태
+
+- `codex/physics-v2`에서 Physics V2를 단일 엔진으로 적용했다. 50Hz 종방향 물리, 곡률 기반 실제 속도, 차량 추종, 최소 간격과 물리적 횡방향 추월 라인이 포함된다.
+- Legacy 런타임 분기, 개발 UI 전환 메뉴와 WebSocket 명령은 제거되었다.
+- 물리 피트레인과 시간 기반 가상 라인 전환은 후속 범위다. 상세 내용은 `PHYSICS_V2_DESIGN.md` 참고.
 
 ## 실행
 
@@ -39,7 +45,7 @@ npm run build
 | 1 | **거리기반 그리드 동시 출발** — 순차 0.3초 출발 제거, `GRID_SLOT_PROGRESS_GAP=0.0028` | `race_engine._init_grid`, `TrackCanvas.jsx` |
 | 2 | **Q1/Q2/Q3 녹아웃 예선** + track evolution(Q1=1.0, Q2=0.997, Q3=0.994) | `qualifying.py`, `RaceSetup.jsx`, `schemas.py` |
 | 3 | **사고 분류 2축** (원인×심각도) + **SC/VSC 상태머신** | `incidents.py`, `race_engine.py` |
-| 4 | **SC 물리 출동/철수** + 10대 길이(56m) 합류 판정, 7대 길이(39.2m) 목표 간격 | `_advance_safety_car`, `_sync_safety_car_queue` |
+| 4 | **SC 물리 출동/철수** + 10대 길이(50m) 합류 판정, 7대 길이(35m) 목표 간격 | `_advance_safety_car`, `_sync_safety_car_queue` |
 | 5 | **사고 처리+대열 상태 기반 SC 해제**, VSC는 시간 기준(25s) 유지 | `_tick_safety_car_after_cars`, `_tick_race_phase` |
 | 6 | **SC 피트 기회** + AI 공짜 피트 + 실제 추가 랩 **백마커 언랩/리스타트** | `_ai_sc_pit_decisions`, `_start_sc_unlapping`, `_begin_sc_in_this_lap` |
 | 7 | **피트 3단계 자연화** — `in`/`stop`/`out`, 핏레인 경로 이동, 시간 증가형 표시 | `pit_stop.py`, `_tick_in_pit`, `TrackCanvas.jsx` |
@@ -50,7 +56,8 @@ npm run build
 ```text
 그리드:     GRID_SLOT_PROGRESS_GAP = 0.0028
 SC/VSC:     VSC ×1.4 / SC 대열 ×1.8 / 미합류 거리별 ×1.08~×1.25, VSC 25s
-SC 간격:    10 car lengths × 5.6m를 서킷 길이에 맞춰 progress로 환산
+차체/트랙:  1.9m × 5.0m, 기본 트랙 폭 12m, 중심선 기반 자동 레이싱 라인
+SC 간격:    합류 10 car lengths = 50m / 목표 7 car lengths = 35m
 SC 피트:    pit_window_open (SC만), AI wear≥0.30 & prob 0.4
 피트:       in → stop → out, pit_loss_time(레인) + tire_change(정지)
             pit_lane_progress 0→1, pit_elapsed / pit_stop_elapsed (증가형)

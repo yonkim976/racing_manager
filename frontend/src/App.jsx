@@ -114,6 +114,7 @@ export default function App() {
   const [startLightsActive, setStartLightsActive] = useState(false);
   const [startLightCount, setStartLightCount] = useState(0);
   const [lightsOut, setLightsOut] = useState(false);
+  const [pendingPaused, setPendingPaused] = useState(null);
 
   const {
     raceInfo,
@@ -128,6 +129,7 @@ export default function App() {
 
   const handleRaceStart = (result) => {
     resetState();
+    setPendingPaused(null);
     setSetupResult(result);
     setStartLightCount(0);
     setLightsOut(false);
@@ -142,8 +144,22 @@ export default function App() {
     setLightsOut(false);
     setPhase('setup');
     setSetupResult(null);
+    setPendingPaused(null);
     resetState();
   };
+
+  useEffect(() => {
+    if (
+      pendingPaused !== null
+      && raceState?.paused === pendingPaused
+    ) {
+      setPendingPaused(null);
+    }
+  }, [pendingPaused, raceState?.paused]);
+
+  useEffect(() => {
+    if (!connected) setPendingPaused(null);
+  }, [connected]);
 
   useEffect(() => {
     if (phase !== 'race' || !startLightsActive) return undefined;
@@ -170,6 +186,7 @@ export default function App() {
   }
 
   const playerDriverIds = raceInfo?.player_drivers || setupResult?.player_drivers?.map((d) => d.id) || [];
+  const displayedPaused = pendingPaused ?? raceState?.paused ?? false;
   const setupPlayerDriverCodes = setupResult?.player_drivers?.map((driver) => driver.abbreviation) || [];
   const livePlayerDriverCodes = raceState?.positions
     ?.filter((position) => playerDriverIds.includes(position.driver_id))
@@ -180,6 +197,11 @@ export default function App() {
   const winnerTime = finalResults.find((r) => !r.retired)?.total_time || 0;
   const circuitName = raceInfo?.circuit_name || setupResult?.circuit?.name;
   const trackCoords = raceInfo?.track_coords || setupResult?.circuit?.track_coords;
+  const trackLengthM = raceInfo?.track_length_m || setupResult?.circuit?.track_length_m || 5000;
+  const trackWidthM = raceInfo?.track_width_m || setupResult?.circuit?.track_width_m || 12;
+  const carWidthM = raceInfo?.car_width_m || 1.9;
+  const carLengthM = raceInfo?.car_length_m || 5.0;
+  const racingLineProfile = raceInfo?.racing_line_profile || [];
   const pitLaneCoords = raceInfo?.pit_lane_coords || setupResult?.circuit?.pit_lane_coords;
   const pitBoxOffset = raceInfo?.pit_box_offset ?? setupResult?.circuit?.pit_lane?.box_offset ?? 11;
   const drsZones = raceInfo?.drs_zones || setupResult?.circuit?.drs_zones || [];
@@ -289,6 +311,11 @@ export default function App() {
         <section className="race-layout__main">
           <TrackCanvas
             trackCoords={trackCoords}
+            trackLengthM={trackLengthM}
+            trackWidthM={trackWidthM}
+            carWidthM={carWidthM}
+            carLengthM={carLengthM}
+            racingLineProfile={racingLineProfile}
             pitLaneCoords={pitLaneCoords}
             pitBoxOffset={pitBoxOffset}
             drsZones={drsZones}
@@ -300,7 +327,7 @@ export default function App() {
             positions={raceState?.positions}
             playerDriverIds={playerDriverIds}
             speedMultiplier={raceState?.speed_multiplier || 1}
-            paused={raceState?.paused || false}
+            paused={displayedPaused}
             racePhase={raceState?.race_phase || 'green'}
             safetyCarStage={raceState?.safety_car_stage || 'inactive'}
             safetyCarVisible={raceState?.safety_car_visible || false}
@@ -316,9 +343,12 @@ export default function App() {
           <SpeedControl
             connected={connected}
             speedMultiplier={raceState?.speed_multiplier ?? 1}
-            paused={raceState?.paused ?? false}
+            paused={displayedPaused}
             onSpeed={(m) => sendCommand({ type: 'set_speed', multiplier: m })}
-            onPause={() => sendCommand({ type: 'pause' })}
+            onPause={() => {
+              setPendingPaused(true);
+              sendCommand({ type: 'pause' });
+            }}
             onResume={() => sendCommand({ type: 'resume' })}
           />
           {DEV_RACE_CONTROLS_ENABLED && (
@@ -328,6 +358,7 @@ export default function App() {
               safetyCarStage={raceState?.safety_car_stage || 'inactive'}
               remainingSeconds={raceState?.race_phase_remaining_seconds || 0}
               remainingLaps={raceState?.race_phase_remaining_laps || 0}
+              physicsHz={raceState?.physics_hz || 50}
               onSetPhase={(nextPhase) => sendCommand({
                 type: 'dev_set_race_phase',
                 phase: nextPhase,

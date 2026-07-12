@@ -19,17 +19,25 @@ PROFILE_PASS_COUNT = 6
 
 @dataclass(frozen=True)
 class SpeedProfile:
-    """Normalized local speed factors around a lap."""
+    """Curvature-derived physical speed limits around a lap."""
 
     progress: list[float]
-    factors: list[float]
     raw_speeds_mps: list[float]
 
-    def factor_at_progress(self, progress: float) -> float:
-        if not self.progress or not self.factors:
-            return 1.0
+    def raw_speed_at_progress(self, progress: float) -> float:
+        """Interpolate the un-normalized physical speed limit around the lap."""
+        return self._value_at_progress(self.raw_speeds_mps, progress, PROFILE_MAX_SPEED_MPS)
+
+    def _value_at_progress(
+        self,
+        values: list[float],
+        progress: float,
+        fallback: float,
+    ) -> float:
+        if not self.progress or not values:
+            return fallback
         if len(self.progress) == 1:
-            return self.factors[0]
+            return values[0]
 
         normalized = progress % 1.0
         index = bisect_right(self.progress, normalized) - 1
@@ -44,7 +52,7 @@ class SpeedProfile:
         target = normalized if normalized >= start else normalized + 1.0
         span = max(1e-9, end - start)
         ratio = min(1.0, max(0.0, (target - start) / span))
-        return self.factors[index] + (self.factors[next_index] - self.factors[index]) * ratio
+        return values[index] + (values[next_index] - values[index]) * ratio
 
 
 def _point(values) -> Point:
@@ -142,22 +150,6 @@ def _apply_braking_and_acceleration_limits(
     return limited
 
 
-def _normalize_speed_factors(speeds: list[float], segment_lengths_m: list[float]) -> list[float]:
-    total_length = sum(segment_lengths_m)
-    if total_length <= 0:
-        return [1.0 for _ in speeds]
-
-    base_factors = [max(0.01, speed / PROFILE_MAX_SPEED_MPS) for speed in speeds]
-    weighted_time = 0.0
-    for index, factor in enumerate(base_factors):
-        lap_fraction = segment_lengths_m[index] / total_length
-        weighted_time += lap_fraction / factor
-
-    if weighted_time <= 0:
-        return [1.0 for _ in speeds]
-    return [factor * weighted_time for factor in base_factors]
-
-
 def build_speed_profile(
     circuit: Circuit,
     *,
@@ -184,8 +176,6 @@ def build_speed_profile(
         acceleration_mps2=acceleration_mps2,
         braking_mps2=braking_mps2,
     )
-    normalized_factors = _normalize_speed_factors(limited_speeds, segment_lengths_m)
-
     total_length = sum(segment_lengths_m)
     cumulative = 0.0
     progress: list[float] = []
@@ -195,6 +185,5 @@ def build_speed_profile(
 
     return SpeedProfile(
         progress=progress,
-        factors=normalized_factors,
         raw_speeds_mps=limited_speeds,
     )

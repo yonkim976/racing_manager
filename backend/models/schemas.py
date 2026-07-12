@@ -385,6 +385,7 @@ class Circuit(BaseModel):
         gt=0.0,
         validation_alias=AliasChoices("track_length_m", "length_m"),
     )
+    track_width_m: float = Field(default=12.0, ge=8.0, le=24.0)
     overtaking_difficulty: float = Field(default=0.5, ge=0.0, le=1.0)
     sectors: list[Sector] = Field(default_factory=list)
     layout_segments: list[TrackLayoutSegment] = Field(default_factory=list)
@@ -428,6 +429,17 @@ class DriverRaceState(BaseModel):
     finished: bool = False
     total_time: float = 0.0  # cumulative race time in seconds
     speed_kph: float = 0.0  # current smoothed car speed
+    total_distance_m: float = 0.0  # physical race distance, including completed laps
+    acceleration_mps2: float = 0.0
+    target_speed_kph: float = 0.0
+    throttle: float = 0.0
+    brake: float = 0.0
+    racing_line: str = "racing_line"
+    lateral_offset_m: float = 0.0
+    lateral_speed_mps: float = 0.0
+    target_lateral_offset_m: float = 0.0
+    car_width_m: float = 1.9
+    car_length_m: float = 5.0
     drs_active: bool = False
     dirty_air_active: bool = False
     side_by_side_active: bool = False
@@ -474,6 +486,7 @@ class RaceTickState(BaseModel):
     race_elapsed: float = 0.0
     speed_multiplier: int = 1
     paused: bool = False
+    physics_hz: int = 50
     positions: list[DriverPositionInfo] = []
     events: list[RaceEvent] = []
 
@@ -489,6 +502,16 @@ class DriverPositionInfo(BaseModel):
     progress: float
     progress_rate: float = 0.0  # track progress per game second
     speed_kph: float = 0.0
+    acceleration_mps2: float = 0.0
+    target_speed_kph: float = 0.0
+    throttle: float = 0.0
+    brake: float = 0.0
+    racing_line: str = "racing_line"
+    lateral_offset_m: float = 0.0
+    lateral_speed_mps: float = 0.0
+    target_lateral_offset_m: float = 0.0
+    car_width_m: float = 1.9
+    car_length_m: float = 5.0
     gap: str  # formatted gap string
     interval: str  # gap to car ahead
     tire_compound: str
@@ -578,6 +601,10 @@ class RaceInfoMessage(BaseModel):
     player_team_color: str
     player_drivers: list[int]
     track_length_m: float
+    track_width_m: float = 12.0
+    car_width_m: float = 1.9
+    car_length_m: float = 5.0
+    racing_line_profile: list[list[float]] = Field(default_factory=list)
     track_coords: list[list[float]]
     start_finish_index: int = 0
     pit_lane_coords: list[list[float]] = []

@@ -31,12 +31,24 @@ from simulation.physics import (
     GAME_TICK_SECONDS,
     car_performance_multiplier,
     compute_effective_lap_time,
-    compute_progress_delta,
     driver_pace_multiplier,
 )
 from simulation.pit_stop import compute_pit_components
 from simulation.speed_profile import SpeedProfile, build_speed_profile
-from simulation.track_geometry import progress_range_length, segment_at_progress
+from simulation.track_physics import (
+    PHYSICAL_CAR_LENGTH_M,
+    PHYSICAL_CAR_WIDTH_M,
+    TRACK_EDGE_MARGIN_M,
+    TrackPhysicsProfile,
+    build_track_physics_profile,
+)
+from simulation.vehicle_physics import (
+    PHYSICS_STEP_SECONDS,
+    LongitudinalVehiclePhysics,
+    VehicleFollowingConstraint,
+    VehiclePhysicsModifiers,
+)
+from simulation.track_geometry import segment_at_progress
 from simulation.tire_model import compute_managed_tire_age, compute_tire_performance, compute_wear
 
 PACE_MODE_EFFECTS: dict[PaceMode, dict[str, float]] = {
@@ -49,19 +61,8 @@ PACE_MODE_ATTACK_FACTORS: dict[PaceMode, float] = {
     PaceMode.STANDARD: 0.85,
     PaceMode.ATTACK: 1.15,
 }
-TRACK_SEGMENT_SPEED_FACTORS: dict[TrackSegmentType, float] = {
-    TrackSegmentType.STRAIGHT: 1.18,
-    TrackSegmentType.SWEEPING: 1.05,
-    TrackSegmentType.HEAVY_BRAKING: 0.68,
-    TrackSegmentType.TECHNICAL: 0.78,
-    TrackSegmentType.TRACTION: 0.88,
-}
 RACING_ACCELERATION_MPS2 = 12.0
 RACING_BRAKING_MPS2 = 34.0
-MIN_RACING_SPEED_MPS = 25.0
-MAX_RACING_SPEED_MPS = 100.0
-DRS_SPEED_MULTIPLIER = 1.04
-DRS_MAX_RACING_SPEED_MPS = 105.0
 GRID_SLOT_PROGRESS_GAP = 0.0028
 VSC_DURATION_SECONDS = 25.0
 VSC_LAP_TIME_FACTOR = 1.4
@@ -71,7 +72,7 @@ SC_CATCH_UP_NEAR_LAP_TIME_FACTOR = 1.25
 SC_CAUGHT_RECOVERY_LAP_TIME_FACTOR = 1.55
 SC_UNLAP_LAP_TIME_FACTOR = 1.1
 SC_LEAD_PROGRESS_GAP = 0.012  # lap-fraction gap between the SC and the on-track leader
-SC_CAR_LENGTH_M = 5.6
+SC_CAR_LENGTH_M = PHYSICAL_CAR_LENGTH_M
 SC_MAX_GAP_CAR_LENGTHS = 10.0
 SC_QUEUE_TARGET_CAR_LENGTHS = 7.0
 SC_DEPLOY_PIT_SECONDS = 2.5
@@ -238,7 +239,12 @@ class RaceEngine:
             acceleration_mps2=RACING_ACCELERATION_MPS2,
             braking_mps2=RACING_BRAKING_MPS2,
         )
-        self._segment_speed_normalizer = self._compute_segment_speed_normalizer()
+        self._vehicle_physics = LongitudinalVehiclePhysics(
+            self._speed_profile,
+            self.track_length_m,
+            self.circuit.base_lap_time,
+        )
+        self._track_physics: TrackPhysicsProfile = build_track_physics_profile(circuit)
 
         self.driver_states: dict[int, DriverRaceState] = {}
         self._lap_random: dict[int, float] = {}
@@ -301,6 +307,7 @@ class RaceEngine:
             team = self.teams[driver.team_id]
             starting_compound = self.starting_tires.get(driver.id, TireCompound.MEDIUM)
             grid_offset = (position - 1) * GRID_SLOT_PROGRESS_GAP
+            initial_track_sample = self._track_physics.at_progress(-grid_offset)
             self.driver_states[driver.id] = DriverRaceState(
                 driver_id=driver.id,
                 position=position,
@@ -315,8 +322,18 @@ class RaceEngine:
                 pit_count=0,
                 retired=False,
                 total_time=0.0,
-                speed_kph=self._initial_speed_kph(-grid_offset),
+                speed_kph=self._initial_speed_kph(
+                    -grid_offset,
+                    car_performance_multiplier(team.car_performance),
+                    driver_pace_multiplier(driver.stats.pace),
+                    starting_compound,
+                ),
+                total_distance_m=-grid_offset * self.track_length_m,
                 pace_mode=PaceMode.STANDARD,
+                lateral_offset_m=initial_track_sample.racing_line_offset_m,
+                target_lateral_offset_m=initial_track_sample.racing_line_offset_m,
+                car_width_m=PHYSICAL_CAR_WIDTH_M,
+                car_length_m=PHYSICAL_CAR_LENGTH_M,
             )
             self._driver_meta[driver.id] = {
                 "abbreviation": driver.abbreviation,
@@ -339,90 +356,238 @@ class RaceEngine:
         """Return per-lap random swing from driver consistency."""
         return 0.10 + (1.0 - consistency) * 1.35
 
-    def _segment_base_speed_factor(self, segment) -> float:
-        factor = getattr(segment, "speed_factor", None)
-        if factor is not None:
-            return factor
-        return TRACK_SEGMENT_SPEED_FACTORS.get(segment.type, 1.0)
-
-    def _compute_segment_speed_normalizer(self) -> float:
-        """Normalize local segment speeds so their lap average stays near target pace."""
-        if not self.circuit.segments:
-            return 1.0
-
-        weighted_time = 0.0
-        covered_progress = 0.0
-        for segment in self.circuit.segments:
-            length = progress_range_length(segment.start, segment.end)
-            factor = self._segment_base_speed_factor(segment)
-            if length <= 0 or factor <= 0:
-                continue
-            covered_progress += length
-            weighted_time += length / factor
-
-        missing_progress = max(0.0, 1.0 - covered_progress)
-        weighted_time += missing_progress
-        if weighted_time <= 0:
-            return 1.0
-        return weighted_time
-
-    def _segment_speed_factor_at_progress(self, progress: float) -> float:
-        segment = segment_at_progress(self.circuit, progress)
-        if segment is None:
-            return 1.0
-        return self._segment_base_speed_factor(segment) * self._segment_speed_normalizer
-
-    def _speed_factor_at_progress(self, progress: float) -> float:
-        if self._speed_profile is not None:
-            return self._speed_profile.factor_at_progress(progress)
-        return self._segment_speed_factor_at_progress(progress)
-
-    def _average_speed_mps(self, lap_time: float) -> float:
-        return self.track_length_m / max(1.0, lap_time)
-
-    def _clamp_racing_speed(self, speed_mps: float, *, drs_active: bool = False) -> float:
-        max_speed = DRS_MAX_RACING_SPEED_MPS if drs_active else MAX_RACING_SPEED_MPS
-        return min(max_speed, max(MIN_RACING_SPEED_MPS, speed_mps))
-
-    def _initial_speed_kph(self, progress: float) -> float:
-        speed_mps = self._average_speed_mps(self.circuit.base_lap_time)
-        speed_mps *= self._speed_factor_at_progress(progress)
-        return round(self._clamp_racing_speed(speed_mps) * 3.6, 3)
-
-    def _target_speed_mps_for_lap_time(self, state: DriverRaceState, lap_time: float) -> float:
-        speed_mps = self._average_speed_mps(lap_time)
-        segment = segment_at_progress(self.circuit, state.progress)
-        drs_speed_active = bool(
-            state.drs_active and segment is not None and segment.type == TrackSegmentType.STRAIGHT
+    def _initial_speed_kph(
+        self,
+        progress: float,
+        car_performance: float,
+        driver_pace: float,
+        tire_compound: TireCompound,
+    ) -> float:
+        modifiers = VehiclePhysicsModifiers(
+            power=car_performance,
+            grip=compute_tire_performance(tire_compound, 0.0),
+            pace=driver_pace,
         )
-        speed_mps *= self._speed_factor_at_progress(state.progress)
-        if drs_speed_active:
-            speed_mps *= DRS_SPEED_MULTIPLIER
-        return self._clamp_racing_speed(speed_mps, drs_active=drs_speed_active)
+        speed_mps = self._vehicle_physics.target_speed_mps(
+            progress * self.track_length_m,
+            modifiers,
+        )
+        return round(speed_mps * 3.6, 3)
 
-    def _advance_speed_mps(self, current_mps: float, target_mps: float, delta: float) -> float:
-        if delta <= 0:
-            return current_mps
-        rate = RACING_ACCELERATION_MPS2 if target_mps > current_mps else RACING_BRAKING_MPS2
-        max_change = rate * delta
-        diff = target_mps - current_mps
-        if abs(diff) <= max_change:
-            return target_mps
-        return current_mps + max_change * (1 if diff > 0 else -1)
+    def _physics_v2_modifiers(self, state: DriverRaceState) -> VehiclePhysicsModifiers:
+        meta = self._driver_meta[state.driver_id]
+        wear = self._current_tire_wear(state)
+        pace_mode_factor = {
+            PaceMode.CONSERVE: 0.975,
+            PaceMode.STANDARD: 1.0,
+            PaceMode.ATTACK: 1.018,
+        }.get(state.pace_mode, 1.0)
+        drs_power_factor = 1.025 if state.drs_active else 1.0
+        dirty_air_grip_factor = 0.975 if state.dirty_air_active else 1.0
+        battle_lap_delta = self._battle_effect_lap_time_delta(state)
+        battle_speed_factor = self.circuit.base_lap_time / max(
+            1.0,
+            self.circuit.base_lap_time + battle_lap_delta,
+        )
+        return VehiclePhysicsModifiers(
+            power=meta["car_performance"] * drs_power_factor,
+            grip=max(0.90, 1.0 - wear * 0.08) * dirty_air_grip_factor,
+            pace=meta["pace"] * pace_mode_factor * battle_speed_factor,
+            speed_limit_factor=1.0 / self._phase_lap_time_factor(state),
+        )
 
-    def _distance_based_progress_delta(
+    def _physics_v2_progress_delta(
         self,
         state: DriverRaceState,
-        lap_time: float,
         delta: float,
+        car_ahead: DriverRaceState | None,
+        start_snapshot: dict[int, tuple[float, float]],
     ) -> float:
-        target_speed = self._target_speed_mps_for_lap_time(state, lap_time)
-        current_speed = max(0.0, state.speed_kph / 3.6)
-        speed_mps = self._advance_speed_mps(current_speed, target_speed, delta)
-        state.speed_kph = round(speed_mps * 3.6, 3)
-        if self.track_length_m <= 0:
-            return compute_progress_delta(delta, lap_time)
-        return (speed_mps * delta) / self.track_length_m
+        start_distance_m = state.total_progress * self.track_length_m
+        track_sample = self._track_physics.at_progress(state.progress)
+        state.target_lateral_offset_m = self._physics_v2_target_lateral_offset(
+            state,
+            track_sample,
+        )
+        minimum_lateral = (
+            -track_sample.right_width_m
+            + PHYSICAL_CAR_WIDTH_M / 2.0
+            + TRACK_EDGE_MARGIN_M
+        )
+        maximum_lateral = (
+            track_sample.left_width_m
+            - PHYSICAL_CAR_WIDTH_M / 2.0
+            - TRACK_EDGE_MARGIN_M
+        )
+        following = self._physics_v2_following_constraint(
+            state,
+            car_ahead,
+            start_snapshot,
+        )
+        result = self._vehicle_physics.advance(
+            distance_m=start_distance_m,
+            speed_mps=max(0.0, state.speed_kph / 3.6),
+            delta_seconds=delta,
+            modifiers=self._physics_v2_modifiers(state),
+            following=following,
+            lateral_offset_m=state.lateral_offset_m,
+            lateral_speed_mps=state.lateral_speed_mps,
+            target_lateral_offset_m=state.target_lateral_offset_m,
+            minimum_lateral_offset_m=minimum_lateral,
+            maximum_lateral_offset_m=maximum_lateral,
+        )
+        state.total_distance_m = result.distance_m
+        state.speed_kph = round(result.speed_mps * 3.6, 3)
+        state.acceleration_mps2 = round(result.acceleration_mps2, 4)
+        state.target_speed_kph = round(result.target_speed_mps * 3.6, 3)
+        state.throttle = round(result.throttle, 4)
+        state.brake = round(result.brake, 4)
+        state.lateral_offset_m = round(result.lateral_offset_m, 4)
+        state.lateral_speed_mps = round(result.lateral_speed_mps, 4)
+        return max(0.0, (result.distance_m - start_distance_m) / self.track_length_m)
+
+    def _physics_v2_virtual_line(self, state: DriverRaceState) -> str:
+        battle = self._side_by_side_battle_for_driver(state.driver_id)
+        if battle is not None:
+            if state.driver_id == battle.attacker_id:
+                return battle.attacker_line
+            return battle.defender_line
+
+        for aftermath in self._forced_wide_aftermaths.values():
+            if state.driver_id == aftermath.attacker_id:
+                return ATTACK_LINE_INSIDE
+            if state.driver_id == aftermath.defender_id:
+                return ATTACK_LINE_OUTSIDE
+
+        effect = self._battle_effects.get(state.driver_id)
+        if effect is not None and effect.lap_time_delta < 0:
+            return ATTACK_LINE_INSIDE
+        if state.driver_id in self._sc_unlap_driver_ids:
+            return ATTACK_LINE_OUTSIDE
+        return DEFENDER_LINE_RACING
+
+    def _physics_v2_target_lateral_offset(self, state, track_sample) -> float:
+        base = track_sample.racing_line_offset_m
+        if self.race_phase != "green" and state.driver_id not in self._sc_unlap_driver_ids:
+            return base
+
+        line = self._physics_v2_virtual_line(state)
+        turn_direction = 1.0 if track_sample.turn_signal >= 0 else -1.0
+        if abs(track_sample.turn_signal) < 0.12:
+            turn_direction = 1.0 if state.driver_id % 2 else -1.0
+        positive_limit = (
+            track_sample.left_width_m
+            - PHYSICAL_CAR_WIDTH_M / 2.0
+            - TRACK_EDGE_MARGIN_M
+        )
+        negative_limit = (
+            track_sample.right_width_m
+            - PHYSICAL_CAR_WIDTH_M / 2.0
+            - TRACK_EDGE_MARGIN_M
+        )
+
+        def offset_for_direction(direction: float, fraction: float) -> float:
+            limit = positive_limit if direction > 0 else negative_limit
+            return direction * max(0.0, limit) * fraction
+
+        if line == ATTACK_LINE_INSIDE:
+            target = offset_for_direction(turn_direction, 0.82)
+        elif line == ATTACK_LINE_OUTSIDE:
+            target = offset_for_direction(-turn_direction, 0.78)
+        elif line == DEFENDER_LINE_DEFENSIVE:
+            target = offset_for_direction(turn_direction, 0.58)
+        else:
+            target = base
+        return max(-negative_limit, min(positive_limit, target))
+
+    def _physics_v2_passing_authorized(
+        self,
+        state: DriverRaceState,
+        car_ahead: DriverRaceState,
+    ) -> bool:
+        unlapping = state.driver_id in self._sc_unlap_driver_ids
+        if not unlapping and self.race_phase != "green":
+            return False
+        if (
+            not unlapping
+            and self._physics_v2_virtual_line(state)
+            == self._physics_v2_virtual_line(car_ahead)
+        ):
+            return False
+        lateral_clearance = abs(state.lateral_offset_m - car_ahead.lateral_offset_m)
+        return lateral_clearance >= PHYSICAL_CAR_WIDTH_M + 0.25
+
+    def _physics_v2_following_constraint(
+        self,
+        state: DriverRaceState,
+        car_ahead: DriverRaceState | None,
+        start_snapshot: dict[int, tuple[float, float]],
+    ) -> VehicleFollowingConstraint | None:
+        if (
+            car_ahead is None
+            or car_ahead.in_pit
+            or car_ahead.retired
+            or car_ahead.finished
+            or self._physics_v2_passing_authorized(state, car_ahead)
+        ):
+            return None
+        leader_snapshot = start_snapshot.get(car_ahead.driver_id)
+        if leader_snapshot is None:
+            return None
+
+        leader_distance_m, leader_speed_mps = leader_snapshot
+        follower_distance_m, follower_speed_mps = start_snapshot.get(
+            state.driver_id,
+            (state.total_progress * self.track_length_m, state.speed_kph / 3.6),
+        )
+        current_gap_m = max(0.0, leader_distance_m - follower_distance_m)
+        minimum_gap_m = SC_CAR_LENGTH_M
+        dynamic_gap_m = min(28.0, max(10.0, minimum_gap_m + follower_speed_mps * 0.22))
+        if self.race_phase == "sc":
+            desired_gap_m = SC_CAR_LENGTH_M * SC_QUEUE_TARGET_CAR_LENGTHS
+        elif self.race_phase == "vsc":
+            desired_gap_m = max(dynamic_gap_m, current_gap_m)
+        else:
+            desired_gap_m = dynamic_gap_m
+        return VehicleFollowingConstraint(
+            leader_distance_m=leader_distance_m,
+            leader_speed_mps=leader_speed_mps,
+            leader_end_distance_m=car_ahead.total_progress * self.track_length_m,
+            leader_end_speed_mps=max(0.0, car_ahead.speed_kph / 3.6),
+            desired_gap_m=desired_gap_m,
+            minimum_gap_m=minimum_gap_m,
+        )
+
+    def _resolve_physics_v2_same_line_gaps(self) -> None:
+        """Resolve new adjacency created by passes without allowing car overlap."""
+        running = sorted(
+            (
+                state
+                for state in self.driver_states.values()
+                if not state.retired and not state.finished and not state.in_pit
+            ),
+            key=lambda state: (-state.total_progress, state.position),
+        )
+        minimum_gap = PHYSICAL_CAR_LENGTH_M / self.track_length_m
+        for ahead, behind in zip(running, running[1:]):
+            lateral_overlap = (
+                abs(ahead.lateral_offset_m - behind.lateral_offset_m)
+                < PHYSICAL_CAR_WIDTH_M + 0.15
+            )
+            if not lateral_overlap:
+                continue
+            gap = ahead.total_progress - behind.total_progress
+            if gap >= minimum_gap - PROGRESS_EPSILON:
+                continue
+            self._set_state_total_progress(
+                behind,
+                ahead.total_progress - minimum_gap,
+            )
+            behind.speed_kph = min(behind.speed_kph, ahead.speed_kph)
+            self._progress_rate[behind.driver_id] = min(
+                self._progress_rate.get(behind.driver_id, 0.0),
+                self._progress_rate.get(ahead.driver_id, 0.0),
+            )
 
     def _pit_phase_speed_kph(self, driver_id: int) -> float:
         phase = self._pit_phase.get(driver_id)
@@ -1705,6 +1870,7 @@ class RaceEngine:
         state.current_lap = lap
         state.progress = total - lap
         state.total_progress = total
+        state.total_distance_m = total * self.track_length_m
 
     def _advance_safety_car(self, delta: float, events: list[RaceEvent]) -> None:
         if self.race_phase != "sc" or self._safety_car_total_progress is None:
@@ -2103,10 +2269,10 @@ class RaceEngine:
         if multiplier in (1, 2, 5):
             self.speed_multiplier = multiplier
 
-    def pause(self) -> None:
+    def pause_race(self) -> None:
         self.paused = True
 
-    def resume(self) -> None:
+    def resume_race(self) -> None:
         self.paused = False
 
     def request_pit(self, driver_id: int, tire_choice: TireCompound) -> str | None:
@@ -2230,10 +2396,24 @@ class RaceEngine:
                     self._apply_incident(incident, events)
                 self._pending_incidents.clear()
         running_by_position = self._running_by_position()
+        physics_start_snapshot = {
+            state.driver_id: (
+                state.total_progress * self.track_length_m,
+                max(0.0, state.speed_kph / 3.6),
+            )
+            for state in self.driver_states.values()
+            if not state.retired and not state.finished and not state.in_pit
+        }
         self._tick_ai_pace_cooldowns(delta)
         self._run_ai_pace_modes(running_by_position)
 
-        for driver_id, state in self.driver_states.items():
+        iteration_states = sorted(
+            self.driver_states.values(),
+            key=lambda item: item.position,
+        )
+
+        for state in iteration_states:
+            driver_id = state.driver_id
             state.drs_active = False
             state.dirty_air_active = False
             if state.retired or state.finished:
@@ -2269,11 +2449,10 @@ class RaceEngine:
                 if event_result.event:
                     events.append(event_result.event)
 
-            lap_time = self._base_lap_time_for_state(state)
             pace_effect = self._pace_mode_effect(state)
             car_ahead = running_by_position.get(state.position - 1)
             if racing:
-                lap_time += self._battle_lap_time_delta(state, car_ahead)
+                self._battle_lap_time_delta(state, car_ahead)
                 battle_event = self._maybe_battle_event(state, car_ahead)
                 if battle_event is not None:
                     events.append(battle_event)
@@ -2293,12 +2472,14 @@ class RaceEngine:
                     self._apply_incident(incident, events)
                     if state.retired:
                         continue
-            lap_time += self._battle_effect_lap_time_delta(state)
-
-            lap_time *= self._phase_lap_time_factor(state)
-
             previous_progress = state.progress
-            progress_delta = self._distance_based_progress_delta(state, lap_time, delta)
+            state.racing_line = self._physics_v2_virtual_line(state)
+            progress_delta = self._physics_v2_progress_delta(
+                state,
+                delta,
+                car_ahead,
+                physics_start_snapshot,
+            )
             self._progress_rate[driver_id] = progress_delta / delta if delta > 0 else 0.0
             state.progress += progress_delta
             tire_usage_multiplier = (
@@ -2318,6 +2499,7 @@ class RaceEngine:
                     self._progress_rate[driver_id] = 0.0
                     state.progress = entry
                     state.total_progress = state.current_lap + state.progress
+                    state.total_distance_m = state.total_progress * self.track_length_m
                     self._start_pit_stop(driver_id, state, meta, team, tire, events)
                 continue
 
@@ -2332,8 +2514,10 @@ class RaceEngine:
                 events.extend(lap_events)
 
         self._run_ai_strategy()
+        self._resolve_physics_v2_same_line_gaps()
         self._update_positions()
         self._tick_safety_car_after_cars(events)
+        self._resolve_physics_v2_same_line_gaps()
         self._update_positions()
         self._prune_side_by_side_battles()
         if racing:
@@ -2764,6 +2948,16 @@ class RaceEngine:
                         else state.speed_kph,
                         1,
                     ),
+                    acceleration_mps2=state.acceleration_mps2,
+                    target_speed_kph=state.target_speed_kph,
+                    throttle=state.throttle,
+                    brake=state.brake,
+                    racing_line=state.racing_line,
+                    lateral_offset_m=state.lateral_offset_m,
+                    lateral_speed_mps=state.lateral_speed_mps,
+                    target_lateral_offset_m=state.target_lateral_offset_m,
+                    car_width_m=state.car_width_m,
+                    car_length_m=state.car_length_m,
                     gap=gap,
                     interval=interval,
                     tire_compound=state.tire_compound.value,
@@ -2815,6 +3009,7 @@ class RaceEngine:
             race_elapsed=round(self.race_elapsed, 3),
             speed_multiplier=self.speed_multiplier,
             paused=self.paused,
+            physics_hz=round(1.0 / PHYSICS_STEP_SECONDS),
             positions=positions,
             events=events or [],
         )
