@@ -5,21 +5,97 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import WebSocket
 
-from models.schemas import Circuit, Driver, PaceMode, RaceInfoMessage, RaceSetupRequest, Team
-from simulation.physics import GAME_TICK_SECONDS
+from models.schemas import (
+    Circuit,
+    Driver,
+    PaceMode,
+    RaceInfoMessage,
+    RaceSetupRequest,
+    Team,
+    VehicleTrajectorySample,
+)
 from simulation.pit_stop import parse_tire_choice
 from simulation.race_engine import RaceEngine
+from simulation.vehicle_physics import PHYSICS_STEP_SECONDS
+from simulation.vehicle_dimensions import (
+    PHYSICAL_CAR_LENGTH_M,
+    PHYSICAL_CAR_WIDTH_M,
+    PHYSICAL_CAR_WHEELBASE_M,
+)
 
-BROADCAST_INTERVAL = 0.2  # seconds (real time)
+BROADCAST_HZ = 30
+BROADCAST_INTERVAL = 1.0 / BROADCAST_HZ
+MAX_PHYSICS_STEPS_PER_SLICE = 5
+MAX_SIMULATION_BACKLOG_SECONDS = 0.5
+MAX_TRAJECTORY_SAMPLES_PER_DRIVER = 64
 DEV_RACE_CONTROLS_ENABLED = os.getenv("F1_ENABLE_DEV_CONTROLS", "1").lower() in {
     "1",
     "true",
     "yes",
 }
+
+
+@dataclass
+class SessionCadenceMetrics:
+    """Measure delivered simulation speed without changing authoritative time."""
+
+    requested_speed_multiplier: int = 1
+    window_started_at: float | None = None
+    simulated_seconds: float = 0.0
+    physics_steps_since_broadcast: int = 0
+
+    def reset(self, now: float, requested_speed_multiplier: int) -> None:
+        self.requested_speed_multiplier = requested_speed_multiplier
+        self.window_started_at = now
+        self.simulated_seconds = 0.0
+        self.physics_steps_since_broadcast = 0
+
+    def record_physics_step(self, delta_seconds: float) -> None:
+        self.simulated_seconds += delta_seconds
+        self.physics_steps_since_broadcast += 1
+
+    def snapshot(
+        self,
+        *,
+        now: float,
+        scheduled_broadcast_at: float,
+        simulation_backlog_seconds: float,
+        requested_speed_multiplier: int,
+        paused: bool,
+    ) -> dict[str, float | int]:
+        if (
+            self.window_started_at is None
+            or requested_speed_multiplier != self.requested_speed_multiplier
+            or paused
+        ):
+            self.reset(now, requested_speed_multiplier)
+
+        window_started_at = (
+            self.window_started_at if self.window_started_at is not None else now
+        )
+        wall_seconds = max(0.0, now - window_started_at)
+        effective_speed = (
+            self.simulated_seconds / wall_seconds
+            if wall_seconds > 1e-9 and not paused
+            else 0.0
+        )
+        snapshot = {
+            "broadcast_hz": BROADCAST_HZ,
+            "effective_speed_multiplier": effective_speed,
+            "simulation_backlog_seconds": max(0.0, simulation_backlog_seconds),
+            "broadcast_jitter_ms": max(
+                0.0,
+                (now - scheduled_broadcast_at) * 1000.0,
+            ),
+            "physics_steps_last_broadcast": self.physics_steps_since_broadcast,
+        }
+        self.physics_steps_since_broadcast = 0
+        return snapshot
 
 
 class RaceSession:
@@ -40,6 +116,8 @@ class RaceSession:
         self.player_drivers = player_drivers
         self.clients: set[WebSocket] = set()
         self._loop_task: asyncio.Task | None = None
+        self._trajectory_samples: dict[int, list[VehicleTrajectorySample]] = {}
+        self._cadence_metrics = SessionCadenceMetrics()
 
     @property
     def race_info(self) -> RaceInfoMessage:
@@ -50,19 +128,73 @@ class RaceSession:
             player_team_color=self.player_team.color,
             player_drivers=[d.id for d in self.player_drivers],
             track_length_m=self.circuit.track_length_m,
+            world_origin_x_render=(
+                self.engine._track_physics.coordinate_frame.origin_x_render
+                if self.engine._track_physics.coordinate_frame
+                else 0.0
+            ),
+            world_origin_y_render=(
+                self.engine._track_physics.coordinate_frame.origin_y_render
+                if self.engine._track_physics.coordinate_frame
+                else 0.0
+            ),
+            world_meters_per_render_unit=(
+                self.engine._track_physics.coordinate_frame.meters_per_render_unit
+                if self.engine._track_physics.coordinate_frame
+                else 1.0
+            ),
             track_width_m=self.circuit.track_width_m,
-            car_width_m=1.9,
-            car_length_m=5.0,
+            car_width_m=PHYSICAL_CAR_WIDTH_M,
+            car_length_m=PHYSICAL_CAR_LENGTH_M,
+            wheelbase_m=PHYSICAL_CAR_WHEELBASE_M,
+            grid_slots=self.engine.get_grid_slots(),
             racing_line_profile=[
                 [sample.progress, sample.racing_line_offset_m]
                 for sample in self.engine._track_physics.samples
             ],
+            track_width_profile=[
+                [sample.progress, sample.left_width_m, sample.right_width_m]
+                for sample in self.engine._track_physics.samples
+            ],
+            surface_zones=self.engine._track_surface.zones,
+            track_conditions=self.circuit.track_conditions,
+            racing_line_coords=self.engine._track_physics.racing_line_coords,
+            racing_line_length_m=self.engine._track_physics.racing_line_length_m,
+            predicted_racing_lap_time=self.engine._track_physics.predicted_racing_lap_time,
+            driving_line_coords=self.engine._track_physics.driving_line_coords,
+            driving_line_lengths_m=self.engine._track_physics.driving_line_lengths_m,
+            predicted_line_lap_times=self.engine._track_physics.predicted_line_lap_times,
             track_coords=self.circuit.track_coords,
             start_finish_index=self.circuit.start_finish_index,
-            pit_lane_coords=self.circuit.pit_lane_coords,
+            # Graphics and marker interpolation must use the same entry/exit
+            # anchors and arc-length frame as authoritative pit physics.
+            pit_lane_coords=self.engine.get_pit_route_coords(),
             pit_wall_coords=self.circuit.pit_wall_coords,
             pit_box_offset=self.circuit.pit_lane.box_offset if self.circuit.pit_lane else 11.0,
+            pit_lane_width_m=(
+                self.circuit.pit_lane.lane_width_m if self.circuit.pit_lane else 4.0
+            ),
+            pit_side_entry_progress=(
+                self.circuit.pit_lane.side_entry_progress
+                if self.circuit.pit_lane
+                else 0.02
+            ),
+            pit_speed_limit_start=(
+                self.circuit.pit_lane.speed_limit_start if self.circuit.pit_lane else 0.12
+            ),
+            pit_box_progress=(
+                self.circuit.pit_lane.box_progress if self.circuit.pit_lane else 0.50
+            ),
+            pit_speed_limit_end=(
+                self.circuit.pit_lane.speed_limit_end if self.circuit.pit_lane else 0.88
+            ),
+            pit_side_rejoin_progress=(
+                self.circuit.pit_lane.side_rejoin_progress
+                if self.circuit.pit_lane
+                else 0.94
+            ),
             drs_zones=self.circuit.drs_zones,
+            sectors=self.circuit.sectors,
             landmarks=self.circuit.landmarks,
             segments=self.circuit.segments,
         )
@@ -78,31 +210,128 @@ class RaceSession:
         self.clients.clear()
 
     async def _game_loop(self) -> None:
+        """Advance authoritative physics independently from screen broadcasts.
+
+        Physics always consumes exact 20 ms simulation steps.  Wall-clock time is
+        accumulated as simulation credit, while snapshots are emitted on their own
+        30 Hz deadline.  This avoids adding physics compute time to every sleep and
+        preserves all intermediate poses for the renderer.
+        """
+        loop = asyncio.get_running_loop()
+        last_wall_time = loop.time()
+        next_broadcast_time = last_wall_time
+        simulation_credit = 0.0
+        pending_events: list = []
+        self._cadence_metrics.reset(last_wall_time, 1)
+
         while not self.engine.finished:
-            await asyncio.sleep(BROADCAST_INTERVAL)
+            now = loop.time()
+            wall_delta = max(0.0, min(now - last_wall_time, 0.25))
+            last_wall_time = now
+
             if not self.clients:
+                simulation_credit = 0.0
+                pending_events.clear()
+                self._trajectory_samples.clear()
+                self._cadence_metrics.reset(now, 1)
+                next_broadcast_time = now + BROADCAST_INTERVAL
+                await asyncio.sleep(BROADCAST_INTERVAL)
                 continue
 
-            events: list = []
-            if not self.engine.paused:
-                delta = BROADCAST_INTERVAL * self.engine.speed_multiplier
-                events = self._advance_engine(delta)
+            if self.engine.paused:
+                simulation_credit = 0.0
+            else:
+                simulation_credit = min(
+                    MAX_SIMULATION_BACKLOG_SECONDS,
+                    simulation_credit
+                    + wall_delta
+                    * (self.engine.speed_multiplier if self.engine.race_started else 1),
+                )
 
-            tick = self.engine.build_tick_state(events)
-            await self._broadcast(tick.model_dump())
+            steps_run = 0
+            while (
+                simulation_credit + 1e-12 >= PHYSICS_STEP_SECONDS
+                and steps_run < MAX_PHYSICS_STEPS_PER_SLICE
+                and not self.engine.finished
+                and not self.engine.paused
+            ):
+                pending_events.extend(self.engine.tick(PHYSICS_STEP_SECONDS))
+                simulation_credit -= PHYSICS_STEP_SECONDS
+                steps_run += 1
+                self._cadence_metrics.record_physics_step(PHYSICS_STEP_SECONDS)
+                self._record_trajectory_samples()
+
+            now = loop.time()
+            if now >= next_broadcast_time or self.engine.finished:
+                requested_speed = (
+                    self.engine.speed_multiplier if self.engine.race_started else 1
+                )
+                runtime_metrics = self._cadence_metrics.snapshot(
+                    now=now,
+                    scheduled_broadcast_at=next_broadcast_time,
+                    simulation_backlog_seconds=simulation_credit,
+                    requested_speed_multiplier=requested_speed,
+                    paused=self.engine.paused,
+                )
+                tick = self.engine.build_tick_state(
+                    pending_events,
+                    self._trajectory_samples,
+                    runtime_metrics,
+                )
+                await self._broadcast(tick.model_dump())
+                pending_events = []
+                self._trajectory_samples = {}
+                next_broadcast_time = now + BROADCAST_INTERVAL
+
+            if steps_run >= MAX_PHYSICS_STEPS_PER_SLICE:
+                await asyncio.sleep(0)
+                continue
+
+            time_until_broadcast = max(0.0, next_broadcast_time - loop.time())
+            if self.engine.paused:
+                sleep_seconds = min(BROADCAST_INTERVAL, time_until_broadcast)
+            else:
+                speed = self.engine.speed_multiplier if self.engine.race_started else 1
+                wall_until_step = max(
+                    0.0,
+                    (PHYSICS_STEP_SECONDS - simulation_credit) / max(1, speed),
+                )
+                sleep_seconds = min(time_until_broadcast, wall_until_step, 0.01)
+            await asyncio.sleep(max(0.0, sleep_seconds))
 
         results = self.engine.build_results()
         await self._broadcast({"type": "race_end", "results": results})
 
     def _advance_engine(self, game_seconds: float) -> list:
-        """Advance game time using small fixed simulation steps."""
+        """Advance game time in exact authoritative physics steps (test helper)."""
         events: list = []
-        remaining = game_seconds
-        while remaining > 1e-9 and not self.engine.finished:
-            step = min(GAME_TICK_SECONDS, remaining)
-            events.extend(self.engine.tick(step))
-            remaining -= step
+        steps = int((game_seconds + 1e-12) / PHYSICS_STEP_SECONDS)
+        for _ in range(steps):
+            if self.engine.finished:
+                break
+            events.extend(self.engine.tick(PHYSICS_STEP_SECONDS))
+            self._record_trajectory_samples()
         return events
+
+    def _record_trajectory_samples(self) -> None:
+        """Retain authoritative poses that would otherwise fall between packets."""
+        for state in self.engine.driver_states.values():
+            samples = self._trajectory_samples.setdefault(state.driver_id, [])
+            samples.append(
+                VehicleTrajectorySample(
+                    simulation_time_s=state.simulation_time_s,
+                    physics_frame=state.physics_frame,
+                    world_x_m=state.world_x_m,
+                    world_y_m=state.world_y_m,
+                    heading_rad=state.heading_rad,
+                    progress=state.progress,
+                    lateral_offset_m=state.lateral_offset_m,
+                    in_pit=state.in_pit,
+                    pit_lane_progress=self.engine._pit_lane_progress(state.driver_id),
+                )
+            )
+            if len(samples) > MAX_TRAJECTORY_SAMPLES_PER_DRIVER:
+                del samples[:-MAX_TRAJECTORY_SAMPLES_PER_DRIVER]
 
     async def _broadcast(self, message: dict[str, Any]) -> None:
         dead: set[WebSocket] = set()
@@ -192,7 +421,17 @@ class RaceSession:
 
         if cmd_type == "set_speed":
             multiplier = data.get("multiplier", 1)
-            self.engine.set_speed(int(multiplier))
+            try:
+                accepted = self.engine.set_speed(int(multiplier))
+            except (TypeError, ValueError):
+                accepted = False
+            if not accepted:
+                return {
+                    "type": "command_error",
+                    "command": "set_speed",
+                    "message": "Speed multiplier must be 1, 2, or 3",
+                    "message_ko": "배속은 1, 2, 3 중 하나여야 합니다",
+                }
             return {
                 "type": "command_ack",
                 "command": "set_speed",

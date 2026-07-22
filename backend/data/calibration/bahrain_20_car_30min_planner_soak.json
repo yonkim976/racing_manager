@@ -1,0 +1,47 @@
+{
+  "circuit": "Bahrain International Circuit",
+  "car_count": 20,
+  "simulation_minutes_per_speed": 30.0,
+  "results": [
+    {
+      "speed": 3,
+      "wall_seconds": 600.0,
+      "ticks": 14827,
+      "median_effective_speed": 3.0,
+      "p95_backlog_ms": 18.3,
+      "p95_jitter_ms": 13.7,
+      "final_physics_frame": 89999,
+      "trajectory_samples": 1799900,
+      "trajectory_frames_monotonic": true,
+      "maximum_trajectory_frame_gap": 1,
+      "maximum_trajectory_step_m": 1.7656530406622983,
+      "maximum_trajectory_step_driver_id": 14,
+      "maximum_trajectory_step_frame": 83654,
+      "maximum_trajectory_step_in_pit": true,
+      "maximum_trajectory_step_contact": false,
+      "maximum_trajectory_step_speed_kph": 231.7,
+      "maximum_trajectory_step_previous_progress": 0.9592139496562115,
+      "maximum_trajectory_step_progress": 0.9593911628563715,
+      "maximum_trajectory_step_previous_lateral_m": 1.0199,
+      "maximum_trajectory_step_lateral_m": 1.0249,
+      "planner_replans_observed": 17508,
+      "planner_generation_p50_ms": 2.1143,
+      "planner_generation_p95_ms": 3.7307,
+      "planner_generation_p99_ms": 4.4572,
+      "planner_generation_max_ms": 43.7233,
+      "planner_tier_samples": {
+        "5": 53845,
+        "10": 223175,
+        "20": 19440,
+        "50": 520
+      },
+      "planner_fallback_samples": 11010,
+      "planner_fallback_activations": 268,
+      "contact_samples": 48,
+      "track_limit_samples": 0,
+      "maximum_rss_mb": 278.734375,
+      "passed": true
+    }
+  ],
+  "passed": true
+}

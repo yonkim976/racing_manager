@@ -23,6 +23,14 @@ MAX_TRACK_X = 820.0
 MIN_TRACK_Y = -10.0
 MAX_TRACK_Y = 620.0
 
+# First-stage runtime contract: every circuit is simulated on one 2D plane.
+# Imported sources may retain estimated 2.5D metadata for future work, but it
+# must not affect vehicle, trajectory, collision or telemetry calculations.
+TRACK_GEOMETRY_MODE = "planar_2d"
+FLAT_TRACK_ELEVATION_M = 0.0
+FLAT_TRACK_GRADE = 0.0
+FLAT_TRACK_BANK_ANGLE_DEG = 0.0
+
 
 @dataclass(frozen=True)
 class TrackBounds:

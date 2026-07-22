@@ -141,15 +141,16 @@
   inset: 0;
   z-index: 90;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.58);
+  padding-top: 78px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0.08) 42%, transparent 72%);
   pointer-events: none;
 }
 
 .start-lights {
-  width: min(520px, calc(100vw - 40px));
-  padding: var(--space-xl);
+  width: min(420px, calc(100vw - 40px));
+  padding: var(--space-md) var(--space-lg);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-md);
   background: rgba(8, 8, 14, 0.88);
@@ -157,7 +158,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-lg);
+  gap: var(--space-sm);
 }
 
 .start-lights__row {

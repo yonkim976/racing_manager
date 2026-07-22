@@ -27,6 +27,11 @@ export default function DevRaceControl({
   remainingSeconds = 0,
   remainingLaps = 0,
   physicsHz = 50,
+  broadcastHz = 30,
+  requestedSpeedMultiplier = 1,
+  effectiveSpeedMultiplier = 0,
+  simulationBacklogSeconds = 0,
+  broadcastJitterMs = 0,
   onSetPhase,
 }) {
   const controls = [
@@ -70,7 +75,14 @@ export default function DevRaceControl({
         ))}
       </div>
       <div className="dev-race-control__physics">
-        <span>PHYSICS V2 · {physicsHz}HZ</span>
+        <span>
+          PHYSICS V2 · {physicsHz}HZ / POSE {broadcastHz}HZ / RENDER 60FPS
+        </span>
+        <span>
+          RATE {Number(effectiveSpeedMultiplier).toFixed(2)}x / {requestedSpeedMultiplier}x
+          {' · '}BACKLOG {Math.round(Number(simulationBacklogSeconds) * 1000)}MS
+          {' · '}JITTER {Number(broadcastJitterMs).toFixed(1)}MS
+        </span>
       </div>
     </section>
   );

@@ -1,0 +1,34 @@
+{
+  "width_source": "TUMFTM/racetrack-database Spielberg.csv",
+  "width_source_url": "https://github.com/TUMFTM/racetrack-database/blob/master/tracks/Spielberg.csv",
+  "width_method": "OSM centerline similarity alignment of satellite-derived left/right widths",
+  "width_license": "LGPL-3.0",
+  "width_sample_count": 64,
+  "minimum_total_width_m": 10.181,
+  "maximum_total_width_m": 13.191,
+  "mean_total_width_m": 10.993,
+  "telemetry_source": "TracingInsights-Archive/2025",
+  "telemetry_source_url": "https://github.com/TracingInsights-Archive/2025/tree/main/Austrian%20Grand%20Prix/Qualifying",
+  "reference_session": "2025 Austrian Grand Prix Qualifying",
+  "reference_laps": [
+    "NOR 17 1:03.971",
+    "LEC 17 1:04.492",
+    "PIA 16 1:04.554",
+    "HAM 20 1:04.582",
+    "RUS 17 1:04.763"
+  ],
+  "sample_count": 128,
+  "qualifying_target_comparison": {
+    "pace_modifier": 1.04,
+    "mae_kph": 5.314,
+    "rmse_kph": 7.634,
+    "bias_kph": -3.085,
+    "maximum_over_kph": 32.879,
+    "maximum_under_kph": -32.425
+  },
+  "limitations": [
+    "Widths are satellite-image estimates aligned to the project OSM centerline, not an FIA survey.",
+    "The runtime remains planar_2d; Red Bull Ring elevation and banking are intentionally disabled.",
+    "The largest local speed errors remain braking/apex transition samples and require corner-level dynamic validation."
+  ]
+}

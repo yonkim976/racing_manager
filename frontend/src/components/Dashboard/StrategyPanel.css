@@ -116,7 +116,35 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 4px;
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.strategy-driver__pace-transition {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 12px;
+  margin: -2px 0 var(--space-sm);
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.strategy-driver__pace-transition-track {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.strategy-driver__pace-transition-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-red);
+  transition: width 50ms linear;
 }
 
 .strategy-driver__pace-btn {

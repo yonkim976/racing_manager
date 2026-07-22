@@ -1,469 +1,5 @@
 [
   {
-    "id": 1,
-    "name": "F1 Test Oval Circuit",
-    "country": "Virtual",
-    "base_lap_time": 64.0,
-    "total_laps": 30,
-    "pit_loss_time": 18.0,
-    "track_length_m": 4300.0,
-    "overtaking_difficulty": 0.25,
-    "sectors": [
-      {
-        "name": "Sector 1",
-        "type": "main_straight",
-        "speed_factor": 1.05
-      },
-      {
-        "name": "Sector 2",
-        "type": "sweeping_corners",
-        "speed_factor": 0.96
-      },
-      {
-        "name": "Sector 3",
-        "type": "back_straight",
-        "speed_factor": 1.03
-      }
-    ],
-    "layout_segments": [
-      {
-        "type": "straight",
-        "start": [300, 480],
-        "end": [620, 480]
-      },
-      {
-        "type": "bezier",
-        "start": [620, 480],
-        "cp1": [800, 480],
-        "cp2": [800, 120],
-        "end": [620, 120],
-        "samples": 72
-      },
-      {
-        "type": "straight",
-        "start": [620, 120],
-        "end": [180, 120]
-      },
-      {
-        "type": "bezier",
-        "start": [180, 120],
-        "cp1": [0, 120],
-        "cp2": [0, 480],
-        "end": [180, 480],
-        "samples": 72
-      },
-      {
-        "type": "straight",
-        "start": [180, 480],
-        "end": [300, 480]
-      }
-    ],
-    "start_finish_index": 0,
-    "track_coords": [
-      [300, 480],
-      [380, 480],
-      [460, 480],
-      [540, 480],
-      [620, 480],
-      [667, 474],
-      [710, 456],
-      [747, 427],
-      [776, 390],
-      [794, 347],
-      [800, 300],
-      [794, 253],
-      [776, 210],
-      [747, 173],
-      [710, 144],
-      [667, 126],
-      [620, 120],
-      [540, 120],
-      [460, 120],
-      [380, 120],
-      [300, 120],
-      [220, 120],
-      [180, 120],
-      [133, 126],
-      [90, 144],
-      [53, 173],
-      [24, 210],
-      [6, 253],
-      [0, 300],
-      [6, 347],
-      [24, 390],
-      [53, 427],
-      [90, 456],
-      [133, 474],
-      [180, 480],
-      [240, 480],
-      [300, 480]
-    ],
-    "pit_lane_coords": [
-      [220, 480],
-      [260, 540],
-      [340, 555],
-      [480, 555],
-      [580, 540],
-      [630, 480]
-    ],
-    "pit_lane_segments": [
-      {
-        "type": "bezier",
-        "start": [220, 480],
-        "cp1": [242, 522],
-        "cp2": [285, 552],
-        "end": [340, 555],
-        "samples": 24
-      },
-      {
-        "type": "straight",
-        "start": [340, 555],
-        "end": [500, 555]
-      },
-      {
-        "type": "bezier",
-        "start": [500, 555],
-        "cp1": [572, 555],
-        "cp2": [610, 520],
-        "end": [630, 480],
-        "samples": 24
-      }
-    ],
-    "drs_zones": [
-      {
-        "name": "Main Straight",
-        "start": 0.02,
-        "end": 0.13
-      },
-      {
-        "name": "Back Straight",
-        "start": 0.38,
-        "end": 0.57
-      }
-    ],
-    "landmarks": [
-      {
-        "type": "start_finish",
-        "label": "S/F",
-        "track_index": 0,
-        "progress": 0.00
-      },
-      {
-        "type": "pit",
-        "label": "PIT LANE",
-        "track_index": 3,
-        "progress": 0.07
-      },
-      {
-        "type": "corner",
-        "label": "T1",
-        "track_index": 6,
-        "progress": 0.16
-      },
-      {
-        "type": "corner",
-        "label": "T2",
-        "track_index": 12,
-        "progress": 0.34
-      },
-      {
-        "type": "corner",
-        "label": "T3",
-        "track_index": 24,
-        "progress": 0.61
-      },
-      {
-        "type": "corner",
-        "label": "T4",
-        "track_index": 30,
-        "progress": 0.84
-      }
-    ],
-    "segments": [
-      {
-        "name": "Main Straight",
-        "start": 0.00,
-        "end": 0.16,
-        "type": "straight"
-      },
-      {
-        "name": "Turn 1 Sweep",
-        "start": 0.16,
-        "end": 0.34,
-        "type": "sweeping"
-      },
-      {
-        "name": "Back Straight",
-        "start": 0.34,
-        "end": 0.61,
-        "type": "straight"
-      },
-      {
-        "name": "Turn 3 Sweep",
-        "start": 0.61,
-        "end": 0.84,
-        "type": "sweeping"
-      },
-      {
-        "name": "Final Straight",
-        "start": 0.84,
-        "end": 1.00,
-        "type": "straight"
-      }
-    ]
-  },
-  {
-    "id": 2,
-    "name": "Technical Park Circuit",
-    "country": "Virtual",
-    "base_lap_time": 72.0,
-    "total_laps": 42,
-    "pit_loss_time": 21.5,
-    "track_length_m": 4600.0,
-    "overtaking_difficulty": 0.58,
-    "sectors": [
-      {
-        "name": "Sector 1",
-        "type": "technical_sweeps",
-        "speed_factor": 0.97
-      },
-      {
-        "name": "Sector 2",
-        "type": "hairpin_and_back_straight",
-        "speed_factor": 1.02
-      },
-      {
-        "name": "Sector 3",
-        "type": "stadium_complex",
-        "speed_factor": 0.94
-      }
-    ],
-    "layout_segments": [
-      {
-        "type": "straight",
-        "start": [360, 520],
-        "end": [540, 510]
-      },
-      {
-        "type": "bezier",
-        "start": [540, 510],
-        "cp1": [625, 500],
-        "cp2": [720, 450],
-        "end": [730, 365],
-        "samples": 48
-      },
-      {
-        "type": "bezier",
-        "start": [730, 365],
-        "cp1": [746, 292],
-        "cp2": [700, 232],
-        "end": [620, 224],
-        "samples": 44
-      },
-      {
-        "type": "bezier",
-        "start": [620, 224],
-        "cp1": [560, 218],
-        "cp2": [505, 292],
-        "end": [438, 304],
-        "samples": 42
-      },
-      {
-        "type": "bezier",
-        "start": [438, 304],
-        "cp1": [378, 318],
-        "cp2": [330, 280],
-        "end": [292, 224],
-        "samples": 36
-      },
-      {
-        "type": "bezier",
-        "start": [292, 224],
-        "cp1": [236, 180],
-        "cp2": [160, 170],
-        "end": [108, 216],
-        "samples": 44
-      },
-      {
-        "type": "bezier",
-        "start": [108, 216],
-        "cp1": [58, 260],
-        "cp2": [56, 358],
-        "end": [98, 410],
-        "samples": 48
-      },
-      {
-        "type": "bezier",
-        "start": [98, 410],
-        "cp1": [132, 474],
-        "cp2": [222, 506],
-        "end": [300, 512],
-        "samples": 42
-      },
-      {
-        "type": "bezier",
-        "start": [300, 512],
-        "cp1": [320, 516],
-        "cp2": [342, 520],
-        "end": [360, 520],
-        "samples": 12
-      }
-    ],
-    "start_finish_index": 0,
-    "track_coords": [
-      [360, 520],
-      [450, 520],
-      [540, 510],
-      [620, 480],
-      [690, 430],
-      [730, 365],
-      [726, 300],
-      [688, 250],
-      [620, 224],
-      [548, 234],
-      [490, 270],
-      [438, 304],
-      [382, 306],
-      [330, 276],
-      [292, 224],
-      [232, 186],
-      [166, 182],
-      [108, 216],
-      [78, 276],
-      [72, 346],
-      [98, 410],
-      [154, 458],
-      [230, 492],
-      [300, 512],
-      [360, 520]
-    ],
-    "pit_lane_coords": [
-      [290, 512],
-      [340, 562],
-      [430, 582],
-      [535, 560],
-      [610, 482]
-    ],
-    "pit_lane_segments": [
-      {
-        "type": "bezier",
-        "start": [290, 512],
-        "cp1": [320, 548],
-        "cp2": [366, 574],
-        "end": [430, 582],
-        "samples": 24
-      },
-      {
-        "type": "bezier",
-        "start": [430, 582],
-        "cp1": [500, 586],
-        "cp2": [570, 538],
-        "end": [610, 482],
-        "samples": 28
-      }
-    ],
-    "drs_zones": [
-      {
-        "name": "Main Straight",
-        "start": 0.02,
-        "end": 0.09
-      },
-      {
-        "name": "Back Straight",
-        "start": 0.28,
-        "end": 0.40
-      }
-    ],
-    "landmarks": [
-      {
-        "type": "start_finish",
-        "label": "S/F",
-        "track_index": 0,
-        "progress": 0.00
-      },
-      {
-        "type": "pit",
-        "label": "PIT LANE",
-        "track_index": 1,
-        "progress": 0.03
-      },
-      {
-        "type": "corner",
-        "label": "T1",
-        "track_index": 4,
-        "progress": 0.14
-      },
-      {
-        "type": "corner",
-        "label": "T2",
-        "track_index": 7,
-        "progress": 0.24
-      },
-      {
-        "type": "corner",
-        "label": "ESSES",
-        "track_index": 11,
-        "progress": 0.42
-      },
-      {
-        "type": "corner",
-        "label": "HAIRPIN",
-        "track_index": 18,
-        "progress": 0.66
-      },
-      {
-        "type": "corner",
-        "label": "T7",
-        "track_index": 21,
-        "progress": 0.80
-      },
-      {
-        "type": "corner",
-        "label": "FINAL",
-        "track_index": 23,
-        "progress": 0.92
-      }
-    ],
-    "segments": [
-      {
-        "name": "Main Straight",
-        "start": 0.00,
-        "end": 0.12,
-        "type": "straight"
-      },
-      {
-        "name": "Opening Braking Zone",
-        "start": 0.12,
-        "end": 0.24,
-        "type": "heavy_braking"
-      },
-      {
-        "name": "Back Straight",
-        "start": 0.24,
-        "end": 0.44,
-        "type": "straight"
-      },
-      {
-        "name": "Middle Complex",
-        "start": 0.44,
-        "end": 0.66,
-        "type": "technical"
-      },
-      {
-        "name": "Traction Loop",
-        "start": 0.66,
-        "end": 0.82,
-        "type": "traction"
-      },
-      {
-        "name": "Final Technical Sector",
-        "start": 0.82,
-        "end": 1.00,
-        "type": "technical"
-      }
-    ]
-  },
-  {
     "id": 3,
     "name": "Bahrain International Circuit",
     "country": "Bahrain",
@@ -471,156 +7,354 @@
     "total_laps": 57,
     "pit_loss_time": 23.0,
     "track_length_m": 5412.0,
+    "track_width_m": 14.0,
+    "data_version": "v2",
     "overtaking_difficulty": 0.48,
     "geo_file": "circuit_sources/bahrain_osm_geo.json",
+    "profile_file": "circuit_sources/bahrain_track_profile_v2.json",
     "sectors": [
       {
         "name": "Sector 1",
         "type": "main_straight_and_heavy_braking",
-        "speed_factor": 1.03
+        "speed_factor": 1.03,
+        "start": 0.0,
+        "end": 0.345,
+        "mini_sector_count": 6
       },
       {
         "name": "Sector 2",
         "type": "technical_middle_sector",
-        "speed_factor": 0.94
+        "speed_factor": 0.94,
+        "start": 0.345,
+        "end": 0.7821308,
+        "mini_sector_count": 6
       },
       {
         "name": "Sector 3",
         "type": "back_straight_and_final_loop",
-        "speed_factor": 1.01
+        "speed_factor": 1.01,
+        "start": 0.7821308,
+        "end": 1.0,
+        "mini_sector_count": 6
       }
     ],
     "layout_segments": [
       {
         "type": "straight",
-        "start": [500, 520],
-        "end": [122, 520]
+        "start": [
+          500,
+          520
+        ],
+        "end": [
+          122,
+          520
+        ]
       },
       {
         "type": "bezier",
-        "start": [122, 520],
-        "cp1": [72, 520],
-        "cp2": [70, 476],
-        "end": [130, 450],
+        "start": [
+          122,
+          520
+        ],
+        "cp1": [
+          72,
+          520
+        ],
+        "cp2": [
+          70,
+          476
+        ],
+        "end": [
+          130,
+          450
+        ],
         "samples": 38
       },
       {
         "type": "bezier",
-        "start": [130, 450],
-        "cp1": [174, 432],
-        "cp2": [108, 420],
-        "end": [116, 382],
+        "start": [
+          130,
+          450
+        ],
+        "cp1": [
+          174,
+          432
+        ],
+        "cp2": [
+          108,
+          420
+        ],
+        "end": [
+          116,
+          382
+        ],
         "samples": 34
       },
       {
         "type": "straight",
-        "start": [116, 382],
-        "end": [172, 118]
+        "start": [
+          116,
+          382
+        ],
+        "end": [
+          172,
+          118
+        ]
       },
       {
         "type": "bezier",
-        "start": [172, 118],
-        "cp1": [180, 58],
-        "cp2": [274, 84],
-        "end": [322, 132],
+        "start": [
+          172,
+          118
+        ],
+        "cp1": [
+          180,
+          58
+        ],
+        "cp2": [
+          274,
+          84
+        ],
+        "end": [
+          322,
+          132
+        ],
         "samples": 52
       },
       {
         "type": "straight",
-        "start": [322, 132],
-        "end": [395, 208]
+        "start": [
+          322,
+          132
+        ],
+        "end": [
+          395,
+          208
+        ]
       },
       {
         "type": "bezier",
-        "start": [395, 208],
-        "cp1": [430, 246],
-        "cp2": [505, 252],
-        "end": [515, 318],
+        "start": [
+          395,
+          208
+        ],
+        "cp1": [
+          430,
+          246
+        ],
+        "cp2": [
+          505,
+          252
+        ],
+        "end": [
+          515,
+          318
+        ],
         "samples": 38
       },
       {
         "type": "bezier",
-        "start": [515, 318],
-        "cp1": [512, 360],
-        "cp2": [536, 392],
-        "end": [578, 410],
+        "start": [
+          515,
+          318
+        ],
+        "cp1": [
+          512,
+          360
+        ],
+        "cp2": [
+          536,
+          392
+        ],
+        "end": [
+          578,
+          410
+        ],
         "samples": 30
       },
       {
         "type": "bezier",
-        "start": [578, 410],
-        "cp1": [612, 426],
-        "cp2": [562, 444],
-        "end": [515, 430],
+        "start": [
+          578,
+          410
+        ],
+        "cp1": [
+          612,
+          426
+        ],
+        "cp2": [
+          562,
+          444
+        ],
+        "end": [
+          515,
+          430
+        ],
         "samples": 24
       },
       {
         "type": "bezier",
-        "start": [515, 430],
-        "cp1": [470, 418],
-        "cp2": [420, 402],
-        "end": [365, 398],
+        "start": [
+          515,
+          430
+        ],
+        "cp1": [
+          470,
+          418
+        ],
+        "cp2": [
+          420,
+          402
+        ],
+        "end": [
+          365,
+          398
+        ],
         "samples": 34
       },
       {
         "type": "bezier",
-        "start": [365, 398],
-        "cp1": [292, 394],
-        "cp2": [270, 462],
-        "end": [326, 455],
+        "start": [
+          365,
+          398
+        ],
+        "cp1": [
+          292,
+          394
+        ],
+        "cp2": [
+          270,
+          462
+        ],
+        "end": [
+          326,
+          455
+        ],
         "samples": 40
       },
       {
         "type": "straight",
-        "start": [326, 455],
-        "end": [645, 455]
+        "start": [
+          326,
+          455
+        ],
+        "end": [
+          645,
+          455
+        ]
       },
       {
         "type": "bezier",
-        "start": [645, 455],
-        "cp1": [708, 456],
-        "cp2": [714, 398],
-        "end": [670, 355],
+        "start": [
+          645,
+          455
+        ],
+        "cp1": [
+          708,
+          456
+        ],
+        "cp2": [
+          714,
+          398
+        ],
+        "end": [
+          670,
+          355
+        ],
         "samples": 44
       },
       {
         "type": "bezier",
-        "start": [670, 355],
-        "cp1": [620, 318],
-        "cp2": [612, 270],
-        "end": [636, 225],
+        "start": [
+          670,
+          355
+        ],
+        "cp1": [
+          620,
+          318
+        ],
+        "cp2": [
+          612,
+          270
+        ],
+        "end": [
+          636,
+          225
+        ],
         "samples": 40
       },
       {
         "type": "bezier",
-        "start": [636, 225],
-        "cp1": [652, 152],
-        "cp2": [722, 70],
-        "end": [735, 115],
+        "start": [
+          636,
+          225
+        ],
+        "cp1": [
+          652,
+          152
+        ],
+        "cp2": [
+          722,
+          70
+        ],
+        "end": [
+          735,
+          115
+        ],
         "samples": 52
       },
       {
         "type": "straight",
-        "start": [735, 115],
-        "end": [805, 428]
+        "start": [
+          735,
+          115
+        ],
+        "end": [
+          805,
+          428
+        ]
       },
       {
         "type": "bezier",
-        "start": [805, 428],
-        "cp1": [832, 488],
-        "cp2": [760, 522],
-        "end": [704, 520],
+        "start": [
+          805,
+          428
+        ],
+        "cp1": [
+          832,
+          488
+        ],
+        "cp2": [
+          760,
+          522
+        ],
+        "end": [
+          704,
+          520
+        ],
         "samples": 52
       },
       {
         "type": "straight",
-        "start": [704, 520],
-        "end": [650, 520]
+        "start": [
+          704,
+          520
+        ],
+        "end": [
+          650,
+          520
+        ]
       },
       {
         "type": "straight",
-        "start": [650, 520],
-        "end": [500, 520]
+        "start": [
+          650,
+          520
+        ],
+        "end": [
+          500,
+          520
+        ]
       }
     ],
     "start_finish_index": 0,
@@ -630,67 +364,186 @@
       "lane_offset": 22,
       "wall_offset": 11,
       "box_offset": 10,
+      "side_entry_progress": 0.02,
+      "side_rejoin_progress": 0.94,
       "entry_blend": 0.018,
-      "exit_blend": 0.020,
+      "exit_blend": 0.02,
       "samples": 64
     },
     "track_coords": [
-      [500, 520],
-      [122, 520],
-      [130, 450],
-      [116, 382],
-      [172, 118],
-      [322, 132],
-      [395, 208],
-      [515, 318],
-      [578, 410],
-      [515, 430],
-      [365, 398],
-      [326, 455],
-      [645, 455],
-      [670, 355],
-      [636, 225],
-      [735, 115],
-      [805, 428],
-      [704, 520],
-      [650, 520],
-      [500, 520]
+      [
+        500,
+        520
+      ],
+      [
+        122,
+        520
+      ],
+      [
+        130,
+        450
+      ],
+      [
+        116,
+        382
+      ],
+      [
+        172,
+        118
+      ],
+      [
+        322,
+        132
+      ],
+      [
+        395,
+        208
+      ],
+      [
+        515,
+        318
+      ],
+      [
+        578,
+        410
+      ],
+      [
+        515,
+        430
+      ],
+      [
+        365,
+        398
+      ],
+      [
+        326,
+        455
+      ],
+      [
+        645,
+        455
+      ],
+      [
+        670,
+        355
+      ],
+      [
+        636,
+        225
+      ],
+      [
+        735,
+        115
+      ],
+      [
+        805,
+        428
+      ],
+      [
+        704,
+        520
+      ],
+      [
+        650,
+        520
+      ],
+      [
+        500,
+        520
+      ]
     ],
     "pit_lane_coords": [
-      [808, 463],
-      [700, 486],
-      [500, 488],
-      [260, 490],
-      [168, 520]
+      [
+        808,
+        463
+      ],
+      [
+        700,
+        486
+      ],
+      [
+        500,
+        488
+      ],
+      [
+        260,
+        490
+      ],
+      [
+        168,
+        520
+      ]
     ],
     "pit_lane_segments": [
       {
         "type": "bezier",
-        "start": [808, 463],
-        "cp1": [810, 474],
-        "cp2": [790, 484],
-        "end": [700, 486],
+        "start": [
+          808,
+          463
+        ],
+        "cp1": [
+          810,
+          474
+        ],
+        "cp2": [
+          790,
+          484
+        ],
+        "end": [
+          700,
+          486
+        ],
         "samples": 24
       },
       {
         "type": "bezier",
-        "start": [700, 486],
-        "cp1": [640, 487],
-        "cp2": [570, 488],
-        "end": [500, 488],
+        "start": [
+          700,
+          486
+        ],
+        "cp1": [
+          640,
+          487
+        ],
+        "cp2": [
+          570,
+          488
+        ],
+        "end": [
+          500,
+          488
+        ],
         "samples": 20
       },
       {
         "type": "straight",
-        "start": [500, 488],
-        "end": [260, 490]
+        "start": [
+          500,
+          488
+        ],
+        "end": [
+          260,
+          490
+        ]
       },
       {
         "type": "bezier",
-        "start": [260, 490],
-        "cp1": [210, 492],
-        "cp2": [185, 506],
-        "end": [168, 520],
+        "start": [
+          260,
+          490
+        ],
+        "cp1": [
+          210,
+          492
+        ],
+        "cp2": [
+          185,
+          506
+        ],
+        "end": [
+          168,
+          520
+        ],
         "samples": 24
       }
     ],
@@ -703,7 +556,7 @@
       {
         "name": "T3-T4 Climb",
         "start": 0.184,
-        "end": 0.250
+        "end": 0.25
       },
       {
         "name": "Back Straight",
@@ -712,7 +565,7 @@
       },
       {
         "name": "T13-T14 Straight",
-        "start": 0.800,
+        "start": 0.8,
         "end": 0.884
       }
     ],
@@ -721,13 +574,13 @@
         "type": "start_finish",
         "label": "S/F",
         "track_index": 0,
-        "progress": 0.00
+        "progress": 0.0
       },
       {
         "type": "pit",
         "label": "PIT LANE",
         "track_index": 2,
-        "progress": 0.000
+        "progress": 0.0
       },
       {
         "type": "corner",
@@ -823,7 +676,7 @@
     "segments": [
       {
         "name": "Start/Finish Straight",
-        "start": 0.00,
+        "start": 0.0,
         "end": 0.099,
         "type": "straight",
         "speed_factor": 1.18
@@ -894,11 +747,1063 @@
       {
         "name": "Main Straight Approach",
         "start": 0.954,
-        "end": 1.00,
+        "end": 1.0,
         "type": "straight",
         "speed_factor": 1.14
       }
-    ]
+    ],
+    "physics_calibration": {
+      "source": "TracingInsights-Archive/2025",
+      "source_url": "https://github.com/TracingInsights-Archive/2025",
+      "reference_season": 2025,
+      "reference_session": "Bahrain Grand Prix Qualifying",
+      "reference_laps": [
+        "PIA 14 1:29.841",
+        "RUS 19 1:30.009",
+        "LEC 15 1:30.175",
+        "ANT 19 1:30.213",
+        "GAS 18 1:30.216"
+      ],
+      "reference_lap_time_seconds": 89.841,
+      "planner_braking_utilization": 0.55,
+      "telemetry_max_braking_utilization": 0.80,
+      "telemetry_braking_speed_reserve": 0.98,
+      "braking_longitudinal_grip_factor": 1.35,
+      "brake_control_error_fraction": 0.06,
+      "controller_sample_distance_m": 12.5,
+      "racing_line_reference": [
+        {
+          "progress": 0.0,
+          "lateral_offset_m": 0.209
+        },
+        {
+          "progress": 0.015625,
+          "lateral_offset_m": 0.023
+        },
+        {
+          "progress": 0.03125,
+          "lateral_offset_m": -0.021
+        },
+        {
+          "progress": 0.046875,
+          "lateral_offset_m": 0.052
+        },
+        {
+          "progress": 0.0625,
+          "lateral_offset_m": 0.248
+        },
+        {
+          "progress": 0.078125,
+          "lateral_offset_m": 0.74
+        },
+        {
+          "progress": 0.09375,
+          "lateral_offset_m": 1.734
+        },
+        {
+          "progress": 0.109375,
+          "lateral_offset_m": 1.585
+        },
+        {
+          "progress": 0.125,
+          "lateral_offset_m": 0.911
+        },
+        {
+          "progress": 0.140625,
+          "lateral_offset_m": -2.943
+        },
+        {
+          "progress": 0.15625,
+          "lateral_offset_m": -0.748
+        },
+        {
+          "progress": 0.171875,
+          "lateral_offset_m": 1.405
+        },
+        {
+          "progress": 0.1875,
+          "lateral_offset_m": -1.294
+        },
+        {
+          "progress": 0.203125,
+          "lateral_offset_m": -1.497
+        },
+        {
+          "progress": 0.21875,
+          "lateral_offset_m": -0.702
+        },
+        {
+          "progress": 0.234375,
+          "lateral_offset_m": 0.507
+        },
+        {
+          "progress": 0.25,
+          "lateral_offset_m": 1.647
+        },
+        {
+          "progress": 0.265625,
+          "lateral_offset_m": 2.835
+        },
+        {
+          "progress": 0.28125,
+          "lateral_offset_m": 2.565
+        },
+        {
+          "progress": 0.296875,
+          "lateral_offset_m": -4.053
+        },
+        {
+          "progress": 0.3125,
+          "lateral_offset_m": -3.977
+        },
+        {
+          "progress": 0.328125,
+          "lateral_offset_m": -2.104
+        },
+        {
+          "progress": 0.34375,
+          "lateral_offset_m": 1.657
+        },
+        {
+          "progress": 0.359375,
+          "lateral_offset_m": 1.778
+        },
+        {
+          "progress": 0.375,
+          "lateral_offset_m": 0.334
+        },
+        {
+          "progress": 0.390625,
+          "lateral_offset_m": 0.607
+        },
+        {
+          "progress": 0.40625,
+          "lateral_offset_m": -1.145
+        },
+        {
+          "progress": 0.421875,
+          "lateral_offset_m": -0.006
+        },
+        {
+          "progress": 0.4375,
+          "lateral_offset_m": -1.65
+        },
+        {
+          "progress": 0.453125,
+          "lateral_offset_m": 0.679
+        },
+        {
+          "progress": 0.46875,
+          "lateral_offset_m": 2.303
+        },
+        {
+          "progress": 0.484375,
+          "lateral_offset_m": 2.176
+        },
+        {
+          "progress": 0.5,
+          "lateral_offset_m": 0.976
+        },
+        {
+          "progress": 0.515625,
+          "lateral_offset_m": -1.541
+        },
+        {
+          "progress": 0.53125,
+          "lateral_offset_m": -1.883
+        },
+        {
+          "progress": 0.546875,
+          "lateral_offset_m": -1.296
+        },
+        {
+          "progress": 0.5625,
+          "lateral_offset_m": -0.35
+        },
+        {
+          "progress": 0.578125,
+          "lateral_offset_m": 0.377
+        },
+        {
+          "progress": 0.59375,
+          "lateral_offset_m": 1.091
+        },
+        {
+          "progress": 0.609375,
+          "lateral_offset_m": 1.94
+        },
+        {
+          "progress": 0.625,
+          "lateral_offset_m": 0.778
+        },
+        {
+          "progress": 0.640625,
+          "lateral_offset_m": -0.648
+        },
+        {
+          "progress": 0.65625,
+          "lateral_offset_m": -0.515
+        },
+        {
+          "progress": 0.671875,
+          "lateral_offset_m": -2.497
+        },
+        {
+          "progress": 0.6875,
+          "lateral_offset_m": -0.833
+        },
+        {
+          "progress": 0.703125,
+          "lateral_offset_m": 1.975
+        },
+        {
+          "progress": 0.71875,
+          "lateral_offset_m": 0.979
+        },
+        {
+          "progress": 0.734375,
+          "lateral_offset_m": -0.068
+        },
+        {
+          "progress": 0.75,
+          "lateral_offset_m": 0.412
+        },
+        {
+          "progress": 0.765625,
+          "lateral_offset_m": 0.318
+        },
+        {
+          "progress": 0.78125,
+          "lateral_offset_m": -2.028
+        },
+        {
+          "progress": 0.796875,
+          "lateral_offset_m": -1.093
+        },
+        {
+          "progress": 0.8125,
+          "lateral_offset_m": -0.098
+        },
+        {
+          "progress": 0.828125,
+          "lateral_offset_m": 0.341
+        },
+        {
+          "progress": 0.84375,
+          "lateral_offset_m": 0.263
+        },
+        {
+          "progress": 0.859375,
+          "lateral_offset_m": 0.427
+        },
+        {
+          "progress": 0.875,
+          "lateral_offset_m": 1.207
+        },
+        {
+          "progress": 0.890625,
+          "lateral_offset_m": 2.29
+        },
+        {
+          "progress": 0.90625,
+          "lateral_offset_m": 2.357
+        },
+        {
+          "progress": 0.921875,
+          "lateral_offset_m": -2.964
+        },
+        {
+          "progress": 0.9375,
+          "lateral_offset_m": -3.922
+        },
+        {
+          "progress": 0.953125,
+          "lateral_offset_m": -1.135
+        },
+        {
+          "progress": 0.96875,
+          "lateral_offset_m": 0.63
+        },
+        {
+          "progress": 0.984375,
+          "lateral_offset_m": 0.638
+        }
+      ],
+      "racing_line_reference_weight": 0.65,
+      "racing_line_initial_smoothing_passes": 1,
+      "telemetry_reference": [
+        {
+          "progress": 0.0,
+          "speed_kph": 292.634,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.007812,
+          "speed_kph": 297.179,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.015625,
+          "speed_kph": 300.889,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.023438,
+          "speed_kph": 305.619,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.03125,
+          "speed_kph": 307.63,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.039062,
+          "speed_kph": 311.342,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.046875,
+          "speed_kph": 313.471,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.054688,
+          "speed_kph": 315.0,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.0625,
+          "speed_kph": 316.612,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.070312,
+          "speed_kph": 317.0,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.078125,
+          "speed_kph": 318.147,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.085938,
+          "speed_kph": 319.0,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.09375,
+          "speed_kph": 319.921,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.101562,
+          "speed_kph": 319.196,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.109375,
+          "speed_kph": 315.778,
+          "throttle_percent": 59.269,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.117188,
+          "speed_kph": 247.289,
+          "throttle_percent": 0.0,
+          "braking_fraction": 1.0
+        },
+        {
+          "progress": 0.125,
+          "speed_kph": 133.651,
+          "throttle_percent": 0.0,
+          "braking_fraction": 1.0
+        },
+        {
+          "progress": 0.132812,
+          "speed_kph": 69.802,
+          "throttle_percent": 4.964,
+          "braking_fraction": 0.4
+        },
+        {
+          "progress": 0.140625,
+          "speed_kph": 106.683,
+          "throttle_percent": 72.631,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.148438,
+          "speed_kph": 152.331,
+          "throttle_percent": 83.332,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.15625,
+          "speed_kph": 184.326,
+          "throttle_percent": 99.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.164062,
+          "speed_kph": 207.5,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.171875,
+          "speed_kph": 224.821,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.179688,
+          "speed_kph": 238.493,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.1875,
+          "speed_kph": 251.32,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.195312,
+          "speed_kph": 263.188,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.203125,
+          "speed_kph": 271.904,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.210938,
+          "speed_kph": 279.17,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.21875,
+          "speed_kph": 287.074,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.226562,
+          "speed_kph": 292.101,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.234375,
+          "speed_kph": 297.146,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.242188,
+          "speed_kph": 300.907,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.25,
+          "speed_kph": 303.878,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.257812,
+          "speed_kph": 301.673,
+          "throttle_percent": 70.146,
+          "braking_fraction": 0.2
+        },
+        {
+          "progress": 0.265625,
+          "speed_kph": 215.766,
+          "throttle_percent": 0.0,
+          "braking_fraction": 1.0
+        },
+        {
+          "progress": 0.273438,
+          "speed_kph": 150.355,
+          "throttle_percent": 0.0,
+          "braking_fraction": 1.0
+        },
+        {
+          "progress": 0.28125,
+          "speed_kph": 124.897,
+          "throttle_percent": 28.204,
+          "braking_fraction": 0.2
+        },
+        {
+          "progress": 0.289062,
+          "speed_kph": 141.747,
+          "throttle_percent": 69.435,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.296875,
+          "speed_kph": 175.941,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.304688,
+          "speed_kph": 204.9,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.3125,
+          "speed_kph": 223.961,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.320312,
+          "speed_kph": 240.235,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.328125,
+          "speed_kph": 250.566,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.335938,
+          "speed_kph": 240.032,
+          "throttle_percent": 5.478,
+          "braking_fraction": 0.8
+        },
+        {
+          "progress": 0.34375,
+          "speed_kph": 218.386,
+          "throttle_percent": 25.614,
+          "braking_fraction": 0.2
+        },
+        {
+          "progress": 0.351562,
+          "speed_kph": 212.012,
+          "throttle_percent": 87.042,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.359375,
+          "speed_kph": 227.861,
+          "throttle_percent": 99.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.367188,
+          "speed_kph": 235.586,
+          "throttle_percent": 83.795,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.375,
+          "speed_kph": 241.434,
+          "throttle_percent": 99.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.382812,
+          "speed_kph": 251.306,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.390625,
+          "speed_kph": 254.834,
+          "throttle_percent": 68.175,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.398438,
+          "speed_kph": 196.337,
+          "throttle_percent": 0.0,
+          "braking_fraction": 1.0
+        },
+        {
+          "progress": 0.40625,
+          "speed_kph": 113.453,
+          "throttle_percent": 0.0,
+          "braking_fraction": 1.0
+        },
+        {
+          "progress": 0.414062,
+          "speed_kph": 81.016,
+          "throttle_percent": 23.702,
+          "braking_fraction": 0.4
+        },
+        {
+          "progress": 0.421875,
+          "speed_kph": 115.913,
+          "throttle_percent": 77.003,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.429688,
+          "speed_kph": 167.359,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.4375,
+          "speed_kph": 199.907,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.445312,
+          "speed_kph": 219.741,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.453125,
+          "speed_kph": 234.493,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.460938,
+          "speed_kph": 246.776,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.46875,
+          "speed_kph": 255.608,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.476562,
+          "speed_kph": 257.779,
+          "throttle_percent": 71.635,
+          "braking_fraction": 0.2
+        },
+        {
+          "progress": 0.484375,
+          "speed_kph": 212.827,
+          "throttle_percent": 0.0,
+          "braking_fraction": 1.0
+        },
+        {
+          "progress": 0.492188,
+          "speed_kph": 124.74,
+          "throttle_percent": 0.0,
+          "braking_fraction": 1.0
+        },
+        {
+          "progress": 0.5,
+          "speed_kph": 77.439,
+          "throttle_percent": 16.104,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.507812,
+          "speed_kph": 117.271,
+          "throttle_percent": 79.809,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.515625,
+          "speed_kph": 170.97,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.523438,
+          "speed_kph": 202.673,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.53125,
+          "speed_kph": 227.214,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.539062,
+          "speed_kph": 245.02,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.546875,
+          "speed_kph": 259.228,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.554688,
+          "speed_kph": 269.89,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.5625,
+          "speed_kph": 278.236,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.570312,
+          "speed_kph": 286.785,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.578125,
+          "speed_kph": 293.25,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.585938,
+          "speed_kph": 298.827,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.59375,
+          "speed_kph": 304.037,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.601562,
+          "speed_kph": 308.123,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.609375,
+          "speed_kph": 310.599,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.617188,
+          "speed_kph": 272.099,
+          "throttle_percent": 0.0,
+          "braking_fraction": 1.0
+        },
+        {
+          "progress": 0.625,
+          "speed_kph": 199.346,
+          "throttle_percent": 0.0,
+          "braking_fraction": 1.0
+        },
+        {
+          "progress": 0.632812,
+          "speed_kph": 164.083,
+          "throttle_percent": 13.523,
+          "braking_fraction": 0.6
+        },
+        {
+          "progress": 0.640625,
+          "speed_kph": 166.694,
+          "throttle_percent": 73.584,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.648438,
+          "speed_kph": 189.688,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.65625,
+          "speed_kph": 209.996,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.664062,
+          "speed_kph": 225.255,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.671875,
+          "speed_kph": 236.595,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.679688,
+          "speed_kph": 247.941,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.6875,
+          "speed_kph": 254.263,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.695312,
+          "speed_kph": 258.832,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.703125,
+          "speed_kph": 262.0,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.710938,
+          "speed_kph": 265.162,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.71875,
+          "speed_kph": 268.122,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.726562,
+          "speed_kph": 270.506,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.734375,
+          "speed_kph": 271.832,
+          "throttle_percent": 66.794,
+          "braking_fraction": 0.2
+        },
+        {
+          "progress": 0.742188,
+          "speed_kph": 206.648,
+          "throttle_percent": 0.0,
+          "braking_fraction": 1.0
+        },
+        {
+          "progress": 0.75,
+          "speed_kph": 156.395,
+          "throttle_percent": 0.0,
+          "braking_fraction": 0.8
+        },
+        {
+          "progress": 0.757812,
+          "speed_kph": 141.737,
+          "throttle_percent": 34.332,
+          "braking_fraction": 0.2
+        },
+        {
+          "progress": 0.765625,
+          "speed_kph": 157.556,
+          "throttle_percent": 83.76,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.773438,
+          "speed_kph": 188.595,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.78125,
+          "speed_kph": 213.624,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.789062,
+          "speed_kph": 232.743,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.796875,
+          "speed_kph": 247.807,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.804688,
+          "speed_kph": 259.645,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.8125,
+          "speed_kph": 267.77,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.820312,
+          "speed_kph": 275.796,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.828125,
+          "speed_kph": 282.011,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.835938,
+          "speed_kph": 287.35,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.84375,
+          "speed_kph": 291.413,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.851562,
+          "speed_kph": 295.201,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.859375,
+          "speed_kph": 299.0,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.867188,
+          "speed_kph": 300.082,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.875,
+          "speed_kph": 301.931,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.882812,
+          "speed_kph": 300.0,
+          "throttle_percent": 68.779,
+          "braking_fraction": 0.2
+        },
+        {
+          "progress": 0.890625,
+          "speed_kph": 244.113,
+          "throttle_percent": 0.0,
+          "braking_fraction": 1.0
+        },
+        {
+          "progress": 0.898438,
+          "speed_kph": 155.65,
+          "throttle_percent": 0.0,
+          "braking_fraction": 1.0
+        },
+        {
+          "progress": 0.90625,
+          "speed_kph": 131.672,
+          "throttle_percent": 27.452,
+          "braking_fraction": 0.2
+        },
+        {
+          "progress": 0.914062,
+          "speed_kph": 147.929,
+          "throttle_percent": 92.929,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.921875,
+          "speed_kph": 186.229,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.929688,
+          "speed_kph": 210.438,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.9375,
+          "speed_kph": 229.771,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.945312,
+          "speed_kph": 243.216,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.953125,
+          "speed_kph": 253.759,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.960938,
+          "speed_kph": 262.01,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.96875,
+          "speed_kph": 268.638,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.976562,
+          "speed_kph": 275.266,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.984375,
+          "speed_kph": 283.178,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        },
+        {
+          "progress": 0.992188,
+          "speed_kph": 290.272,
+          "throttle_percent": 100.0,
+          "braking_fraction": 0.0
+        }
+      ],
+      "telemetry_speed_reference_weight": 1.0,
+      "telemetry_braking_curvature_threshold": 0.05
+    }
   },
   {
     "id": 4,
@@ -910,6 +1815,8 @@
     "track_length_m": 4318.0,
     "overtaking_difficulty": 0.32,
     "geo_file": "circuit_sources/red_bull_ring_osm_geo.json",
+    "profile_file": "circuit_sources/red_bull_ring_track_profile_v2.json",
+    "track_width_m": 11.0,
     "sectors": [
       {
         "name": "Sector 1",
@@ -930,120 +1837,288 @@
     "layout_segments": [
       {
         "type": "bezier",
-        "start": [548.3, 470.5],
-        "cp1": [500, 482],
-        "cp2": [400, 512],
-        "end": [344.4, 518.2],
+        "start": [
+          548.3,
+          470.5
+        ],
+        "cp1": [
+          500,
+          482
+        ],
+        "cp2": [
+          400,
+          512
+        ],
+        "end": [
+          344.4,
+          518.2
+        ],
         "samples": 44
       },
       {
         "type": "bezier",
-        "start": [344.4, 518.2],
-        "cp1": [344.4, 518.2],
-        "cp2": [323.2, 481.1],
-        "end": [297.8, 449.3],
+        "start": [
+          344.4,
+          518.2
+        ],
+        "cp1": [
+          344.4,
+          518.2
+        ],
+        "cp2": [
+          323.2,
+          481.1
+        ],
+        "end": [
+          297.8,
+          449.3
+        ],
         "samples": 24
       },
       {
         "type": "straight",
-        "start": [297.8, 449.3],
-        "end": [269.3, 409.1]
+        "start": [
+          297.8,
+          449.3
+        ],
+        "end": [
+          269.3,
+          409.1
+        ]
       },
       {
         "type": "straight",
-        "start": [269.3, 409.1],
-        "end": [172.5, 216.3]
+        "start": [
+          269.3,
+          409.1
+        ],
+        "end": [
+          172.5,
+          216.3
+        ]
       },
       {
         "type": "straight",
-        "start": [172.5, 216.3],
-        "end": [68.5, 96.8]
+        "start": [
+          172.5,
+          216.3
+        ],
+        "end": [
+          68.5,
+          96.8
+        ]
       },
       {
         "type": "bezier",
-        "start": [68.5, 96.8],
-        "cp1": [68.5, 96.8],
-        "cp2": [53.3, 82.2],
-        "end": [74.9, 77.5],
+        "start": [
+          68.5,
+          96.8
+        ],
+        "cp1": [
+          68.5,
+          96.8
+        ],
+        "cp2": [
+          53.3,
+          82.2
+        ],
+        "end": [
+          74.9,
+          77.5
+        ],
         "samples": 24
       },
       {
         "type": "straight",
-        "start": [74.9, 77.5],
-        "end": [495, 119.7]
+        "start": [
+          74.9,
+          77.5
+        ],
+        "end": [
+          495,
+          119.7
+        ]
       },
       {
         "type": "bezier",
-        "start": [495, 119.7],
-        "cp1": [520, 125],
-        "cp2": [515, 178],
-        "end": [422.8, 205.7],
+        "start": [
+          495,
+          119.7
+        ],
+        "cp1": [
+          520,
+          125
+        ],
+        "cp2": [
+          515,
+          178
+        ],
+        "end": [
+          422.8,
+          205.7
+        ],
         "samples": 44
       },
       {
         "type": "bezier",
-        "start": [422.8, 205.7],
-        "cp1": [408.4, 210.9],
-        "cp2": [300.7, 183.7],
-        "end": [279.5, 193.8],
+        "start": [
+          422.8,
+          205.7
+        ],
+        "cp1": [
+          408.4,
+          210.9
+        ],
+        "cp2": [
+          300.7,
+          183.7
+        ],
+        "end": [
+          279.5,
+          193.8
+        ],
         "samples": 32
       },
       {
         "type": "bezier",
-        "start": [279.5, 193.8],
-        "cp1": [250, 205.6],
-        "cp2": [251.7, 238.1],
-        "end": [257, 255.3],
+        "start": [
+          279.5,
+          193.8
+        ],
+        "cp1": [
+          250,
+          205.6
+        ],
+        "cp2": [
+          251.7,
+          238.1
+        ],
+        "end": [
+          257,
+          255.3
+        ],
         "samples": 28
       },
       {
         "type": "straight",
-        "start": [257, 255.3],
-        "end": [299.6, 334.4]
+        "start": [
+          257,
+          255.3
+        ],
+        "end": [
+          299.6,
+          334.4
+        ]
       },
       {
         "type": "bezier",
-        "start": [299.6, 334.4],
-        "cp1": [324.9, 363.4],
-        "cp2": [340, 365],
-        "end": [359, 341.3],
+        "start": [
+          299.6,
+          334.4
+        ],
+        "cp1": [
+          324.9,
+          363.4
+        ],
+        "cp2": [
+          340,
+          365
+        ],
+        "end": [
+          359,
+          341.3
+        ],
         "samples": 32
       },
       {
         "type": "bezier",
-        "start": [359, 341.3],
-        "cp1": [377, 322],
-        "cp2": [406, 292],
-        "end": [447.6, 281.3],
+        "start": [
+          359,
+          341.3
+        ],
+        "cp1": [
+          377,
+          322
+        ],
+        "cp2": [
+          406,
+          292
+        ],
+        "end": [
+          447.6,
+          281.3
+        ],
         "samples": 32
       },
       {
         "type": "straight",
-        "start": [447.6, 281.3],
-        "end": [705, 281.8]
+        "start": [
+          447.6,
+          281.3
+        ],
+        "end": [
+          705,
+          281.8
+        ]
       },
       {
         "type": "bezier",
-        "start": [705, 281.8],
-        "cp1": [724.6, 282.2],
-        "cp2": [742, 320],
-        "end": [755.1, 386.6],
+        "start": [
+          705,
+          281.8
+        ],
+        "cp1": [
+          724.6,
+          282.2
+        ],
+        "cp2": [
+          742,
+          320
+        ],
+        "end": [
+          755.1,
+          386.6
+        ],
         "samples": 36
       },
       {
         "type": "bezier",
-        "start": [755.1, 386.6],
-        "cp1": [760.6, 401.8],
-        "cp2": [744.3, 409.8],
-        "end": [694.8, 433.4],
+        "start": [
+          755.1,
+          386.6
+        ],
+        "cp1": [
+          760.6,
+          401.8
+        ],
+        "cp2": [
+          744.3,
+          409.8
+        ],
+        "end": [
+          694.8,
+          433.4
+        ],
         "samples": 28
       },
       {
         "type": "bezier",
-        "start": [694.8, 433.4],
-        "cp1": [645.9, 445.8],
-        "cp2": [597.1, 458.1],
-        "end": [548.3, 470.5],
+        "start": [
+          694.8,
+          433.4
+        ],
+        "cp1": [
+          645.9,
+          445.8
+        ],
+        "cp2": [
+          597.1,
+          458.1
+        ],
+        "end": [
+          548.3,
+          470.5
+        ],
         "samples": 36
       }
     ],
@@ -1059,77 +2134,212 @@
       "samples": 56
     },
     "track_coords": [
-      [548.3, 470.5],
-      [344.4, 518.2],
-      [297.8, 449.3],
-      [269.3, 409.1],
-      [172.5, 216.3],
-      [68.5, 96.8],
-      [74.9, 77.5],
-      [495, 119.7],
-      [422.8, 205.7],
-      [279.5, 193.8],
-      [257, 255.3],
-      [299.6, 334.4],
-      [359, 341.3],
-      [447.6, 281.3],
-      [705, 281.8],
-      [755.1, 386.6],
-      [694.8, 433.4],
-      [548.3, 470.5]
+      [
+        548.3,
+        470.5
+      ],
+      [
+        344.4,
+        518.2
+      ],
+      [
+        297.8,
+        449.3
+      ],
+      [
+        269.3,
+        409.1
+      ],
+      [
+        172.5,
+        216.3
+      ],
+      [
+        68.5,
+        96.8
+      ],
+      [
+        74.9,
+        77.5
+      ],
+      [
+        495,
+        119.7
+      ],
+      [
+        422.8,
+        205.7
+      ],
+      [
+        279.5,
+        193.8
+      ],
+      [
+        257,
+        255.3
+      ],
+      [
+        299.6,
+        334.4
+      ],
+      [
+        359,
+        341.3
+      ],
+      [
+        447.6,
+        281.3
+      ],
+      [
+        705,
+        281.8
+      ],
+      [
+        755.1,
+        386.6
+      ],
+      [
+        694.8,
+        433.4
+      ],
+      [
+        548.3,
+        470.5
+      ]
     ],
     "pit_lane_segments": [
       {
         "type": "straight",
-        "start": [744.4, 343.1],
-        "end": [741.2, 382.7]
+        "start": [
+          744.4,
+          343.1
+        ],
+        "end": [
+          741.2,
+          382.7
+        ]
       },
       {
         "type": "bezier",
-        "start": [741.2, 382.7],
-        "cp1": [741.2, 382.7],
-        "cp2": [741.6, 390.1],
-        "end": [733, 397.2],
+        "start": [
+          741.2,
+          382.7
+        ],
+        "cp1": [
+          741.2,
+          382.7
+        ],
+        "cp2": [
+          741.6,
+          390.1
+        ],
+        "end": [
+          733,
+          397.2
+        ],
         "samples": 12
       },
       {
         "type": "bezier",
-        "start": [733, 397.2],
-        "cp1": [733, 397.2],
-        "cp2": [712.1, 411.5],
-        "end": [699, 417.2],
+        "start": [
+          733,
+          397.2
+        ],
+        "cp1": [
+          733,
+          397.2
+        ],
+        "cp2": [
+          712.1,
+          411.5
+        ],
+        "end": [
+          699,
+          417.2
+        ],
         "samples": 14
       },
       {
         "type": "straight",
-        "start": [699, 417.2],
-        "end": [368.8, 500.4]
+        "start": [
+          699,
+          417.2
+        ],
+        "end": [
+          368.8,
+          500.4
+        ]
       },
       {
         "type": "bezier",
-        "start": [368.8, 500.4],
-        "cp1": [361.9, 502.5],
-        "cp2": [348.9, 503.1],
-        "end": [340.6, 487.4],
+        "start": [
+          368.8,
+          500.4
+        ],
+        "cp1": [
+          361.9,
+          502.5
+        ],
+        "cp2": [
+          348.9,
+          503.1
+        ],
+        "end": [
+          340.6,
+          487.4
+        ],
         "samples": 16
       },
       {
         "type": "bezier",
-        "start": [340.6, 487.4],
-        "cp1": [332.7, 475.1],
-        "cp2": [320.7, 466.7],
-        "end": [301.8, 453.4],
+        "start": [
+          340.6,
+          487.4
+        ],
+        "cp1": [
+          332.7,
+          475.1
+        ],
+        "cp2": [
+          320.7,
+          466.7
+        ],
+        "end": [
+          301.8,
+          453.4
+        ],
         "samples": 16
       }
     ],
     "pit_lane_coords": [
-      [744.4, 343.1],
-      [741.2, 382.7],
-      [733, 397.2],
-      [699, 417.2],
-      [368.8, 500.4],
-      [340.6, 487.4],
-      [301.8, 453.4]
+      [
+        744.4,
+        343.1
+      ],
+      [
+        741.2,
+        382.7
+      ],
+      [
+        733,
+        397.2
+      ],
+      [
+        699,
+        417.2
+      ],
+      [
+        368.8,
+        500.4
+      ],
+      [
+        340.6,
+        487.4
+      ],
+      [
+        301.8,
+        453.4
+      ]
     ],
     "drs_zones": [
       {
@@ -1144,8 +2354,8 @@
       },
       {
         "name": "Top Straight",
-        "start": 0.340,
-        "end": 0.460
+        "start": 0.34,
+        "end": 0.46
       }
     ],
     "landmarks": [
@@ -1153,7 +2363,7 @@
         "type": "start_finish",
         "label": "S/F",
         "track_index": 0,
-        "progress": 0.00
+        "progress": 0.0
       },
       {
         "type": "pit",
@@ -1183,7 +2393,7 @@
         "type": "corner",
         "label": "T4",
         "track_index": 0,
-        "progress": 0.490
+        "progress": 0.49
       },
       {
         "type": "corner",
@@ -1225,17 +2435,17 @@
     "segments": [
       {
         "name": "Main Straight",
-        "start": 0.00,
-        "end": 0.070,
+        "start": 0.0,
+        "end": 0.07,
         "type": "straight",
-        "speed_factor": 1.20
+        "speed_factor": 1.2
       },
       {
         "name": "T1 Braking",
-        "start": 0.070,
+        "start": 0.07,
         "end": 0.105,
         "type": "heavy_braking",
-        "speed_factor": 0.70
+        "speed_factor": 0.7
       },
       {
         "name": "Uphill DRS Climb",
@@ -1254,13 +2464,13 @@
       {
         "name": "Remus-Schlossgold Straight",
         "start": 0.325,
-        "end": 0.470,
+        "end": 0.47,
         "type": "straight",
         "speed_factor": 1.14
       },
       {
         "name": "T4 Braking",
-        "start": 0.470,
+        "start": 0.47,
         "end": 0.515,
         "type": "heavy_braking",
         "speed_factor": 0.64
@@ -1275,20 +2485,20 @@
       {
         "name": "Wurth Complex",
         "start": 0.625,
-        "end": 0.750,
+        "end": 0.75,
         "type": "technical",
-        "speed_factor": 0.80
+        "speed_factor": 0.8
       },
       {
         "name": "Rindt Straight",
-        "start": 0.750,
-        "end": 0.850,
+        "start": 0.75,
+        "end": 0.85,
         "type": "straight",
         "speed_factor": 1.12
       },
       {
         "name": "Rindt Sweep",
-        "start": 0.850,
+        "start": 0.85,
         "end": 0.885,
         "type": "sweeping",
         "speed_factor": 1.08
@@ -1310,11 +2520,286 @@
       {
         "name": "Main Straight Approach",
         "start": 0.946,
-        "end": 1.00,
+        "end": 1.0,
         "type": "straight",
         "speed_factor": 1.12
       }
-    ]
+    ],
+    "physics_calibration": {
+      "source": "TracingInsights-Archive/2025",
+      "source_url": "https://github.com/TracingInsights-Archive/2025",
+      "reference_season": 2025,
+      "reference_session": "Austrian Grand Prix Qualifying",
+      "reference_laps": [
+        "NOR 17 1:03.971",
+        "LEC 17 1:04.492",
+        "PIA 16 1:04.554",
+        "HAM 20 1:04.582",
+        "RUS 17 1:04.763"
+      ],
+      "planner_braking_utilization": 0.3,
+      "controller_sample_distance_m": 10.0,
+      "racing_line_reference": [
+        {
+          "progress": 0.0,
+          "lateral_offset_m": 0.67
+        },
+        {
+          "progress": 0.015625,
+          "lateral_offset_m": 0.251
+        },
+        {
+          "progress": 0.03125,
+          "lateral_offset_m": 0.429
+        },
+        {
+          "progress": 0.046875,
+          "lateral_offset_m": 0.558
+        },
+        {
+          "progress": 0.0625,
+          "lateral_offset_m": 0.337
+        },
+        {
+          "progress": 0.078125,
+          "lateral_offset_m": 1.038
+        },
+        {
+          "progress": 0.09375,
+          "lateral_offset_m": -2.6
+        },
+        {
+          "progress": 0.109375,
+          "lateral_offset_m": -3.473
+        },
+        {
+          "progress": 0.125,
+          "lateral_offset_m": -1.122
+        },
+        {
+          "progress": 0.140625,
+          "lateral_offset_m": 1.38
+        },
+        {
+          "progress": 0.15625,
+          "lateral_offset_m": 2.539
+        },
+        {
+          "progress": 0.171875,
+          "lateral_offset_m": 1.459
+        },
+        {
+          "progress": 0.1875,
+          "lateral_offset_m": 0.329
+        },
+        {
+          "progress": 0.203125,
+          "lateral_offset_m": -0.522
+        },
+        {
+          "progress": 0.21875,
+          "lateral_offset_m": -0.604
+        },
+        {
+          "progress": 0.234375,
+          "lateral_offset_m": 0.339
+        },
+        {
+          "progress": 0.25,
+          "lateral_offset_m": 1.156
+        },
+        {
+          "progress": 0.265625,
+          "lateral_offset_m": 1.678
+        },
+        {
+          "progress": 0.28125,
+          "lateral_offset_m": 0.964
+        },
+        {
+          "progress": 0.296875,
+          "lateral_offset_m": 0.389
+        },
+        {
+          "progress": 0.3125,
+          "lateral_offset_m": -2.182
+        },
+        {
+          "progress": 0.328125,
+          "lateral_offset_m": -3.239
+        },
+        {
+          "progress": 0.34375,
+          "lateral_offset_m": -1.676
+        },
+        {
+          "progress": 0.359375,
+          "lateral_offset_m": 0.257
+        },
+        {
+          "progress": 0.375,
+          "lateral_offset_m": 0.759
+        },
+        {
+          "progress": 0.390625,
+          "lateral_offset_m": 1.039
+        },
+        {
+          "progress": 0.40625,
+          "lateral_offset_m": 1.413
+        },
+        {
+          "progress": 0.421875,
+          "lateral_offset_m": 0.41
+        },
+        {
+          "progress": 0.4375,
+          "lateral_offset_m": -0.179
+        },
+        {
+          "progress": 0.453125,
+          "lateral_offset_m": 0.343
+        },
+        {
+          "progress": 0.46875,
+          "lateral_offset_m": -0.117
+        },
+        {
+          "progress": 0.484375,
+          "lateral_offset_m": 0.505
+        },
+        {
+          "progress": 0.5,
+          "lateral_offset_m": -1.322
+        },
+        {
+          "progress": 0.515625,
+          "lateral_offset_m": -4.061
+        },
+        {
+          "progress": 0.53125,
+          "lateral_offset_m": -1.703
+        },
+        {
+          "progress": 0.546875,
+          "lateral_offset_m": 1.594
+        },
+        {
+          "progress": 0.5625,
+          "lateral_offset_m": 3.008
+        },
+        {
+          "progress": 0.578125,
+          "lateral_offset_m": 3.061
+        },
+        {
+          "progress": 0.59375,
+          "lateral_offset_m": 0.278
+        },
+        {
+          "progress": 0.609375,
+          "lateral_offset_m": -2.602
+        },
+        {
+          "progress": 0.625,
+          "lateral_offset_m": -2.372
+        },
+        {
+          "progress": 0.640625,
+          "lateral_offset_m": 2.008
+        },
+        {
+          "progress": 0.65625,
+          "lateral_offset_m": 2.553
+        },
+        {
+          "progress": 0.671875,
+          "lateral_offset_m": -0.667
+        },
+        {
+          "progress": 0.6875,
+          "lateral_offset_m": -2.313
+        },
+        {
+          "progress": 0.703125,
+          "lateral_offset_m": 0.28
+        },
+        {
+          "progress": 0.71875,
+          "lateral_offset_m": 3.677
+        },
+        {
+          "progress": 0.734375,
+          "lateral_offset_m": 0.435
+        },
+        {
+          "progress": 0.75,
+          "lateral_offset_m": -1.091
+        },
+        {
+          "progress": 0.765625,
+          "lateral_offset_m": -1.66
+        },
+        {
+          "progress": 0.78125,
+          "lateral_offset_m": -1.814
+        },
+        {
+          "progress": 0.796875,
+          "lateral_offset_m": -1.607
+        },
+        {
+          "progress": 0.8125,
+          "lateral_offset_m": -1.796
+        },
+        {
+          "progress": 0.828125,
+          "lateral_offset_m": -2.239
+        },
+        {
+          "progress": 0.84375,
+          "lateral_offset_m": 1.253
+        },
+        {
+          "progress": 0.859375,
+          "lateral_offset_m": 4.7
+        },
+        {
+          "progress": 0.875,
+          "lateral_offset_m": 3.497
+        },
+        {
+          "progress": 0.890625,
+          "lateral_offset_m": 2.947
+        },
+        {
+          "progress": 0.90625,
+          "lateral_offset_m": 1.137
+        },
+        {
+          "progress": 0.921875,
+          "lateral_offset_m": -4.7
+        },
+        {
+          "progress": 0.9375,
+          "lateral_offset_m": -4.143
+        },
+        {
+          "progress": 0.953125,
+          "lateral_offset_m": -0.961
+        },
+        {
+          "progress": 0.96875,
+          "lateral_offset_m": 0.449
+        },
+        {
+          "progress": 0.984375,
+          "lateral_offset_m": 0.89
+        }
+      ],
+      "racing_line_reference_weight": 0.65,
+      "racing_line_initial_smoothing_passes": 1
+    }
   },
   {
     "id": 5,
@@ -1352,33 +2837,108 @@
         "scale": 1
       },
       "centerlineControlPoints": [
-        { "x": 555, "y": 482 },
-        { "x": 470, "y": 402 },
-        { "x": 460, "y": 320 },
-        { "x": 420, "y": 258 },
-        { "x": 518, "y": 242 },
-        { "x": 382, "y": 220 },
-        { "x": 235, "y": 420 },
-        { "x": 292, "y": 472 },
-        { "x": 282, "y": 515 },
-        { "x": 150, "y": 430 },
-        { "x": 128, "y": 205 },
-        { "x": 315, "y": 125 },
-        { "x": 382, "y": 104 },
-        { "x": 470, "y": 118 },
-        { "x": 555, "y": 94 },
-        { "x": 612, "y": 170 },
-        { "x": 770, "y": 286 },
-        { "x": 748, "y": 382 },
-        { "x": 660, "y": 460 },
-        { "x": 665, "y": 520 }
+        {
+          "x": 555,
+          "y": 482
+        },
+        {
+          "x": 470,
+          "y": 402
+        },
+        {
+          "x": 460,
+          "y": 320
+        },
+        {
+          "x": 420,
+          "y": 258
+        },
+        {
+          "x": 518,
+          "y": 242
+        },
+        {
+          "x": 382,
+          "y": 220
+        },
+        {
+          "x": 235,
+          "y": 420
+        },
+        {
+          "x": 292,
+          "y": 472
+        },
+        {
+          "x": 282,
+          "y": 515
+        },
+        {
+          "x": 150,
+          "y": 430
+        },
+        {
+          "x": 128,
+          "y": 205
+        },
+        {
+          "x": 315,
+          "y": 125
+        },
+        {
+          "x": 382,
+          "y": 104
+        },
+        {
+          "x": 470,
+          "y": 118
+        },
+        {
+          "x": 555,
+          "y": 94
+        },
+        {
+          "x": 612,
+          "y": 170
+        },
+        {
+          "x": 770,
+          "y": 286
+        },
+        {
+          "x": 748,
+          "y": 382
+        },
+        {
+          "x": 660,
+          "y": 460
+        },
+        {
+          "x": 665,
+          "y": 520
+        }
       ],
       "pitLaneControlPoints": [
-        { "x": 708, "y": 418 },
-        { "x": 610, "y": 470 },
-        { "x": 560, "y": 505 },
-        { "x": 470, "y": 420 },
-        { "x": 460, "y": 326 }
+        {
+          "x": 708,
+          "y": 418
+        },
+        {
+          "x": 610,
+          "y": 470
+        },
+        {
+          "x": 560,
+          "y": 505
+        },
+        {
+          "x": 470,
+          "y": 420
+        },
+        {
+          "x": 460,
+          "y": 326
+        }
       ],
       "trackWidth": 22,
       "sampleSpacing": 14
@@ -1386,170 +2946,437 @@
     "layout_segments": [
       {
         "type": "straight",
-        "start": [555, 482],
-        "end": [470, 402]
+        "start": [
+          555,
+          482
+        ],
+        "end": [
+          470,
+          402
+        ]
       },
       {
         "type": "bezier",
-        "start": [470, 402],
-        "cp1": [452, 385],
-        "cp2": [452, 348],
-        "end": [460, 320],
+        "start": [
+          470,
+          402
+        ],
+        "cp1": [
+          452,
+          385
+        ],
+        "cp2": [
+          452,
+          348
+        ],
+        "end": [
+          460,
+          320
+        ],
         "samples": 30
       },
       {
         "type": "bezier",
-        "start": [460, 320],
-        "cp1": [465, 292],
-        "cp2": [430, 280],
-        "end": [420, 258],
+        "start": [
+          460,
+          320
+        ],
+        "cp1": [
+          465,
+          292
+        ],
+        "cp2": [
+          430,
+          280
+        ],
+        "end": [
+          420,
+          258
+        ],
         "samples": 28
       },
       {
         "type": "bezier",
-        "start": [420, 258],
-        "cp1": [418, 225],
-        "cp2": [500, 220],
-        "end": [518, 242],
+        "start": [
+          420,
+          258
+        ],
+        "cp1": [
+          418,
+          225
+        ],
+        "cp2": [
+          500,
+          220
+        ],
+        "end": [
+          518,
+          242
+        ],
         "samples": 34
       },
       {
         "type": "bezier",
-        "start": [518, 242],
-        "cp1": [535, 230],
-        "cp2": [430, 198],
-        "end": [382, 220],
+        "start": [
+          518,
+          242
+        ],
+        "cp1": [
+          535,
+          230
+        ],
+        "cp2": [
+          430,
+          198
+        ],
+        "end": [
+          382,
+          220
+        ],
         "samples": 42
       },
       {
         "type": "straight",
-        "start": [382, 220],
-        "end": [235, 420]
+        "start": [
+          382,
+          220
+        ],
+        "end": [
+          235,
+          420
+        ]
       },
       {
         "type": "bezier",
-        "start": [235, 420],
-        "cp1": [220, 455],
-        "cp2": [250, 476],
-        "end": [292, 472],
+        "start": [
+          235,
+          420
+        ],
+        "cp1": [
+          220,
+          455
+        ],
+        "cp2": [
+          250,
+          476
+        ],
+        "end": [
+          292,
+          472
+        ],
         "samples": 32
       },
       {
         "type": "bezier",
-        "start": [292, 472],
-        "cp1": [325, 470],
-        "cp2": [326, 530],
-        "end": [282, 515],
+        "start": [
+          292,
+          472
+        ],
+        "cp1": [
+          325,
+          470
+        ],
+        "cp2": [
+          326,
+          530
+        ],
+        "end": [
+          282,
+          515
+        ],
         "samples": 32
       },
       {
         "type": "straight",
-        "start": [282, 515],
-        "end": [150, 430]
+        "start": [
+          282,
+          515
+        ],
+        "end": [
+          150,
+          430
+        ]
       },
       {
         "type": "straight",
-        "start": [150, 430],
-        "end": [128, 205]
+        "start": [
+          150,
+          430
+        ],
+        "end": [
+          128,
+          205
+        ]
       },
       {
         "type": "bezier",
-        "start": [128, 205],
-        "cp1": [122, 165],
-        "cp2": [220, 135],
-        "end": [315, 125],
+        "start": [
+          128,
+          205
+        ],
+        "cp1": [
+          122,
+          165
+        ],
+        "cp2": [
+          220,
+          135
+        ],
+        "end": [
+          315,
+          125
+        ],
         "samples": 44
       },
       {
         "type": "bezier",
-        "start": [315, 125],
-        "cp1": [345, 122],
-        "cp2": [355, 100],
-        "end": [382, 104],
+        "start": [
+          315,
+          125
+        ],
+        "cp1": [
+          345,
+          122
+        ],
+        "cp2": [
+          355,
+          100
+        ],
+        "end": [
+          382,
+          104
+        ],
         "samples": 30
       },
       {
         "type": "bezier",
-        "start": [382, 104],
-        "cp1": [410, 110],
-        "cp2": [435, 128],
-        "end": [470, 118],
+        "start": [
+          382,
+          104
+        ],
+        "cp1": [
+          410,
+          110
+        ],
+        "cp2": [
+          435,
+          128
+        ],
+        "end": [
+          470,
+          118
+        ],
         "samples": 30
       },
       {
         "type": "bezier",
-        "start": [470, 118],
-        "cp1": [510, 104],
-        "cp2": [525, 82],
-        "end": [555, 94],
+        "start": [
+          470,
+          118
+        ],
+        "cp1": [
+          510,
+          104
+        ],
+        "cp2": [
+          525,
+          82
+        ],
+        "end": [
+          555,
+          94
+        ],
         "samples": 34
       },
       {
         "type": "bezier",
-        "start": [555, 94],
-        "cp1": [588, 108],
-        "cp2": [578, 145],
-        "end": [612, 170],
+        "start": [
+          555,
+          94
+        ],
+        "cp1": [
+          588,
+          108
+        ],
+        "cp2": [
+          578,
+          145
+        ],
+        "end": [
+          612,
+          170
+        ],
         "samples": 36
       },
       {
         "type": "straight",
-        "start": [612, 170],
-        "end": [770, 286]
+        "start": [
+          612,
+          170
+        ],
+        "end": [
+          770,
+          286
+        ]
       },
       {
         "type": "bezier",
-        "start": [770, 286],
-        "cp1": [812, 318],
-        "cp2": [790, 365],
-        "end": [748, 382],
+        "start": [
+          770,
+          286
+        ],
+        "cp1": [
+          812,
+          318
+        ],
+        "cp2": [
+          790,
+          365
+        ],
+        "end": [
+          748,
+          382
+        ],
         "samples": 34
       },
       {
         "type": "straight",
-        "start": [748, 382],
-        "end": [660, 460]
+        "start": [
+          748,
+          382
+        ],
+        "end": [
+          660,
+          460
+        ]
       },
       {
         "type": "bezier",
-        "start": [660, 460],
-        "cp1": [640, 478],
-        "cp2": [700, 490],
-        "end": [665, 520],
+        "start": [
+          660,
+          460
+        ],
+        "cp1": [
+          640,
+          478
+        ],
+        "cp2": [
+          700,
+          490
+        ],
+        "end": [
+          665,
+          520
+        ],
         "samples": 30
       },
       {
         "type": "bezier",
-        "start": [665, 520],
-        "cp1": [630, 548],
-        "cp2": [578, 544],
-        "end": [555, 482],
+        "start": [
+          665,
+          520
+        ],
+        "cp1": [
+          630,
+          548
+        ],
+        "cp2": [
+          578,
+          544
+        ],
+        "end": [
+          555,
+          482
+        ],
         "samples": 42
       }
     ],
     "start_finish_index": 0,
     "track_coords": [
-      [555, 482],
-      [470, 402],
-      [460, 320],
-      [420, 258],
-      [518, 242],
-      [382, 220],
-      [235, 420],
-      [292, 472],
-      [282, 515],
-      [150, 430],
-      [128, 205],
-      [315, 125],
-      [382, 104],
-      [470, 118],
-      [555, 94],
-      [612, 170],
-      [770, 286],
-      [748, 382],
-      [660, 460],
-      [665, 520],
-      [555, 482]
+      [
+        555,
+        482
+      ],
+      [
+        470,
+        402
+      ],
+      [
+        460,
+        320
+      ],
+      [
+        420,
+        258
+      ],
+      [
+        518,
+        242
+      ],
+      [
+        382,
+        220
+      ],
+      [
+        235,
+        420
+      ],
+      [
+        292,
+        472
+      ],
+      [
+        282,
+        515
+      ],
+      [
+        150,
+        430
+      ],
+      [
+        128,
+        205
+      ],
+      [
+        315,
+        125
+      ],
+      [
+        382,
+        104
+      ],
+      [
+        470,
+        118
+      ],
+      [
+        555,
+        94
+      ],
+      [
+        612,
+        170
+      ],
+      [
+        770,
+        286
+      ],
+      [
+        748,
+        382
+      ],
+      [
+        660,
+        460
+      ],
+      [
+        665,
+        520
+      ],
+      [
+        555,
+        482
+      ]
     ],
     "pit_lane": {
       "entry_progress": 0.887,
@@ -1557,45 +3384,102 @@
       "lane_offset": 0,
       "wall_offset": -10,
       "box_offset": 10,
-      "entry_blend": 0.010,
-      "exit_blend": 0.010,
+      "entry_blend": 0.01,
+      "exit_blend": 0.01,
       "samples": 50
     },
     "pit_lane_coords": [
-      [708, 418],
-      [610, 470],
-      [560, 505],
-      [470, 420],
-      [460, 326]
+      [
+        708,
+        418
+      ],
+      [
+        610,
+        470
+      ],
+      [
+        560,
+        505
+      ],
+      [
+        470,
+        420
+      ],
+      [
+        460,
+        326
+      ]
     ],
     "pit_lane_segments": [
       {
         "type": "bezier",
-        "start": [708, 418],
-        "cp1": [690, 430],
-        "cp2": [650, 448],
-        "end": [610, 470],
+        "start": [
+          708,
+          418
+        ],
+        "cp1": [
+          690,
+          430
+        ],
+        "cp2": [
+          650,
+          448
+        ],
+        "end": [
+          610,
+          470
+        ],
         "samples": 18
       },
       {
         "type": "bezier",
-        "start": [610, 470],
-        "cp1": [592, 482],
-        "cp2": [575, 503],
-        "end": [560, 505],
+        "start": [
+          610,
+          470
+        ],
+        "cp1": [
+          592,
+          482
+        ],
+        "cp2": [
+          575,
+          503
+        ],
+        "end": [
+          560,
+          505
+        ],
         "samples": 16
       },
       {
         "type": "straight",
-        "start": [560, 505],
-        "end": [470, 420]
+        "start": [
+          560,
+          505
+        ],
+        "end": [
+          470,
+          420
+        ]
       },
       {
         "type": "bezier",
-        "start": [470, 420],
-        "cp1": [458, 392],
-        "cp2": [456, 352],
-        "end": [460, 326],
+        "start": [
+          470,
+          420
+        ],
+        "cp1": [
+          458,
+          392
+        ],
+        "cp2": [
+          456,
+          352
+        ],
+        "end": [
+          460,
+          326
+        ],
         "samples": 22
       }
     ],
@@ -1618,7 +3502,7 @@
         "type": "start_finish",
         "label": "S/F",
         "track_index": 0,
-        "progress": 0.000
+        "progress": 0.0
       },
       {
         "type": "pit",
@@ -1702,7 +3586,7 @@
         "type": "corner",
         "label": "T12 Becketts",
         "track_index": 0,
-        "progress": 0.670
+        "progress": 0.67
       },
       {
         "type": "corner",
@@ -1726,7 +3610,7 @@
         "type": "corner",
         "label": "T16 Vale",
         "track_index": 0,
-        "progress": 0.920
+        "progress": 0.92
       },
       {
         "type": "corner",
@@ -1744,14 +3628,14 @@
     "segments": [
       {
         "name": "Hamilton Straight to Abbey",
-        "start": 0.000,
-        "end": 0.050,
+        "start": 0.0,
+        "end": 0.05,
         "type": "straight",
         "speed_factor": 1.16
       },
       {
         "name": "Abbey-Farm Sweep",
-        "start": 0.050,
+        "start": 0.05,
         "end": 0.085,
         "type": "sweeping",
         "speed_factor": 1.08
@@ -1761,14 +3645,14 @@
         "start": 0.085,
         "end": 0.125,
         "type": "heavy_braking",
-        "speed_factor": 0.70
+        "speed_factor": 0.7
       },
       {
         "name": "Loop-Aintree Complex",
         "start": 0.125,
         "end": 0.205,
         "type": "technical",
-        "speed_factor": 0.80
+        "speed_factor": 0.8
       },
       {
         "name": "T5-T6 Straight",
@@ -1801,13 +3685,13 @@
       {
         "name": "Copse Approach",
         "start": 0.525,
-        "end": 0.610,
+        "end": 0.61,
         "type": "straight",
-        "speed_factor": 1.10
+        "speed_factor": 1.1
       },
       {
         "name": "Maggotts-Becketts-Chapel",
-        "start": 0.610,
+        "start": 0.61,
         "end": 0.745,
         "type": "technical",
         "speed_factor": 0.86
@@ -1829,25 +3713,300 @@
       {
         "name": "Vale",
         "start": 0.865,
-        "end": 0.930,
+        "end": 0.93,
         "type": "traction",
         "speed_factor": 0.82
       },
       {
         "name": "Club Complex",
-        "start": 0.930,
-        "end": 0.970,
+        "start": 0.93,
+        "end": 0.97,
         "type": "technical",
         "speed_factor": 0.84
       },
       {
         "name": "Club Exit to Start",
-        "start": 0.970,
-        "end": 1.000,
+        "start": 0.97,
+        "end": 1.0,
         "type": "straight",
         "speed_factor": 1.12
       }
-    ]
+    ],
+    "physics_calibration": {
+      "source": "TracingInsights-Archive/2025",
+      "source_url": "https://github.com/TracingInsights-Archive/2025",
+      "reference_season": 2025,
+      "reference_session": "British Grand Prix Qualifying",
+      "reference_laps": [
+        "VER 17 1:24.892",
+        "PIA 17 1:24.995",
+        "NOR 19 1:25.010",
+        "RUS 18 1:25.029",
+        "HAM 12 1:25.084"
+      ],
+      "planner_braking_utilization": 0.55,
+      "controller_sample_distance_m": 10.0,
+      "racing_line_reference": [
+        {
+          "progress": 0.0,
+          "lateral_offset_m": -0.578
+        },
+        {
+          "progress": 0.015625,
+          "lateral_offset_m": -1.075
+        },
+        {
+          "progress": 0.03125,
+          "lateral_offset_m": -0.26
+        },
+        {
+          "progress": 0.046875,
+          "lateral_offset_m": -0.323
+        },
+        {
+          "progress": 0.0625,
+          "lateral_offset_m": -0.766
+        },
+        {
+          "progress": 0.078125,
+          "lateral_offset_m": 0.69
+        },
+        {
+          "progress": 0.09375,
+          "lateral_offset_m": 0.815
+        },
+        {
+          "progress": 0.109375,
+          "lateral_offset_m": -0.406
+        },
+        {
+          "progress": 0.125,
+          "lateral_offset_m": 0.021
+        },
+        {
+          "progress": 0.140625,
+          "lateral_offset_m": -0.156
+        },
+        {
+          "progress": 0.15625,
+          "lateral_offset_m": -1.193
+        },
+        {
+          "progress": 0.171875,
+          "lateral_offset_m": -0.314
+        },
+        {
+          "progress": 0.1875,
+          "lateral_offset_m": 1.504
+        },
+        {
+          "progress": 0.203125,
+          "lateral_offset_m": 1.284
+        },
+        {
+          "progress": 0.21875,
+          "lateral_offset_m": -0.673
+        },
+        {
+          "progress": 0.234375,
+          "lateral_offset_m": -0.24
+        },
+        {
+          "progress": 0.25,
+          "lateral_offset_m": -0.034
+        },
+        {
+          "progress": 0.265625,
+          "lateral_offset_m": -0.366
+        },
+        {
+          "progress": 0.28125,
+          "lateral_offset_m": -0.399
+        },
+        {
+          "progress": 0.296875,
+          "lateral_offset_m": 0.166
+        },
+        {
+          "progress": 0.3125,
+          "lateral_offset_m": 0.871
+        },
+        {
+          "progress": 0.328125,
+          "lateral_offset_m": 0.992
+        },
+        {
+          "progress": 0.34375,
+          "lateral_offset_m": -0.799
+        },
+        {
+          "progress": 0.359375,
+          "lateral_offset_m": -0.199
+        },
+        {
+          "progress": 0.375,
+          "lateral_offset_m": -0.211
+        },
+        {
+          "progress": 0.390625,
+          "lateral_offset_m": -0.044
+        },
+        {
+          "progress": 0.40625,
+          "lateral_offset_m": -1.007
+        },
+        {
+          "progress": 0.421875,
+          "lateral_offset_m": -0.088
+        },
+        {
+          "progress": 0.4375,
+          "lateral_offset_m": 1.747
+        },
+        {
+          "progress": 0.453125,
+          "lateral_offset_m": 1.095
+        },
+        {
+          "progress": 0.46875,
+          "lateral_offset_m": -0.981
+        },
+        {
+          "progress": 0.484375,
+          "lateral_offset_m": -0.997
+        },
+        {
+          "progress": 0.5,
+          "lateral_offset_m": -0.218
+        },
+        {
+          "progress": 0.515625,
+          "lateral_offset_m": 0.269
+        },
+        {
+          "progress": 0.53125,
+          "lateral_offset_m": 1.66
+        },
+        {
+          "progress": 0.546875,
+          "lateral_offset_m": 0.075
+        },
+        {
+          "progress": 0.5625,
+          "lateral_offset_m": -2.106
+        },
+        {
+          "progress": 0.578125,
+          "lateral_offset_m": -1.069
+        },
+        {
+          "progress": 0.59375,
+          "lateral_offset_m": 0.576
+        },
+        {
+          "progress": 0.609375,
+          "lateral_offset_m": 1.38
+        },
+        {
+          "progress": 0.625,
+          "lateral_offset_m": -0.414
+        },
+        {
+          "progress": 0.640625,
+          "lateral_offset_m": 0.243
+        },
+        {
+          "progress": 0.65625,
+          "lateral_offset_m": -0.043
+        },
+        {
+          "progress": 0.671875,
+          "lateral_offset_m": -0.519
+        },
+        {
+          "progress": 0.6875,
+          "lateral_offset_m": 1.0
+        },
+        {
+          "progress": 0.703125,
+          "lateral_offset_m": -0.669
+        },
+        {
+          "progress": 0.71875,
+          "lateral_offset_m": -2.254
+        },
+        {
+          "progress": 0.734375,
+          "lateral_offset_m": 0.215
+        },
+        {
+          "progress": 0.75,
+          "lateral_offset_m": 1.468
+        },
+        {
+          "progress": 0.765625,
+          "lateral_offset_m": 0.817
+        },
+        {
+          "progress": 0.78125,
+          "lateral_offset_m": 0.239
+        },
+        {
+          "progress": 0.796875,
+          "lateral_offset_m": 0.194
+        },
+        {
+          "progress": 0.8125,
+          "lateral_offset_m": 0.268
+        },
+        {
+          "progress": 0.828125,
+          "lateral_offset_m": -0.006
+        },
+        {
+          "progress": 0.84375,
+          "lateral_offset_m": -0.637
+        },
+        {
+          "progress": 0.859375,
+          "lateral_offset_m": 0.305
+        },
+        {
+          "progress": 0.875,
+          "lateral_offset_m": 0.999
+        },
+        {
+          "progress": 0.890625,
+          "lateral_offset_m": -1.429
+        },
+        {
+          "progress": 0.90625,
+          "lateral_offset_m": -2.503
+        },
+        {
+          "progress": 0.921875,
+          "lateral_offset_m": -0.184
+        },
+        {
+          "progress": 0.9375,
+          "lateral_offset_m": 2.395
+        },
+        {
+          "progress": 0.953125,
+          "lateral_offset_m": 2.462
+        },
+        {
+          "progress": 0.96875,
+          "lateral_offset_m": 0.016
+        },
+        {
+          "progress": 0.984375,
+          "lateral_offset_m": -0.713
+        }
+      ],
+      "racing_line_reference_weight": 0.65,
+      "racing_line_initial_smoothing_passes": 1
+    }
   },
   {
     "id": 6,
@@ -1857,8 +4016,26 @@
     "total_laps": 44,
     "pit_loss_time": 23.5,
     "track_length_m": 7004.0,
-    "overtaking_difficulty": 0.36,
+    "overtaking_difficulty": 0.3,
     "geo_file": "circuit_sources/spa_francorchamps_osm_geo.json",
+    "physics_calibration": {
+      "source": "TracingInsights/2025",
+      "source_url": "https://github.com/TracingInsights/2025",
+      "reference_season": 2025,
+      "reference_session": "Belgian Grand Prix Qualifying",
+      "reference_laps": [
+        "NOR 16 1:40.562",
+        "PIA 11 1:40.626",
+        "LEC 17 1:40.900",
+        "VER 14 1:40.903",
+        "RUS 11 1:41.254"
+      ],
+      "planner_braking_utilization": 0.55,
+      "controller_sample_distance_m": 10.0,
+      "controller_speed_scale_floor": 1.0,
+      "racing_line_reference_weight": 0.4,
+      "racing_line_initial_smoothing_passes": 1
+    },
     "sectors": [
       {
         "name": "Sector 1",
@@ -1889,14 +4066,14 @@
       {
         "name": "Main Straight",
         "start": 0.954,
-        "end": 0.030
+        "end": 0.03
       }
     ],
     "landmarks": [
       {
         "type": "start_finish",
         "label": "S/F",
-        "progress": 0.000
+        "progress": 0.0
       },
       {
         "type": "pit",
@@ -1931,7 +4108,7 @@
       {
         "type": "corner",
         "label": "T6 Les Combes",
-        "progress": 0.340
+        "progress": 0.34
       },
       {
         "type": "corner",
@@ -1956,12 +4133,12 @@
       {
         "type": "corner",
         "label": "T11 Pouhon",
-        "progress": 0.560
+        "progress": 0.56
       },
       {
         "type": "corner",
         "label": "T12 Fagnes",
-        "progress": 0.620
+        "progress": 0.62
       },
       {
         "type": "corner",
@@ -1971,7 +4148,7 @@
       {
         "type": "corner",
         "label": "T14 Campus",
-        "progress": 0.690
+        "progress": 0.69
       },
       {
         "type": "corner",
@@ -1996,121 +4173,169 @@
       {
         "type": "corner",
         "label": "T19 Bus Stop",
-        "progress": 0.950
+        "progress": 0.95
       }
     ],
     "segments": [
       {
         "name": "Start/Finish Straight",
-        "start": 0.000,
-        "end": 0.030,
+        "start": 0.0,
+        "end": 0.03,
         "type": "straight",
-        "speed_factor": 1.14
+        "speed_factor": 1.14,
+        "overtake_start_allowed": true,
+        "side_by_side_allowed": true,
+        "overtake_risk": 0.15
       },
       {
         "name": "La Source Braking",
-        "start": 0.030,
-        "end": 0.060,
+        "start": 0.03,
+        "end": 0.06,
         "type": "heavy_braking",
-        "speed_factor": 0.54
+        "speed_factor": 0.54,
+        "overtake_start_allowed": true,
+        "side_by_side_allowed": true,
+        "overtake_risk": 0.45
       },
       {
         "name": "Eau Rouge Approach",
-        "start": 0.060,
+        "start": 0.06,
         "end": 0.125,
         "type": "straight",
-        "speed_factor": 1.10
+        "speed_factor": 1.1,
+        "overtake_start_allowed": false,
+        "side_by_side_allowed": false,
+        "overtake_risk": 0.85
       },
       {
         "name": "Eau Rouge and Raidillon",
         "start": 0.125,
         "end": 0.173,
         "type": "sweeping",
-        "speed_factor": 1.08
+        "speed_factor": 1.08,
+        "overtake_start_allowed": false,
+        "side_by_side_allowed": false,
+        "overtake_risk": 0.95
       },
       {
         "name": "Kemmel Straight",
         "start": 0.173,
         "end": 0.315,
         "type": "straight",
-        "speed_factor": 1.20
+        "speed_factor": 1.2,
+        "overtake_start_allowed": true,
+        "side_by_side_allowed": true,
+        "overtake_risk": 0.1
       },
       {
         "name": "Les Combes",
         "start": 0.315,
         "end": 0.355,
         "type": "heavy_braking",
-        "speed_factor": 0.66
+        "speed_factor": 0.66,
+        "overtake_start_allowed": true,
+        "side_by_side_allowed": true,
+        "overtake_risk": 0.35
       },
       {
         "name": "Malmedy and Bruxelles",
         "start": 0.355,
         "end": 0.445,
         "type": "traction",
-        "speed_factor": 0.86
+        "speed_factor": 0.86,
+        "overtake_start_allowed": false,
+        "side_by_side_allowed": true,
+        "overtake_risk": 0.55
       },
       {
         "name": "Speakers Corner",
         "start": 0.445,
-        "end": 0.500,
+        "end": 0.5,
         "type": "technical",
-        "speed_factor": 0.80
+        "speed_factor": 0.8,
+        "overtake_start_allowed": false,
+        "side_by_side_allowed": true,
+        "overtake_risk": 0.65
       },
       {
         "name": "Pouhon",
-        "start": 0.500,
-        "end": 0.580,
+        "start": 0.5,
+        "end": 0.58,
         "type": "sweeping",
-        "speed_factor": 1.02
+        "speed_factor": 1.02,
+        "overtake_start_allowed": false,
+        "side_by_side_allowed": false,
+        "overtake_risk": 0.85
       },
       {
         "name": "Fagnes",
-        "start": 0.580,
+        "start": 0.58,
         "end": 0.665,
         "type": "technical",
-        "speed_factor": 0.82
+        "speed_factor": 0.82,
+        "overtake_start_allowed": false,
+        "side_by_side_allowed": true,
+        "overtake_risk": 0.6
       },
       {
         "name": "Campus and Paul Frere",
         "start": 0.665,
-        "end": 0.750,
+        "end": 0.75,
         "type": "traction",
-        "speed_factor": 0.90
+        "speed_factor": 0.9,
+        "overtake_start_allowed": false,
+        "side_by_side_allowed": true,
+        "overtake_risk": 0.55
       },
       {
         "name": "Blanchimont Approach",
-        "start": 0.750,
+        "start": 0.75,
         "end": 0.795,
         "type": "straight",
-        "speed_factor": 1.16
+        "speed_factor": 1.16,
+        "overtake_start_allowed": false,
+        "side_by_side_allowed": false,
+        "overtake_risk": 0.8
       },
       {
         "name": "Blanchimont",
         "start": 0.795,
         "end": 0.885,
         "type": "sweeping",
-        "speed_factor": 1.10
+        "speed_factor": 1.1,
+        "overtake_start_allowed": false,
+        "side_by_side_allowed": false,
+        "overtake_risk": 0.95
       },
       {
         "name": "Bus Stop Approach",
         "start": 0.885,
-        "end": 0.920,
+        "end": 0.92,
         "type": "straight",
-        "speed_factor": 1.18
+        "speed_factor": 1.18,
+        "overtake_start_allowed": true,
+        "side_by_side_allowed": true,
+        "overtake_risk": 0.15
       },
       {
         "name": "Bus Stop Chicane",
-        "start": 0.920,
+        "start": 0.92,
         "end": 0.952,
         "type": "heavy_braking",
-        "speed_factor": 0.58
+        "speed_factor": 0.58,
+        "overtake_start_allowed": true,
+        "side_by_side_allowed": true,
+        "overtake_risk": 0.4
       },
       {
         "name": "Main Straight Approach",
         "start": 0.952,
-        "end": 1.000,
+        "end": 1.0,
         "type": "straight",
-        "speed_factor": 1.12
+        "speed_factor": 1.12,
+        "overtake_start_allowed": true,
+        "side_by_side_allowed": true,
+        "overtake_risk": 0.2
       }
     ]
   },
@@ -2161,7 +4386,7 @@
       {
         "type": "start_finish",
         "label": "S/F",
-        "progress": 0.000
+        "progress": 0.0
       },
       {
         "type": "pit",
@@ -2242,49 +4467,49 @@
     "segments": [
       {
         "name": "Start/Finish Straight",
-        "start": 0.000,
-        "end": 0.120,
+        "start": 0.0,
+        "end": 0.12,
         "type": "straight",
         "speed_factor": 1.16
       },
       {
         "name": "Turn 1 Braking",
-        "start": 0.120,
-        "end": 0.150,
+        "start": 0.12,
+        "end": 0.15,
         "type": "heavy_braking",
         "speed_factor": 0.56
       },
       {
         "name": "T1-T2 Straight",
-        "start": 0.150,
-        "end": 0.240,
+        "start": 0.15,
+        "end": 0.24,
         "type": "straight",
         "speed_factor": 1.12
       },
       {
         "name": "Turn 2",
-        "start": 0.240,
-        "end": 0.290,
+        "start": 0.24,
+        "end": 0.29,
         "type": "traction",
         "speed_factor": 0.73
       },
       {
         "name": "Turn 3",
-        "start": 0.290,
-        "end": 0.330,
+        "start": 0.29,
+        "end": 0.33,
         "type": "traction",
         "speed_factor": 0.84
       },
       {
         "name": "T3-T4 Climb",
-        "start": 0.330,
-        "end": 0.390,
+        "start": 0.33,
+        "end": 0.39,
         "type": "straight",
-        "speed_factor": 1.10
+        "speed_factor": 1.1
       },
       {
         "name": "Turn 4",
-        "start": 0.390,
+        "start": 0.39,
         "end": 0.435,
         "type": "sweeping",
         "speed_factor": 1.02
@@ -2299,13 +4524,13 @@
       {
         "name": "Turns 6-7 Chicane",
         "start": 0.495,
-        "end": 0.570,
+        "end": 0.57,
         "type": "technical",
         "speed_factor": 0.72
       },
       {
         "name": "Turns 8-9",
-        "start": 0.570,
+        "start": 0.57,
         "end": 0.645,
         "type": "technical",
         "speed_factor": 0.82
@@ -2313,41 +4538,41 @@
       {
         "name": "Turn 10",
         "start": 0.645,
-        "end": 0.690,
+        "end": 0.69,
         "type": "sweeping",
         "speed_factor": 1.03
       },
       {
         "name": "Turn 11",
-        "start": 0.690,
-        "end": 0.740,
+        "start": 0.69,
+        "end": 0.74,
         "type": "sweeping",
         "speed_factor": 0.98
       },
       {
         "name": "T11-T12 Straight",
-        "start": 0.740,
-        "end": 0.780,
+        "start": 0.74,
+        "end": 0.78,
         "type": "straight",
         "speed_factor": 1.08
       },
       {
         "name": "Turn 12 Braking",
-        "start": 0.780,
-        "end": 0.830,
+        "start": 0.78,
+        "end": 0.83,
         "type": "heavy_braking",
         "speed_factor": 0.64
       },
       {
         "name": "Turn 13",
-        "start": 0.830,
-        "end": 0.900,
+        "start": 0.83,
+        "end": 0.9,
         "type": "traction",
         "speed_factor": 0.76
       },
       {
         "name": "Turn 14",
-        "start": 0.900,
+        "start": 0.9,
         "end": 0.955,
         "type": "traction",
         "speed_factor": 0.74
@@ -2355,10 +4580,285 @@
       {
         "name": "Main Straight Approach",
         "start": 0.955,
-        "end": 1.000,
+        "end": 1.0,
         "type": "straight",
         "speed_factor": 1.12
       }
-    ]
+    ],
+    "physics_calibration": {
+      "source": "TracingInsights-Archive/2025",
+      "source_url": "https://github.com/TracingInsights-Archive/2025",
+      "reference_season": 2025,
+      "reference_session": "Hungarian Grand Prix Qualifying",
+      "reference_laps": [
+        "NOR 8 1:14.890",
+        "PIA 8 1:14.941",
+        "STR 11 1:15.129",
+        "RUS 8 1:15.201",
+        "ALO 5 1:15.281"
+      ],
+      "planner_braking_utilization": 0.55,
+      "controller_sample_distance_m": 10.0,
+      "racing_line_reference": [
+        {
+          "progress": 0.0,
+          "lateral_offset_m": 0.254
+        },
+        {
+          "progress": 0.015625,
+          "lateral_offset_m": 0.355
+        },
+        {
+          "progress": 0.03125,
+          "lateral_offset_m": 0.347
+        },
+        {
+          "progress": 0.046875,
+          "lateral_offset_m": 0.326
+        },
+        {
+          "progress": 0.0625,
+          "lateral_offset_m": 0.321
+        },
+        {
+          "progress": 0.078125,
+          "lateral_offset_m": 0.139
+        },
+        {
+          "progress": 0.09375,
+          "lateral_offset_m": -0.26
+        },
+        {
+          "progress": 0.109375,
+          "lateral_offset_m": -0.782
+        },
+        {
+          "progress": 0.125,
+          "lateral_offset_m": -0.854
+        },
+        {
+          "progress": 0.140625,
+          "lateral_offset_m": 0.281
+        },
+        {
+          "progress": 0.15625,
+          "lateral_offset_m": -0.148
+        },
+        {
+          "progress": 0.171875,
+          "lateral_offset_m": -0.196
+        },
+        {
+          "progress": 0.1875,
+          "lateral_offset_m": 0.31
+        },
+        {
+          "progress": 0.203125,
+          "lateral_offset_m": 0.298
+        },
+        {
+          "progress": 0.21875,
+          "lateral_offset_m": 0.474
+        },
+        {
+          "progress": 0.234375,
+          "lateral_offset_m": 0.646
+        },
+        {
+          "progress": 0.25,
+          "lateral_offset_m": 0.043
+        },
+        {
+          "progress": 0.265625,
+          "lateral_offset_m": -0.228
+        },
+        {
+          "progress": 0.28125,
+          "lateral_offset_m": -0.389
+        },
+        {
+          "progress": 0.296875,
+          "lateral_offset_m": 0.01
+        },
+        {
+          "progress": 0.3125,
+          "lateral_offset_m": -0.267
+        },
+        {
+          "progress": 0.328125,
+          "lateral_offset_m": -0.831
+        },
+        {
+          "progress": 0.34375,
+          "lateral_offset_m": -0.31
+        },
+        {
+          "progress": 0.359375,
+          "lateral_offset_m": 0.048
+        },
+        {
+          "progress": 0.375,
+          "lateral_offset_m": 0.55
+        },
+        {
+          "progress": 0.390625,
+          "lateral_offset_m": 1.225
+        },
+        {
+          "progress": 0.40625,
+          "lateral_offset_m": 0.653
+        },
+        {
+          "progress": 0.421875,
+          "lateral_offset_m": 0.052
+        },
+        {
+          "progress": 0.4375,
+          "lateral_offset_m": -0.289
+        },
+        {
+          "progress": 0.453125,
+          "lateral_offset_m": -1.045
+        },
+        {
+          "progress": 0.46875,
+          "lateral_offset_m": -0.264
+        },
+        {
+          "progress": 0.484375,
+          "lateral_offset_m": 0.177
+        },
+        {
+          "progress": 0.5,
+          "lateral_offset_m": -0.308
+        },
+        {
+          "progress": 0.515625,
+          "lateral_offset_m": -0.504
+        },
+        {
+          "progress": 0.53125,
+          "lateral_offset_m": -0.56
+        },
+        {
+          "progress": 0.546875,
+          "lateral_offset_m": 0.088
+        },
+        {
+          "progress": 0.5625,
+          "lateral_offset_m": 1.241
+        },
+        {
+          "progress": 0.578125,
+          "lateral_offset_m": 1.34
+        },
+        {
+          "progress": 0.59375,
+          "lateral_offset_m": 0.135
+        },
+        {
+          "progress": 0.609375,
+          "lateral_offset_m": -0.509
+        },
+        {
+          "progress": 0.625,
+          "lateral_offset_m": -0.288
+        },
+        {
+          "progress": 0.640625,
+          "lateral_offset_m": -0.568
+        },
+        {
+          "progress": 0.65625,
+          "lateral_offset_m": 0.23
+        },
+        {
+          "progress": 0.671875,
+          "lateral_offset_m": 0.018
+        },
+        {
+          "progress": 0.6875,
+          "lateral_offset_m": -0.229
+        },
+        {
+          "progress": 0.703125,
+          "lateral_offset_m": 0.087
+        },
+        {
+          "progress": 0.71875,
+          "lateral_offset_m": 0.22
+        },
+        {
+          "progress": 0.734375,
+          "lateral_offset_m": -0.322
+        },
+        {
+          "progress": 0.75,
+          "lateral_offset_m": -0.01
+        },
+        {
+          "progress": 0.765625,
+          "lateral_offset_m": 0.206
+        },
+        {
+          "progress": 0.78125,
+          "lateral_offset_m": 0.004
+        },
+        {
+          "progress": 0.796875,
+          "lateral_offset_m": -0.427
+        },
+        {
+          "progress": 0.8125,
+          "lateral_offset_m": -0.33
+        },
+        {
+          "progress": 0.828125,
+          "lateral_offset_m": -0.169
+        },
+        {
+          "progress": 0.84375,
+          "lateral_offset_m": 0.651
+        },
+        {
+          "progress": 0.859375,
+          "lateral_offset_m": 0.743
+        },
+        {
+          "progress": 0.875,
+          "lateral_offset_m": 0.131
+        },
+        {
+          "progress": 0.890625,
+          "lateral_offset_m": -0.303
+        },
+        {
+          "progress": 0.90625,
+          "lateral_offset_m": -0.607
+        },
+        {
+          "progress": 0.921875,
+          "lateral_offset_m": 0.206
+        },
+        {
+          "progress": 0.9375,
+          "lateral_offset_m": 0.608
+        },
+        {
+          "progress": 0.953125,
+          "lateral_offset_m": -0.254
+        },
+        {
+          "progress": 0.96875,
+          "lateral_offset_m": -0.874
+        },
+        {
+          "progress": 0.984375,
+          "lateral_offset_m": -0.309
+        }
+      ],
+      "racing_line_reference_weight": 0.65,
+      "racing_line_initial_smoothing_passes": 1
+    }
   }
 ]

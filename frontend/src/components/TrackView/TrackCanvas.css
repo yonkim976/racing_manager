@@ -223,6 +223,37 @@
   display: block;
 }
 
+.track-canvas__minimap {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  width: min(260px, 28vw);
+  aspect-ratio: 1.55;
+  padding: 22px 8px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: rgba(5, 5, 8, 0.82);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.34);
+  pointer-events: none;
+}
+
+.track-canvas__minimap-label {
+  position: absolute;
+  top: 7px;
+  left: 9px;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.track-canvas__minimap svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
 .track-canvas__bearing {
   position: absolute;
   left: 12px;

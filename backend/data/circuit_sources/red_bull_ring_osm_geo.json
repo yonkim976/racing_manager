@@ -3,6 +3,10 @@
   "sourceId": "osm:red-bull-ring-gp",
   "license": "ODbL",
   "attribution": "OpenStreetMap contributors",
+  "sourceUrl": "https://www.openstreetmap.org/#map=15/47.219/14.765",
+  "acquiredAt": "2026-07-22",
+  "transformVersion": "osm-centerline-v2",
+  "coordinateSystem": "EPSG:4326",
   "centerlineLonLat": [
     {
       "lat": 47.2201023,

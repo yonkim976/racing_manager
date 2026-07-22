@@ -1,0 +1,32 @@
+{
+  "benchmark_version": "bahrain-racecraft-v1",
+  "track_geometry_mode": "planar_2d",
+  "circuit": "Bahrain International Circuit",
+  "command": ".venv/bin/python tools/run_bahrain_racecraft_benchmark.py --seeds 10 --seconds 2",
+  "seeds": 10,
+  "duration_seconds_per_scenario": 2.0,
+  "status": "pass",
+  "summary": {
+    "scenario_runs": 70,
+    "decision_match_rate": 1.0,
+    "reason_match_rate": 1.0,
+    "contact_runs": 0,
+    "off_track_runs": 0,
+    "pit_merge_sequence_match_rate": 1.0
+  },
+  "scenarios": {
+    "main_straight_attack": "straight_window_open",
+    "t1_late_braking_attack": "heavy_braking_window_open",
+    "middle_technical_hold": "segment_disallows_attack",
+    "t10_distant_braking_hold": "braking_gap_too_large",
+    "t11_t12_prepare_next_straight": "segment_disallows_attack",
+    "t13_t14_straight_attack": "straight_window_open",
+    "final_braking_attack": "heavy_braking_window_open"
+  },
+  "pit_merge_expected_sequence": [
+    "yield",
+    "hold",
+    "merge"
+  ],
+  "interpretation": "This v1 gate validates deterministic attack/hold reasons and physical safety. Pass-rate calibration against real race replays remains a later benchmark layer."
+}

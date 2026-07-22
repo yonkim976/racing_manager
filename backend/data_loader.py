@@ -35,10 +35,21 @@ def _prepare_circuit_seed(data: dict) -> dict:
     prepared = dict(data)
     geo_file = _pop_first(prepared, "geo_file", "geoFile")
     metric_file = _pop_first(prepared, "metric_file", "metricFile")
+    profile_file = _pop_first(prepared, "profile_file", "profileFile")
     if geo_file:
         prepared["geo"] = _load_source_fragment(geo_file)
     if metric_file:
         prepared["metric"] = _load_source_fragment(metric_file)
+    if profile_file:
+        profile = _load_source_fragment(profile_file)
+        for field in ("track_width_profile", "track_conditions", "surface_zones"):
+            if field in profile:
+                prepared[field] = profile[field]
+        if "physics_calibration" in profile:
+            prepared["physics_calibration"] = {
+                **prepared.get("physics_calibration", {}),
+                **profile["physics_calibration"],
+            }
     return prepared
 
 

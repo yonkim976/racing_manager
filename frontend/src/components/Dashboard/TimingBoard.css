@@ -230,6 +230,15 @@
   text-overflow: ellipsis;
 }
 
+.timing-row__sector {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 0.52rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  opacity: 0.8;
+}
+
 .timing-row__status {
   display: flex;
   align-items: center;
@@ -251,6 +260,11 @@
   background: rgba(243, 156, 18, 0.15);
 }
 
+.timing-row__status-badge--yel {
+  color: #050508;
+  background: #ffd60a;
+}
+
 .timing-row__status-badge--drs {
   color: #050508;
   background: var(--accent-green);
@@ -267,6 +281,13 @@
 .timing-row__status-badge--sbs {
   color: #050508;
   background: var(--accent-blue);
+}
+
+.timing-row__status-badge--3w,
+.timing-row__status-badge--4w {
+  color: #0b0d10;
+  background: #f5a623;
+  border-color: #ffd27a;
 }
 
 /* Gap / interval */

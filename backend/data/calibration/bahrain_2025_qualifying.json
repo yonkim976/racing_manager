@@ -1,0 +1,931 @@
+{
+  "source": "TracingInsights-Archive/2025",
+  "source_url": "https://github.com/TracingInsights-Archive/2025",
+  "reference_session": "2025 Bahrain Grand Prix Qualifying",
+  "reference_laps": [
+    "PIA lap 14 1:29.841",
+    "RUS lap 19 1:30.009",
+    "LEC lap 15 1:30.175",
+    "ANT lap 19 1:30.213",
+    "GAS lap 18 1:30.216"
+  ],
+  "sample_count": 128,
+  "current_calibration": {
+    "planner_braking_utilization": 0.55,
+    "telemetry_max_braking_utilization": 0.8,
+    "braking_longitudinal_grip_factor": 1.35,
+    "brake_control_error_fraction": 0.06,
+    "controller_sample_distance_m": 12.5,
+    "qualifying_pace_modifier": 1.04,
+    "mae_kph": 4.02,
+    "rmse_kph": 7.434,
+    "bias_kph": 0.249,
+    "maximum_over_kph": 19.566,
+    "maximum_under_kph": -41.886
+  },
+  "recommended_calibration": {
+    "planner_braking_utilization": 0.55,
+    "telemetry_max_braking_utilization": 0.8,
+    "braking_longitudinal_grip_factor": 1.35,
+    "brake_control_error_fraction": 0.06,
+    "controller_sample_distance_m": 12.5,
+    "qualifying_pace_modifier": 1.04,
+    "mae_kph": 4.02,
+    "rmse_kph": 7.434,
+    "bias_kph": 0.249,
+    "maximum_over_kph": 19.566,
+    "maximum_under_kph": -41.886
+  },
+  "corner_comparison": [
+    {
+      "corner": 1,
+      "progress": 0.130492,
+      "measured_min_speed_kph": 69.802,
+      "predicted_min_speed_kph": 85.766,
+      "minimum_speed_error_kph": 15.964,
+      "measured_braking_fraction": 1.0
+    },
+    {
+      "corner": 2,
+      "progress": 0.149379,
+      "measured_min_speed_kph": 69.802,
+      "predicted_min_speed_kph": 85.766,
+      "minimum_speed_error_kph": 15.964,
+      "measured_braking_fraction": 1.0
+    },
+    {
+      "corner": 3,
+      "progress": 0.171016,
+      "measured_min_speed_kph": 152.331,
+      "predicted_min_speed_kph": 146.828,
+      "minimum_speed_error_kph": -5.503,
+      "measured_braking_fraction": 0.0
+    },
+    {
+      "corner": 4,
+      "progress": 0.278077,
+      "measured_min_speed_kph": 124.897,
+      "predicted_min_speed_kph": 133.058,
+      "minimum_speed_error_kph": 8.161,
+      "measured_braking_fraction": 1.0
+    },
+    {
+      "corner": 5,
+      "progress": 0.328574,
+      "measured_min_speed_kph": 204.9,
+      "predicted_min_speed_kph": 201.524,
+      "minimum_speed_error_kph": -3.376,
+      "measured_braking_fraction": 0.8
+    },
+    {
+      "corner": 6,
+      "progress": 0.343495,
+      "measured_min_speed_kph": 212.012,
+      "predicted_min_speed_kph": 214.507,
+      "minimum_speed_error_kph": 2.495,
+      "measured_braking_fraction": 0.8
+    },
+    {
+      "corner": 7,
+      "progress": 0.363352,
+      "measured_min_speed_kph": 212.012,
+      "predicted_min_speed_kph": 214.507,
+      "minimum_speed_error_kph": 2.495,
+      "measured_braking_fraction": 0.2
+    },
+    {
+      "corner": 8,
+      "progress": 0.40858,
+      "measured_min_speed_kph": 81.016,
+      "predicted_min_speed_kph": 90.062,
+      "minimum_speed_error_kph": 9.046,
+      "measured_braking_fraction": 1.0
+    },
+    {
+      "corner": 9,
+      "progress": 0.473518,
+      "measured_min_speed_kph": 77.439,
+      "predicted_min_speed_kph": 86.51,
+      "minimum_speed_error_kph": 9.071,
+      "measured_braking_fraction": 1.0
+    },
+    {
+      "corner": 10,
+      "progress": 0.493858,
+      "measured_min_speed_kph": 77.439,
+      "predicted_min_speed_kph": 86.51,
+      "minimum_speed_error_kph": 9.071,
+      "measured_braking_fraction": 1.0
+    },
+    {
+      "corner": 11,
+      "progress": 0.637481,
+      "measured_min_speed_kph": 164.083,
+      "predicted_min_speed_kph": 168.458,
+      "minimum_speed_error_kph": 4.375,
+      "measured_braking_fraction": 1.0
+    },
+    {
+      "corner": 12,
+      "progress": 0.712615,
+      "measured_min_speed_kph": 254.263,
+      "predicted_min_speed_kph": 255.479,
+      "minimum_speed_error_kph": 1.216,
+      "measured_braking_fraction": 0.2
+    },
+    {
+      "corner": 13,
+      "progress": 0.751401,
+      "measured_min_speed_kph": 141.737,
+      "predicted_min_speed_kph": 148.112,
+      "minimum_speed_error_kph": 6.375,
+      "measured_braking_fraction": 1.0
+    },
+    {
+      "corner": 14,
+      "progress": 0.900508,
+      "measured_min_speed_kph": 131.672,
+      "predicted_min_speed_kph": 135.678,
+      "minimum_speed_error_kph": 4.006,
+      "measured_braking_fraction": 1.0
+    },
+    {
+      "corner": 15,
+      "progress": 0.915468,
+      "measured_min_speed_kph": 131.672,
+      "predicted_min_speed_kph": 135.678,
+      "minimum_speed_error_kph": 4.006,
+      "measured_braking_fraction": 1.0
+    }
+  ],
+  "telemetry_reference": [
+    {
+      "progress": 0.0,
+      "speed_kph": 292.634,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.007812,
+      "speed_kph": 297.179,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.015625,
+      "speed_kph": 300.889,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.023438,
+      "speed_kph": 305.619,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.03125,
+      "speed_kph": 307.63,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.039062,
+      "speed_kph": 311.342,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.046875,
+      "speed_kph": 313.471,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.054688,
+      "speed_kph": 315.0,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.0625,
+      "speed_kph": 316.612,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.070312,
+      "speed_kph": 317.0,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.078125,
+      "speed_kph": 318.147,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.085938,
+      "speed_kph": 319.0,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.09375,
+      "speed_kph": 319.921,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.101562,
+      "speed_kph": 319.196,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.109375,
+      "speed_kph": 315.778,
+      "throttle_percent": 59.269,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.117188,
+      "speed_kph": 247.289,
+      "throttle_percent": 0.0,
+      "braking_fraction": 1.0
+    },
+    {
+      "progress": 0.125,
+      "speed_kph": 133.651,
+      "throttle_percent": 0.0,
+      "braking_fraction": 1.0
+    },
+    {
+      "progress": 0.132812,
+      "speed_kph": 69.802,
+      "throttle_percent": 4.964,
+      "braking_fraction": 0.4
+    },
+    {
+      "progress": 0.140625,
+      "speed_kph": 106.683,
+      "throttle_percent": 72.631,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.148438,
+      "speed_kph": 152.331,
+      "throttle_percent": 83.332,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.15625,
+      "speed_kph": 184.326,
+      "throttle_percent": 99.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.164062,
+      "speed_kph": 207.5,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.171875,
+      "speed_kph": 224.821,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.179688,
+      "speed_kph": 238.493,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.1875,
+      "speed_kph": 251.32,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.195312,
+      "speed_kph": 263.188,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.203125,
+      "speed_kph": 271.904,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.210938,
+      "speed_kph": 279.17,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.21875,
+      "speed_kph": 287.074,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.226562,
+      "speed_kph": 292.101,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.234375,
+      "speed_kph": 297.146,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.242188,
+      "speed_kph": 300.907,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.25,
+      "speed_kph": 303.878,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.257812,
+      "speed_kph": 301.673,
+      "throttle_percent": 70.146,
+      "braking_fraction": 0.2
+    },
+    {
+      "progress": 0.265625,
+      "speed_kph": 215.766,
+      "throttle_percent": 0.0,
+      "braking_fraction": 1.0
+    },
+    {
+      "progress": 0.273438,
+      "speed_kph": 150.355,
+      "throttle_percent": 0.0,
+      "braking_fraction": 1.0
+    },
+    {
+      "progress": 0.28125,
+      "speed_kph": 124.897,
+      "throttle_percent": 28.204,
+      "braking_fraction": 0.2
+    },
+    {
+      "progress": 0.289062,
+      "speed_kph": 141.747,
+      "throttle_percent": 69.435,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.296875,
+      "speed_kph": 175.941,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.304688,
+      "speed_kph": 204.9,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.3125,
+      "speed_kph": 223.961,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.320312,
+      "speed_kph": 240.235,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.328125,
+      "speed_kph": 250.566,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.335938,
+      "speed_kph": 240.032,
+      "throttle_percent": 5.478,
+      "braking_fraction": 0.8
+    },
+    {
+      "progress": 0.34375,
+      "speed_kph": 218.386,
+      "throttle_percent": 25.614,
+      "braking_fraction": 0.2
+    },
+    {
+      "progress": 0.351562,
+      "speed_kph": 212.012,
+      "throttle_percent": 87.042,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.359375,
+      "speed_kph": 227.861,
+      "throttle_percent": 99.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.367188,
+      "speed_kph": 235.586,
+      "throttle_percent": 83.795,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.375,
+      "speed_kph": 241.434,
+      "throttle_percent": 99.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.382812,
+      "speed_kph": 251.306,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.390625,
+      "speed_kph": 254.834,
+      "throttle_percent": 68.175,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.398438,
+      "speed_kph": 196.337,
+      "throttle_percent": 0.0,
+      "braking_fraction": 1.0
+    },
+    {
+      "progress": 0.40625,
+      "speed_kph": 113.453,
+      "throttle_percent": 0.0,
+      "braking_fraction": 1.0
+    },
+    {
+      "progress": 0.414062,
+      "speed_kph": 81.016,
+      "throttle_percent": 23.702,
+      "braking_fraction": 0.4
+    },
+    {
+      "progress": 0.421875,
+      "speed_kph": 115.913,
+      "throttle_percent": 77.003,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.429688,
+      "speed_kph": 167.359,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.4375,
+      "speed_kph": 199.907,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.445312,
+      "speed_kph": 219.741,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.453125,
+      "speed_kph": 234.493,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.460938,
+      "speed_kph": 246.776,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.46875,
+      "speed_kph": 255.608,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.476562,
+      "speed_kph": 257.779,
+      "throttle_percent": 71.635,
+      "braking_fraction": 0.2
+    },
+    {
+      "progress": 0.484375,
+      "speed_kph": 212.827,
+      "throttle_percent": 0.0,
+      "braking_fraction": 1.0
+    },
+    {
+      "progress": 0.492188,
+      "speed_kph": 124.74,
+      "throttle_percent": 0.0,
+      "braking_fraction": 1.0
+    },
+    {
+      "progress": 0.5,
+      "speed_kph": 77.439,
+      "throttle_percent": 16.104,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.507812,
+      "speed_kph": 117.271,
+      "throttle_percent": 79.809,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.515625,
+      "speed_kph": 170.97,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.523438,
+      "speed_kph": 202.673,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.53125,
+      "speed_kph": 227.214,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.539062,
+      "speed_kph": 245.02,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.546875,
+      "speed_kph": 259.228,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.554688,
+      "speed_kph": 269.89,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.5625,
+      "speed_kph": 278.236,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.570312,
+      "speed_kph": 286.785,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.578125,
+      "speed_kph": 293.25,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.585938,
+      "speed_kph": 298.827,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.59375,
+      "speed_kph": 304.037,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.601562,
+      "speed_kph": 308.123,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.609375,
+      "speed_kph": 310.599,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.617188,
+      "speed_kph": 272.099,
+      "throttle_percent": 0.0,
+      "braking_fraction": 1.0
+    },
+    {
+      "progress": 0.625,
+      "speed_kph": 199.346,
+      "throttle_percent": 0.0,
+      "braking_fraction": 1.0
+    },
+    {
+      "progress": 0.632812,
+      "speed_kph": 164.083,
+      "throttle_percent": 13.523,
+      "braking_fraction": 0.6
+    },
+    {
+      "progress": 0.640625,
+      "speed_kph": 166.694,
+      "throttle_percent": 73.584,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.648438,
+      "speed_kph": 189.688,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.65625,
+      "speed_kph": 209.996,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.664062,
+      "speed_kph": 225.255,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.671875,
+      "speed_kph": 236.595,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.679688,
+      "speed_kph": 247.941,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.6875,
+      "speed_kph": 254.263,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.695312,
+      "speed_kph": 258.832,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.703125,
+      "speed_kph": 262.0,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.710938,
+      "speed_kph": 265.162,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.71875,
+      "speed_kph": 268.122,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.726562,
+      "speed_kph": 270.506,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.734375,
+      "speed_kph": 271.832,
+      "throttle_percent": 66.794,
+      "braking_fraction": 0.2
+    },
+    {
+      "progress": 0.742188,
+      "speed_kph": 206.648,
+      "throttle_percent": 0.0,
+      "braking_fraction": 1.0
+    },
+    {
+      "progress": 0.75,
+      "speed_kph": 156.395,
+      "throttle_percent": 0.0,
+      "braking_fraction": 0.8
+    },
+    {
+      "progress": 0.757812,
+      "speed_kph": 141.737,
+      "throttle_percent": 34.332,
+      "braking_fraction": 0.2
+    },
+    {
+      "progress": 0.765625,
+      "speed_kph": 157.556,
+      "throttle_percent": 83.76,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.773438,
+      "speed_kph": 188.595,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.78125,
+      "speed_kph": 213.624,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.789062,
+      "speed_kph": 232.743,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.796875,
+      "speed_kph": 247.807,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.804688,
+      "speed_kph": 259.645,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.8125,
+      "speed_kph": 267.77,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.820312,
+      "speed_kph": 275.796,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.828125,
+      "speed_kph": 282.011,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.835938,
+      "speed_kph": 287.35,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.84375,
+      "speed_kph": 291.413,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.851562,
+      "speed_kph": 295.201,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.859375,
+      "speed_kph": 299.0,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.867188,
+      "speed_kph": 300.082,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.875,
+      "speed_kph": 301.931,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.882812,
+      "speed_kph": 300.0,
+      "throttle_percent": 68.779,
+      "braking_fraction": 0.2
+    },
+    {
+      "progress": 0.890625,
+      "speed_kph": 244.113,
+      "throttle_percent": 0.0,
+      "braking_fraction": 1.0
+    },
+    {
+      "progress": 0.898438,
+      "speed_kph": 155.65,
+      "throttle_percent": 0.0,
+      "braking_fraction": 1.0
+    },
+    {
+      "progress": 0.90625,
+      "speed_kph": 131.672,
+      "throttle_percent": 27.452,
+      "braking_fraction": 0.2
+    },
+    {
+      "progress": 0.914062,
+      "speed_kph": 147.929,
+      "throttle_percent": 92.929,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.921875,
+      "speed_kph": 186.229,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.929688,
+      "speed_kph": 210.438,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.9375,
+      "speed_kph": 229.771,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.945312,
+      "speed_kph": 243.216,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.953125,
+      "speed_kph": 253.759,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.960938,
+      "speed_kph": 262.01,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.96875,
+      "speed_kph": 268.638,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.976562,
+      "speed_kph": 275.266,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.984375,
+      "speed_kph": 283.178,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    },
+    {
+      "progress": 0.992188,
+      "speed_kph": 290.272,
+      "throttle_percent": 100.0,
+      "braking_fraction": 0.0
+    }
+  ]
+}

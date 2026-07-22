@@ -12,7 +12,8 @@ from models.schemas import (
     Team,
     TireCompound,
 )
-from simulation.physics import car_performance_multiplier, compute_effective_lap_time, driver_pace_multiplier
+from simulation.car_performance import car_performance_factors
+from simulation.physics import compute_effective_lap_time, driver_pace_multiplier
 from simulation.tire_model import compute_tire_performance
 
 # Each entry: (session name, number of drivers advancing to the next session).
@@ -38,6 +39,38 @@ def _format_gap(lap_time: float, pole_time: float) -> str:
     return f"+{gap:.3f}"
 
 
+def _normalize_to_reference_pole(
+    circuit: Circuit,
+    session_best: dict[int, dict[str, float]],
+    session_laps: dict[int, dict[str, list[float]]],
+    pole_driver_id: int,
+) -> None:
+    """Anchor the simulated dry Q3 field to an empirical pole reference.
+
+    The performance model still determines every relative gap and knockout result.
+    The circuit reference only corrects the absolute clock, preventing the legacy
+    ``base_lap_time`` value from producing implausible qualifying records.
+    """
+    calibration = circuit.physics_calibration
+    reference = (
+        calibration.reference_lap_time_seconds
+        if calibration is not None
+        else None
+    )
+    raw_pole = session_best[pole_driver_id].get("Q3")
+    if reference is None or raw_pole is None or raw_pole <= 0.0:
+        return
+
+    scale = reference / raw_pole
+    for driver_id, sessions in session_best.items():
+        for session_name, lap_time in sessions.items():
+            session_best[driver_id][session_name] = round(lap_time * scale, 3)
+        for session_name, laps in session_laps[driver_id].items():
+            session_laps[driver_id][session_name] = [
+                round(lap_time * scale, 3) for lap_time in laps
+            ]
+
+
 def _qualifying_lap_time(
     circuit: Circuit,
     driver: Driver,
@@ -45,7 +78,7 @@ def _qualifying_lap_time(
     rng: random.Random,
     evolution: float = 1.0,
 ) -> float:
-    car_performance = car_performance_multiplier(team.car_performance)
+    car_performance = car_performance_factors(team).qualifying
     driver_pace = driver_pace_multiplier(driver.stats.pace)
     tire_performance = compute_tire_performance(
         TireCompound.SOFT,
@@ -122,6 +155,13 @@ def run_qualifying(
     for block in reversed(eliminated_blocks):
         grid_order.extend(block)
 
+    if final_block:
+        _normalize_to_reference_pole(
+            circuit,
+            session_best,
+            session_laps,
+            final_block[0],
+        )
     pole_time = session_best[final_block[0]]["Q3"] if final_block else 0.0
     results: list[QualifyingResult] = []
 

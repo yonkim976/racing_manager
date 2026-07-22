@@ -108,7 +108,8 @@
 }
 
 .event-feed__item--sc_end,
-.event-feed__item--vsc_end {
+.event-feed__item--vsc_end,
+.event-feed__item--hazard_cleared {
   border-left-color: var(--accent-green);
 }
 

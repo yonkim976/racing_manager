@@ -7,11 +7,6 @@ import random
 GAME_TICK_SECONDS = 0.1
 
 
-def car_performance_multiplier(car_performance: float) -> float:
-    """Compress constructor performance spread for closer racing."""
-    return 1.0 + (car_performance - 1.0) * 0.50
-
-
 def driver_pace_multiplier(pace_stat: float) -> float:
     """Map driver pace stat to a compressed lap-time multiplier."""
     return 1.0 + (pace_stat - 0.88) * 0.28
@@ -19,7 +14,7 @@ def driver_pace_multiplier(pace_stat: float) -> float:
 
 def compute_effective_lap_time(
     base_lap_time: float,
-    car_performance: float,
+    vehicle_performance: float,
     driver_pace: float,
     tire_performance: float,
     rng: random.Random,
@@ -29,7 +24,7 @@ def compute_effective_lap_time(
     if lap_random_variation == 0.0:
         lap_random_variation = rng.uniform(-0.3, 0.3)
 
-    denominator = car_performance * driver_pace * tire_performance
+    denominator = vehicle_performance * driver_pace * tire_performance
     if denominator <= 0:
         return base_lap_time * 10 + abs(lap_random_variation)
     return base_lap_time / denominator + lap_random_variation

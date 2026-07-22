@@ -48,6 +48,9 @@ function tireLifePercent(wear) {
 
 function getStatusBadge(driver, isFinished) {
   if (driver.in_pit) return 'PIT';
+  if (driver.local_yellow_active && !isFinished) return 'YEL';
+  if (driver.maneuver_group_size >= 4 && !isFinished) return '4W';
+  if (driver.maneuver_group_size === 3 && !isFinished) return '3W';
   if (driver.side_by_side_active && !isFinished) return 'SBS';
   if (driver.drs_active && !isFinished) return 'DRS';
   if (driver.dirty_air_active && !driver.drs_active && !isFinished) return 'AIR';
@@ -149,6 +152,12 @@ export default function TimingBoard({ positions, playerDriverIds }) {
                   style={{ backgroundColor: driver.team_color }}
                 />
                 <span className="timing-row__name">{driver.name}</span>
+                <span
+                  className="timing-row__sector"
+                  title={`Sector ${driver.current_sector || 1}, mini-sector ${driver.current_mini_sector || 1}`}
+                >
+                  S{driver.current_sector || 1} M{driver.current_mini_sector || 1}
+                </span>
               </span>
 
               <span className="timing-row__status">
@@ -159,7 +168,10 @@ export default function TimingBoard({ positions, playerDriverIds }) {
                 )}
               </span>
 
-              <span className="timing-row__gap">
+              <span
+                className="timing-row__gap"
+                title={driver.timing_gap_valid ? 'Measured at timing loop' : 'Provisional until next common timing loop'}
+              >
                 {isFinished ? (
                   <span className="timing-row__gap-finished">FIN</span>
                 ) : isGapMode && driver.gap === 'LEADER' ? (

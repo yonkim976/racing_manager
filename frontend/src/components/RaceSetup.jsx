@@ -208,7 +208,9 @@ export default function RaceSetup({ onStart }) {
           </select>
           {selectedCircuit && (
             <span className="race-setup__hint">
-              Base lap: {selectedCircuit.base_lap_time}s
+              {selectedCircuit.physics_calibration?.reference_lap_time_seconds
+                ? `Telemetry reference: ${selectedCircuit.physics_calibration.reference_lap_time_seconds}s`
+                : `Base lap: ${selectedCircuit.base_lap_time}s`}
             </span>
           )}
         </div>

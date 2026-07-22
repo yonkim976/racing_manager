@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from bisect import bisect_right
-from dataclasses import dataclass
-from math import acos, hypot, sqrt
+from dataclasses import dataclass, field
+from math import atan2, hypot, sqrt
 
 from models.schemas import Circuit
 
@@ -23,10 +23,28 @@ class SpeedProfile:
 
     progress: list[float]
     raw_speeds_mps: list[float]
+    curvatures_1pm: list[float]
+    signed_curvatures_1pm: list[float]
+    braking_fractions: list[float] = field(default_factory=list)
 
     def raw_speed_at_progress(self, progress: float) -> float:
         """Interpolate the un-normalized physical speed limit around the lap."""
         return self._value_at_progress(self.raw_speeds_mps, progress, PROFILE_MAX_SPEED_MPS)
+
+    def curvature_at_progress(self, progress: float) -> float:
+        """Interpolate absolute centerline curvature in inverse metres."""
+        return max(0.0, self._value_at_progress(self.curvatures_1pm, progress, 0.0))
+
+    def signed_curvature_at_progress(self, progress: float) -> float:
+        """Interpolate signed curvature; positive values denote left turns."""
+        return self._value_at_progress(self.signed_curvatures_1pm, progress, 0.0)
+
+    def braking_fraction_at_progress(self, progress: float) -> float:
+        """Interpolate the share of measured laps braking at this position."""
+        return max(
+            0.0,
+            min(1.0, self._value_at_progress(self.braking_fractions, progress, 0.0)),
+        )
 
     def _value_at_progress(
         self,
@@ -98,7 +116,11 @@ def _segment_lengths_m(points: list[Point], track_length_m: float) -> tuple[list
     return [length * meters_per_pixel for length in pixel_lengths], pixel_total
 
 
-def _curvature_at(points: list[Point], segment_lengths_m: list[float], index: int) -> float:
+def _signed_curvature_at(
+    points: list[Point],
+    segment_lengths_m: list[float],
+    index: int,
+) -> float:
     previous_index = (index - 1) % len(points)
     next_index = (index + 1) % len(points)
     incoming = _unit_vector(points[previous_index], points[index])
@@ -107,7 +129,8 @@ def _curvature_at(points: list[Point], segment_lengths_m: list[float], index: in
         return 0.0
 
     clamped_dot = max(-1.0, min(1.0, _dot(incoming, outgoing)))
-    turn_angle = acos(clamped_dot)
+    cross = incoming[0] * outgoing[1] - incoming[1] * outgoing[0]
+    turn_angle = atan2(cross, clamped_dot)
     arc_length = max(
         1e-6,
         0.5 * (segment_lengths_m[previous_index] + segment_lengths_m[index]),
@@ -166,9 +189,14 @@ def build_speed_profile(
     if sum(segment_lengths_m) <= 0:
         return None
 
-    curvature_limits = [
-        _curvature_speed_limit_mps(_curvature_at(points, segment_lengths_m, index))
+    signed_curvatures = [
+        _signed_curvature_at(points, segment_lengths_m, index)
         for index in range(len(points))
+    ]
+    curvatures = [abs(curvature) for curvature in signed_curvatures]
+    curvature_limits = [
+        _curvature_speed_limit_mps(curvature)
+        for curvature in curvatures
     ]
     limited_speeds = _apply_braking_and_acceleration_limits(
         curvature_limits,
@@ -186,4 +214,6 @@ def build_speed_profile(
     return SpeedProfile(
         progress=progress,
         raw_speeds_mps=limited_speeds,
+        curvatures_1pm=curvatures,
+        signed_curvatures_1pm=signed_curvatures,
     )

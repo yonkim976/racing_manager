@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import ReconnectingWebSocket from 'reconnecting-websocket';
 
 const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws/race`;
+const DASHBOARD_UPDATE_INTERVAL_MS = 100;
 
 /**
  * Custom hook for managing WebSocket connection to the race server.
@@ -16,6 +17,9 @@ export function useRaceWebSocket(shouldConnect = false) {
   const [connectionState, setConnectionState] = useState('disconnected');
   const wsRef = useRef(null);
   const eventsRef = useRef([]);
+  const poseTickRef = useRef(null);
+  const dashboardTickRef = useRef(null);
+  const dashboardUpdatedAtRef = useRef(0);
 
   useEffect(() => {
     if (!shouldConnect) {
@@ -63,7 +67,29 @@ export function useRaceWebSocket(shouldConnect = false) {
             break;
 
           case 'tick':
-            setRaceState(data);
+            // Canvas pose consumption is deliberately independent from React.
+            // Every 30 Hz packet reaches the stable ref, while the timing and
+            // strategy dashboard renders at 10 Hz. This keeps JSON/React work
+            // from stealing frames from Pixi's 60 FPS playback loop.
+            poseTickRef.current = data;
+            {
+              const now = performance.now();
+              const previous = dashboardTickRef.current;
+              const urgentStateChange = !previous
+                || previous.paused !== data.paused
+                || previous.speed_multiplier !== data.speed_multiplier
+                || previous.race_phase !== data.race_phase
+                || previous.start_sequence_phase !== data.start_sequence_phase
+                || data.events?.length > 0;
+              if (
+                urgentStateChange
+                || now - dashboardUpdatedAtRef.current >= DASHBOARD_UPDATE_INTERVAL_MS
+              ) {
+                dashboardTickRef.current = data;
+                dashboardUpdatedAtRef.current = now;
+                setRaceState(data);
+              }
+            }
             if (data.events?.length > 0) {
               const newEvents = [...eventsRef.current, ...data.events].slice(-50);
               eventsRef.current = newEvents;
@@ -121,11 +147,15 @@ export function useRaceWebSocket(shouldConnect = false) {
     setEvents([]);
     setRaceEnd(null);
     eventsRef.current = [];
+    poseTickRef.current = null;
+    dashboardTickRef.current = null;
+    dashboardUpdatedAtRef.current = 0;
   }, []);
 
   return {
     raceInfo,
     raceState,
+    poseTickRef,
     events,
     raceEnd,
     connected,

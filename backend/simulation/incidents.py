@@ -131,8 +131,8 @@ def roll_solo_incident(
 
 
 # ── Collision escalation ─────────────────────────────────────────────────────
-COLLISION_CAR_STOPPED_PROBABILITY = 0.07
-COLLISION_CRASH_PROBABILITY = 0.03
+COLLISION_CAR_STOPPED_PROBABILITY = 0.015
+COLLISION_CRASH_PROBABILITY = 0.005
 COLLISION_HEAVY_BRAKING_CRASH_BONUS = 0.04
 
 
@@ -140,14 +140,22 @@ def escalate_collision(
     rng: random.Random,
     *,
     segment_type: str | None,
+    impact_speed_mps: float = 5.0,
 ) -> IncidentSeverity:
-    """Decide whether a light contact stays minor or escalates to out/SC."""
-    crash_p = COLLISION_CRASH_PROBABILITY
+    """Escalate only after contact, with probability driven by impact speed."""
+    impact_factor = max(0.0, min(1.0, (impact_speed_mps - 10.0) / 20.0))
+    crash_p = COLLISION_CRASH_PROBABILITY + 0.60 * impact_factor**1.5
     if segment_type == "heavy_braking":
         crash_p += COLLISION_HEAVY_BRAKING_CRASH_BONUS
+    car_stopped_p = COLLISION_CAR_STOPPED_PROBABILITY + 0.36 * impact_factor
+    major_probability = crash_p + car_stopped_p
+    if major_probability > 0.98:
+        scale = 0.98 / major_probability
+        crash_p *= scale
+        car_stopped_p *= scale
     roll = rng.random()
     if roll < crash_p:
         return IncidentSeverity.CRASH
-    if roll < crash_p + COLLISION_CAR_STOPPED_PROBABILITY:
+    if roll < crash_p + car_stopped_p:
         return IncidentSeverity.CAR_STOPPED
     return IncidentSeverity.MINOR

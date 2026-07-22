@@ -3,6 +3,10 @@
   "sourceId": "osm:bahrain-gp",
   "license": "ODbL",
   "attribution": "OpenStreetMap contributors",
+  "sourceUrl": "https://www.openstreetmap.org/#map=16/26.0328/50.5128",
+  "acquiredAt": "2026-07-22",
+  "transformVersion": "osm-centerline-v2",
+  "coordinateSystem": "EPSG:4326",
   "centerlineLonLat": [
     {
       "lat": 26.0304454,

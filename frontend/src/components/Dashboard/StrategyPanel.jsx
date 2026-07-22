@@ -342,6 +342,17 @@ export default function StrategyPanel({ drivers, pitWindowOpen = false, onPitCal
         >
           {(() => {
             const tireLife = tireLifePercent(driver.tire_wear);
+            const paceTransitionProgress = Math.max(
+              0,
+              Math.min(1, Number(driver.pace_mode_transition_progress ?? 1)),
+            );
+            const paceTransitioning = paceTransitionProgress < 0.999;
+            const paceFrom = PACE_MODES.find(
+              (mode) => mode.value === driver.pace_mode_from,
+            )?.label || 'STD';
+            const paceTarget = PACE_MODES.find(
+              (mode) => mode.value === driver.pace_mode,
+            )?.label || 'STD';
             return (
               <>
           <div className="strategy-driver__info">
@@ -395,6 +406,23 @@ export default function StrategyPanel({ drivers, pitWindowOpen = false, onPitCal
               );
             })}
           </div>
+
+          {paceTransitioning && (
+            <div
+              className="strategy-driver__pace-transition"
+              aria-live="polite"
+              aria-label={`Pace transition ${Math.round(paceTransitionProgress * 100)} percent`}
+            >
+              <span>{paceFrom} → {paceTarget}</span>
+              <div className="strategy-driver__pace-transition-track">
+                <div
+                  className="strategy-driver__pace-transition-fill"
+                  style={{ width: `${paceTransitionProgress * 100}%` }}
+                />
+              </div>
+              <b>{Math.round(paceTransitionProgress * 100)}%</b>
+            </div>
+          )}
 
           <div
             className="strategy-driver__actions"

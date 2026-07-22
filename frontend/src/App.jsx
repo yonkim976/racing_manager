@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import TimingBoard from './components/Dashboard/TimingBoard';
 import StrategyPanel from './components/Dashboard/StrategyPanel';
 import SpeedControl from './components/Controls/SpeedControl';
 import EventFeed from './components/Controls/EventFeed';
 import DevRaceControl from './components/DevRaceControl/DevRaceControl';
-import TrackCanvas from './components/TrackView/TrackCanvas';
 import RaceSetup from './components/RaceSetup';
 import { useRaceWebSocket } from './hooks/useRaceWebSocket';
 import './App.css';
@@ -15,6 +14,8 @@ const CIRCUIT_DISPLAY_ROTATION_OVERRIDES = {
 };
 const DEV_RACE_CONTROLS_ENABLED = import.meta.env.DEV
   || import.meta.env.VITE_ENABLE_RACE_DEV_CONTROLS === 'true';
+const EMPTY_TRACK_DATA = Object.freeze([]);
+const TrackCanvas = lazy(() => import('./components/TrackView/TrackCanvas'));
 
 function formatRaceTime(seconds) {
   if (!seconds || seconds <= 0) return '—';
@@ -41,7 +42,7 @@ function formatResultTime(result, winnerTime) {
   return `+${Math.max(0, result.total_time - winnerTime).toFixed(3)}`;
 }
 
-function StartLightsOverlay({ lightCount, lightsOut }) {
+function StartLightsOverlay({ phase, lightCount, lightsOut }) {
   return (
     <div className="start-lights-overlay">
       <div className={`start-lights ${lightsOut ? 'start-lights--out' : ''}`}>
@@ -54,7 +55,7 @@ function StartLightsOverlay({ lightCount, lightsOut }) {
           ))}
         </div>
         <span className="start-lights__status">
-          {lightsOut ? 'LIGHTS OUT' : 'GET READY'}
+          {lightsOut ? 'LIGHTS OUT' : phase === 'grid' ? 'CARS ON GRID' : 'GET READY'}
         </span>
       </div>
     </div>
@@ -111,37 +112,29 @@ function getCircuitDisplayRotationDeg(circuit) {
 export default function App() {
   const [phase, setPhase] = useState('setup');
   const [setupResult, setSetupResult] = useState(null);
-  const [startLightsActive, setStartLightsActive] = useState(false);
-  const [startLightCount, setStartLightCount] = useState(0);
-  const [lightsOut, setLightsOut] = useState(false);
   const [pendingPaused, setPendingPaused] = useState(null);
 
   const {
     raceInfo,
     raceState,
+    poseTickRef,
     events,
     raceEnd,
     connected,
     connectionState,
     sendCommand,
     resetState,
-  } = useRaceWebSocket(phase === 'race' && !startLightsActive);
+  } = useRaceWebSocket(phase === 'race');
 
   const handleRaceStart = (result) => {
     resetState();
     setPendingPaused(null);
     setSetupResult(result);
-    setStartLightCount(0);
-    setLightsOut(false);
-    setStartLightsActive(true);
     setPhase('race');
   };
 
   const handleBackToSetup = async () => {
     fetch('/api/race/session', { method: 'DELETE' }).catch(() => {});
-    setStartLightsActive(false);
-    setStartLightCount(0);
-    setLightsOut(false);
     setPhase('setup');
     setSetupResult(null);
     setPendingPaused(null);
@@ -161,26 +154,6 @@ export default function App() {
     if (!connected) setPendingPaused(null);
   }, [connected]);
 
-  useEffect(() => {
-    if (phase !== 'race' || !startLightsActive) return undefined;
-
-    const timers = [];
-    const firstLightDelay = 250;
-    const lightStep = 620;
-    const lightsOutDelay = firstLightDelay + lightStep * 5;
-    const connectDelay = lightsOutDelay + 700;
-
-    for (let i = 1; i <= 5; i += 1) {
-      timers.push(setTimeout(() => setStartLightCount(i), firstLightDelay + lightStep * (i - 1)));
-    }
-    timers.push(setTimeout(() => setLightsOut(true), lightsOutDelay));
-    timers.push(setTimeout(() => setStartLightsActive(false), connectDelay));
-
-    return () => {
-      timers.forEach((timer) => clearTimeout(timer));
-    };
-  }, [phase, startLightsActive]);
-
   if (phase === 'setup') {
     return <RaceSetup onStart={handleRaceStart} />;
   }
@@ -198,20 +171,52 @@ export default function App() {
   const circuitName = raceInfo?.circuit_name || setupResult?.circuit?.name;
   const trackCoords = raceInfo?.track_coords || setupResult?.circuit?.track_coords;
   const trackLengthM = raceInfo?.track_length_m || setupResult?.circuit?.track_length_m || 5000;
+  const worldCoordinateFrame = raceInfo ? {
+    originXRender: Number(raceInfo.world_origin_x_render || 0),
+    originYRender: Number(raceInfo.world_origin_y_render || 0),
+    metersPerRenderUnit: Number(raceInfo.world_meters_per_render_unit || 1),
+  } : null;
   const trackWidthM = raceInfo?.track_width_m || setupResult?.circuit?.track_width_m || 12;
   const carWidthM = raceInfo?.car_width_m || 1.9;
   const carLengthM = raceInfo?.car_length_m || 5.0;
-  const racingLineProfile = raceInfo?.racing_line_profile || [];
+  const gridSlots = raceInfo?.grid_slots || EMPTY_TRACK_DATA;
+  const racingLineProfile = raceInfo?.racing_line_profile || EMPTY_TRACK_DATA;
+  const trackWidthProfile = raceInfo?.track_width_profile || EMPTY_TRACK_DATA;
+  const surfaceZones = raceInfo?.surface_zones || EMPTY_TRACK_DATA;
+  const racingLineCoords = raceInfo?.racing_line_coords || EMPTY_TRACK_DATA;
   const pitLaneCoords = raceInfo?.pit_lane_coords || setupResult?.circuit?.pit_lane_coords;
   const pitBoxOffset = raceInfo?.pit_box_offset ?? setupResult?.circuit?.pit_lane?.box_offset ?? 11;
+  const pitLaneWidthM = raceInfo?.pit_lane_width_m
+    ?? setupResult?.circuit?.pit_lane?.lane_width_m
+    ?? 4;
+  const pitSideEntryProgress = raceInfo?.pit_side_entry_progress
+    ?? setupResult?.circuit?.pit_lane?.side_entry_progress
+    ?? 0.02;
+  const pitSpeedLimitStart = raceInfo?.pit_speed_limit_start
+    ?? setupResult?.circuit?.pit_lane?.speed_limit_start
+    ?? 0.12;
+  const pitBoxProgress = raceInfo?.pit_box_progress
+    ?? setupResult?.circuit?.pit_lane?.box_progress
+    ?? 0.5;
+  const pitSpeedLimitEnd = raceInfo?.pit_speed_limit_end
+    ?? setupResult?.circuit?.pit_lane?.speed_limit_end
+    ?? 0.88;
+  const pitSideRejoinProgress = raceInfo?.pit_side_rejoin_progress
+    ?? setupResult?.circuit?.pit_lane?.side_rejoin_progress
+    ?? 0.94;
   const drsZones = raceInfo?.drs_zones || setupResult?.circuit?.drs_zones || [];
+  const sectors = raceInfo?.sectors || setupResult?.circuit?.sectors || [];
   const startFinishIndex = raceInfo?.start_finish_index ?? setupResult?.circuit?.start_finish_index ?? 0;
   const landmarks = raceInfo?.landmarks || setupResult?.circuit?.landmarks || [];
   const circuitViewBounds = getCircuitViewBounds(setupResult?.circuit);
   const circuitDisplayRotationDeg = getCircuitDisplayRotationDeg(setupResult?.circuit);
   const showCircuitBearing = Boolean(setupResult?.circuit?.geo);
+  const startSequencePhase = raceState?.start_sequence_phase || 'connecting';
+  const startLightCount = raceState?.start_light_count || 0;
+  const lightsOut = startSequencePhase === 'lights_out';
+  const startLightsActive = ['grid', 'lights', 'lights_out'].includes(startSequencePhase);
   const statusText = startLightsActive
-    ? (lightsOut ? 'LIGHTS OUT' : 'STARTING')
+    ? (lightsOut ? 'LIGHTS OUT' : 'ON THE GRID')
     : (connectionState === 'connected' ? '● LIVE' : connectionState.toUpperCase());
   const statusClass = startLightsActive ? 'connecting' : connectionState;
 
@@ -297,28 +302,46 @@ export default function App() {
       )}
 
       {startLightsActive && (
-        <StartLightsOverlay lightCount={startLightCount} lightsOut={lightsOut} />
+        <StartLightsOverlay
+          phase={startSequencePhase}
+          lightCount={startLightCount}
+          lightsOut={lightsOut}
+        />
       )}
 
       <main className="race-layout">
         <aside className="race-layout__sidebar">
           <TimingBoard
             positions={raceState?.positions}
+            poseTickRef={poseTickRef}
             playerDriverIds={playerDriverIds}
           />
         </aside>
 
         <section className="race-layout__main">
-          <TrackCanvas
+          <Suspense fallback={<div className="track-canvas track-canvas--loading">Loading track…</div>}>
+            <TrackCanvas
             trackCoords={trackCoords}
             trackLengthM={trackLengthM}
+            worldCoordinateFrame={worldCoordinateFrame}
             trackWidthM={trackWidthM}
             carWidthM={carWidthM}
             carLengthM={carLengthM}
+            gridSlots={gridSlots}
             racingLineProfile={racingLineProfile}
+            trackWidthProfile={trackWidthProfile}
+            surfaceZones={surfaceZones}
+            racingLineCoords={racingLineCoords}
             pitLaneCoords={pitLaneCoords}
             pitBoxOffset={pitBoxOffset}
+            pitLaneWidthM={pitLaneWidthM}
+            pitSideEntryProgress={pitSideEntryProgress}
+            pitSpeedLimitStart={pitSpeedLimitStart}
+            pitBoxProgress={pitBoxProgress}
+            pitSpeedLimitEnd={pitSpeedLimitEnd}
+            pitSideRejoinProgress={pitSideRejoinProgress}
             drsZones={drsZones}
+            sectors={sectors}
             startFinishIndex={startFinishIndex}
             landmarks={landmarks}
             viewBounds={circuitViewBounds}
@@ -335,7 +358,8 @@ export default function App() {
             safetyCarProgress={raceState?.safety_car_progress}
             safetyCarProgressRate={raceState?.safety_car_progress_rate || 0}
             safetyCarPitLaneProgress={raceState?.safety_car_pit_lane_progress || 0}
-          />
+            />
+          </Suspense>
           <EventFeed events={events} playerDriverCodes={playerDriverCodes} />
         </section>
 
@@ -359,6 +383,11 @@ export default function App() {
               remainingSeconds={raceState?.race_phase_remaining_seconds || 0}
               remainingLaps={raceState?.race_phase_remaining_laps || 0}
               physicsHz={raceState?.physics_hz || 50}
+              broadcastHz={raceState?.broadcast_hz || 30}
+              requestedSpeedMultiplier={raceState?.speed_multiplier || 1}
+              effectiveSpeedMultiplier={raceState?.effective_speed_multiplier || 0}
+              simulationBacklogSeconds={raceState?.simulation_backlog_seconds || 0}
+              broadcastJitterMs={raceState?.broadcast_jitter_ms || 0}
               onSetPhase={(nextPhase) => sendCommand({
                 type: 'dev_set_race_phase',
                 phase: nextPhase,
