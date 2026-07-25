@@ -191,7 +191,13 @@ def _pit_merge_audit(seed: int) -> dict[str, Any]:
     speed_mps = 30.0
     route_length_m = engine._pit_route_length_m()
     remaining_m = (pit_lane.side_rejoin_progress - lane_progress) * route_length_m
-    time_to_rejoin_s = remaining_m / speed_mps
+    # Keep the fixture aligned with _pit_rejoin_decision. The runtime limits
+    # occupancy prediction to five seconds so distant traffic does not block a
+    # pit exit indefinitely.
+    time_to_rejoin_s = min(
+        5.0,
+        max(PHYSICS_STEP_SECONDS, remaining_m / speed_mps),
+    )
     entry = engine._pit_entry_progress()
     exit_ = engine._pit_exit_progress()
     assert entry is not None and exit_ is not None

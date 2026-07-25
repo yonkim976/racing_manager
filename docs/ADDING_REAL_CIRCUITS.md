@@ -181,6 +181,95 @@ cd backend
 - OpenStreetMap circuit relation: https://www.openstreetmap.org/relation/284557
 - TUMFTM racetrack-database: https://github.com/TUMFTM/racetrack-database/blob/master/tracks/Budapest.csv
 
+## 몬차(Monza) 적용 기록
+
+- 공식 길이: `5,793m`
+- 레이스 랩 수: `53`
+- OSM 출발점: `45.6189632, 9.2811729`
+  - F1 공식 "폴에서 T1 제동점까지 472m" + 제동거리 약 140m을 Variante del Rettifilo 진입점에서 역산한 위치와, Tribuna Centrale 정면을 트랙에 투영한 위치가 일치
+- OSM 그랑프리 레이아웃: 20개 way 폐곡선 (`19842206` Rettifilo di partenza 등, 원본 5,795.8m)
+- OSM F1 피트 레인 way: `38168747` (`Pit Lane`, 741.4m)
+- 컴파일 피트 진입/출구 진행률: `0.903 / 0.032` (피트 진입은 실제처럼 Parabolica 안쪽을 가로지름)
+- OSM 원본 중심선 길이(회전 후): `5,798.0m`
+- OSM 컴파일 길이: `5,793.0m`
+- FIA 2025 기준 DRS: Serraglio Straight(T7 뒤 170m 활성), Main Straight(T11 뒤 20m 활성)
+- 코너 진행률은 OSM 코너 way(Variante del Rettifilo, Curva Biassono, Variante della Roggia, Lesmo 1/2, Vialone·Variante Ascari, Curva Alboreto)의 누적 거리에서 도출
+- 검증: `validate_track_data --circuit-id 8` 통과, 전용 단위 테스트 3개와 실서킷 공통 피트 왕복·SC 배치 테스트 통과
+- 주의: 폭 프로파일 미적용(기본 12m fallback). Tier B 대기
+
+참고 링크:
+
+- FIA 2025 circuit map: https://www.fia.com/system/files/decision-document/2025_monza_event_-_circuit_map_-_monza_2025_0.pdf
+- Formula 1 circuit page: https://www.formula1.com/en/racing/2025/italy
+- Monza 공식 트랙 안내(직선 1,194.4m): https://www.monzanet.it/en/circuit/
+
+## 잔드보르트(Zandvoort) 적용 기록
+
+- 공식 길이: `4,259m`
+- 레이스 랩 수: `72`
+- OSM 출발점: `52.3902596, 4.5417272`
+  - RaceFans/FIA 이벤트 데이터의 "그리드에서 T1까지 164m"를 Tarzanbocht 진입점에서 역산한 **추정값**
+- OSM 그랑프리 레이아웃: 24개 way 폐곡선 (원본 4,256.5m)
+- OSM F1 피트 레인 way: `38144527` (`Pitstraat`, 757.6m)
+- 컴파일 피트 진입/출구 진행률: `0.907 / 0.093`
+- OSM 원본 중심선 길이(회전 후): `4,261.9m`
+- OSM 컴파일 길이: `4,259.0m`
+- FIA 2025 기준 DRS: Back Straight(T10 뒤 50m 활성), Main Straight
+  - FIA의 두 번째 활성점은 T13 뒤 40m로 뱅크드 T14 **코너 안**에 있으나, 게임 규칙(DRS는 straight 세그먼트 안)에 따라 T14 출구 뒤(0.888)로 이동. 2021년 규격과 동일한 위치이며 의도된 편차로 기록
+- 코너: OSM 코너 way 이름(Tarzan, Gerlach, Hugenholtz, Hunzerug, Slotemaker, Scheivlak, Masters, CM.com bocht, Hans Ernst, Arie Luyendyk) 기준. T8/T9는 무명 way 구간에서 기하로 추정
+- 검증: `validate_track_data --circuit-id 9` 통과, 전용 단위 테스트 3개와 실서킷 공통 피트 왕복·SC 배치 테스트 통과
+- 주의: 폭 프로파일 미적용(기본 12m fallback). 고도·뱅킹(T3/T14 18도)은 `planar_2d` 정책상 물리에 미반영
+
+참고 링크:
+
+- FIA 2025 Race Director's Event Notes: https://www.fia.com/system/files/decision-document/2025_dutch_grand_prix_-_race_directors_event_notes_.pdf
+- Formula 1 circuit page: https://www.formula1.com/en/racing/2025/netherlands
+- RaceFans 트랙 데이터: https://www.racefans.net/f1-information/going-to-a-race/zandvoort/
+
+## 바르셀로나-카탈루냐(Barcelona-Catalunya) 적용 기록
+
+- 공식 길이: `4,657m`
+- 레이스 랩 수: `66`
+- OSM 출발점: `41.5700636, 2.2612477`
+  - F1 이벤트 데이터의 "폴에서 첫 제동점까지 565m" + 제동거리 약 125m을 T1(Elf) 진입점에서 역산한 **추정값**
+- OSM 그랑프리 레이아웃: 모토GP 폐곡선 way `831804327`(원본 4,680.1m, 옛 T14–15 치케인 포함)를 노드 `1300807861`/`385973423`에서 절단하고, AZ 바이패스 way `893732520`+`831804325`+`990483278`(186.5m)로 재스티치한 2025 F1 레이아웃. 원본 4,664.0m
+- OSM F1 피트 레인: `33742214`(Entrada) + `178416729`(Pit Lane) + `178416733`(Sortida) 체인, 1,036.9m
+- 컴파일 피트 진입/출구 진행률: `0.880 / 0.107` (피트 진입은 T13–T14 사이에서 본선을 떠나 최종 코너 안쪽을 가로지름)
+- OSM 원본 중심선 길이: `4,664.0m` (공식 대비 +7.0m, 1% 이내)
+- OSM 컴파일 길이: `4,657.0m`
+- FIA 기준 DRS: Back Straight(T9 뒤 40m 활성), Main Straight(T14 뒤 활성, S/F 랩어라운드)
+- 코너: OSM 헤딩 변화로 14개 코너 추출. 2025 레이아웃에는 치케인(구 T14–15)이 없음
+- 임포터 확장: `import_osm_circuit.py`에 `--split-way`, `--pit-way-ids` 추가(치케인 바이패스·분할 피트 체인용)
+- 검증: `validate_track_data` 통과, Tier A 감사 통과, 전용 단위 테스트 3개와 `tests.test_engine` 283개 전부 통과
+- 주의: 폭 프로파일 미적용(기본 12m fallback). Tier B 대기
+
+참고 링크:
+
+- Formula 1 circuit page: https://www.formula1.com/en/racing/2025/spain
+- RaceFans 트랙 데이터: https://www.racefans.net/f1-information/going-to-a-race/circuit-de-catalunya-barcelona-circuit-information/
+
+## 스즈카(Suzuka) 적용 기록
+
+- 공식 길이: `5,807m`
+- 레이스 랩 수: `53`
+- OSM 출발점: `34.8432400, 136.5403949`
+  - F1 이벤트 데이터의 "폴에서 첫 제동점까지 277m" + 제동거리 약 90m을 1コーナー(way `183391643`) 진입점에서 역산한 **추정값**
+- OSM 그랑프리 레이아웃: 40개 way 폐곡선 (메인/西ストレート, S字, 역뱅크, 데그너, 헤어핀, 스푼, 130R, 히타치 Astemo 치케인 등, 원본 5,811.4m)
+- OSM F1 피트 레인 way: `120917578` (`Pit Lane`, 888.3m) — 치케인 출구~1코너를 본선과 평행
+- 컴파일 피트 진입/출구 진행률: `0.909 / 0.063`
+- OSM 원본 중심선 길이: `5,811.4m` (공식 대비 +4.4m)
+- OSM 컴파일 길이: `5,807.0m`
+- FIA 2025 기준 DRS: Main Straight 단일 존 (T18 뒤~T1 제동, 랩어라운드)
+- 코너: OSM 이름 way(1コーナー, 2코너, S字, 역뱅크, 데그너1/2, NISSIN 헤어핀, 스푼, 130R, 치케인) + 헤딩 변화로 18개 배치
+- 피겨8: `allows_self_intersection: true` — 브리지 교차 1곳을 의도된 자기교차로 허용. 검증기·단위 테스트는 교차 개수=1을 요구
+- 검증: `validate_track_data` 통과, Tier A 감사 통과, 전용 단위 테스트 3개
+- 주의: 폭 프로파일 미적용(기본 12m fallback). 고도·뱅킹은 `planar_2d` 정책상 미반영
+
+참고 링크:
+
+- Formula 1 circuit page: https://www.formula1.com/en/racing/2025/japan
+- FIA 2025 media kit (5.807km / 53 laps): https://www.fia.com/sites/default/files/2025mediakit0402a.pdf
+
 ## 9. 현재 트랙 데이터 및 시각화 상태
 
 현재 레이스 화면은 실제 중심선과 피트 레인 형상을 사용하지만 노면 세부 요소는 정밀 데이터 기반이 아니다.

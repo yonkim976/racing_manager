@@ -8,6 +8,7 @@
 2. [`CURRENT_PROJECT_STATUS.md`](CURRENT_PROJECT_STATUS.md): 구현 현황, 검증 결과, 그래픽 방향과 다음 로드맵
 3. [`ADDING_REAL_CIRCUITS.md`](ADDING_REAL_CIRCUITS.md): 실제 서킷 데이터 추가·검증 절차
 4. [`AI_RACECRAFT_BENCHMARK.md`](AI_RACECRAFT_BENCHMARK.md): 바레인 AI 판단 벤치마크 계약과 실행법
+5. [`MODULE_DECOMPOSITION_LOG.md`](MODULE_DECOMPOSITION_LOG.md): `RaceEngine` 도메인 분리 변경 이력 (추출할 때마다 갱신)
 
 문서와 코드가 충돌하면 코드를 무조건 정답으로 간주하지 않는다. 기준 설계와 현재 구현을 함께 확인하고, 의도된 변경이면 기준 문서를 먼저 갱신한다.
 
@@ -19,4 +20,4 @@
 - 실측값, 공식값, 추정값, 게임 밸런스값을 서로 다른 필드와 이름으로 관리한다.
 - 완료된 작업은 테스트 이름 또는 재현 명령과 함께 기록한다.
 
-마지막 정리일: 2026-07-22
+마지막 정리일: 2026-07-26

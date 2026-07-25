@@ -313,8 +313,13 @@ def validate_circuit_geometry_detailed(circuit: Circuit) -> dict[str, list[str]]
         errors.append(f"{circuit.name}: start_finish_index is outside track segment range")
 
     intersections = self_intersections(circuit.track_coords)
-    if intersections:
+    if intersections and not circuit.allows_self_intersection:
         errors.append(f"{circuit.name}: track self-intersections={intersections}")
+    elif circuit.allows_self_intersection and len(intersections) != 1:
+        errors.append(
+            f"{circuit.name}: figure-eight layout expected exactly 1 self-intersection, "
+            f"found {intersections}"
+        )
 
     curvature_hotspots = [
         (index, calculate_curvature(points, index))

@@ -61,7 +61,10 @@ class TrackPhysicsProfileTests(unittest.TestCase):
             surface = TrackSurfaceProfile.for_circuit(circuit, profile)
             for line_name, samples in profile.driving_line_samples.items():
                 coords = profile.coords_for_line(line_name)
-                self.assertEqual(self_intersections(coords), [], circuit.name)
+                if circuit.allows_self_intersection:
+                    self.assertEqual(len(self_intersections(coords)), 1, circuit.name)
+                else:
+                    self.assertEqual(self_intersections(coords), [], circuit.name)
                 line_length_m = profile.length_for_line(line_name)
                 self.assertGreater(
                     line_length_m,
@@ -201,6 +204,10 @@ class TrackPhysicsProfileTests(unittest.TestCase):
             5: "a0d3264ce93e1857d7487494dda657a8bd3cebe4c27ee89f58e096814a3ec6c5",
             6: "c896ed514c7aa4f826fd81c84d809aa51bb0313735f56dc86626630fb35d7b78",
             7: "45fb6d773f2bd58e2d4e3179622715192e2c55474dfb38f2c6b86c8f4c61d7f6",
+            8: "ef40ca9734056e64b2e05c259ed0790acddf6cdb51b085360dfa7fb4620de2cf",
+            9: "bdb6f9b1d7b42c52aa247865d9f203b8b33f8a2cab817be55aa1e019a7074957",
+            10: "6ba33656c521c02cd21c8170c317d2607ae55c432fb8e46a2653a9957b1665aa",
+            11: "304509d0e42bd22627a7c1a665fb867d3ead5148d63b71023cce2718d64481c0",
         }
 
         for circuit in load_circuits():

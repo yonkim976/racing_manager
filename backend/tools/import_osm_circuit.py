@@ -17,7 +17,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_URLS = (
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+)
+OVERPASS_URL = OVERPASS_URLS[0]
 
 
 @dataclass(frozen=True)
@@ -40,7 +46,15 @@ def main() -> None:
     parser.add_argument("--start-way-name", help="Rotate loop so a matching way name starts the lap")
     parser.add_argument("--start-lonlat", help="Rotate loop to the nearest point on track to lat,lon")
     parser.add_argument("--pit-way-id", type=int, help="Use this way as pit lane")
+    parser.add_argument("--pit-way-ids", help="Comma-separated way ids chained entry->exit as pit lane")
     parser.add_argument("--pit-way-name", help="Use the first way with a matching name as pit lane")
+    parser.add_argument(
+        "--split-way",
+        action="append",
+        default=[],
+        metavar="WAY_ID:NODE_ID[,NODE_ID...]",
+        help="Split a way at internal node ids so alternate routings can be stitched",
+    )
     parser.add_argument("--official-length-m", type=float, help="Official lap distance for scale correction")
     parser.add_argument("--allow-reverse-ways", action="store_true", help="Allow OSM ways to be stitched in reverse")
     parser.add_argument("--source-id", help="Source identifier to store in the fragment")
@@ -53,6 +67,8 @@ def main() -> None:
         parser.error("Provide --input or --bbox")
 
     data = load_overpass_json(args.input) if args.input else fetch_overpass_json(args.bbox)
+    if args.split_way:
+        apply_way_splits(data, [parse_split_spec(spec) for spec in args.split_way])
     ways = parse_raceway_ways(data, include_karting=args.include_karting)
     cycle = select_closed_cycle(
         ways,
@@ -70,9 +86,15 @@ def main() -> None:
         centerline = rotate_geometry_to_lonlat(centerline, parse_lonlat(args.start_lonlat))
 
     pit_lane = []
-    pit_way = find_way(ways, way_id=args.pit_way_id, way_name=args.pit_way_name)
-    if pit_way:
-        pit_lane = pit_way.geometry
+    if args.pit_way_ids:
+        pit_lane = chain_pit_ways(
+            ways,
+            [int(part.strip()) for part in args.pit_way_ids.split(",") if part.strip()],
+        )
+    else:
+        pit_way = find_way(ways, way_id=args.pit_way_id, way_name=args.pit_way_name)
+        if pit_way:
+            pit_lane = pit_way.geometry
 
     fragment: dict[str, Any] = {
         "source": "osm",
@@ -109,22 +131,94 @@ def fetch_overpass_json(bbox: str | None) -> dict[str, Any]:
     if bbox is None:
         raise ValueError("Missing bbox")
     query = f"""
-    [out:json][timeout:25];
+    [out:json][timeout:40];
     way["highway"="raceway"]({bbox});
     out geom;
     """
     body = urllib.parse.urlencode({"data": query}).encode()
-    request = urllib.request.Request(
-        OVERPASS_URL,
-        data=body,
-        headers={
-            "Accept": "application/json",
-            "User-Agent": "f1-race-manager-prototype/0.1",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+    last_error: Exception | None = None
+    for url in OVERPASS_URLS:
+        request = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "f1-race-manager-prototype/0.1",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=50) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except Exception as exc:  # noqa: BLE001 - fall through to the next mirror
+            last_error = exc
+            print(f"overpass endpoint failed ({url}): {exc}", file=sys.stderr)
+    raise SystemExit(f"All Overpass endpoints failed: {last_error}")
+
+
+def parse_split_spec(spec: str) -> tuple[int, list[int]]:
+    try:
+        way_part, node_part = spec.split(":", 1)
+        way_id = int(way_part)
+        node_ids = [int(part.strip()) for part in node_part.split(",") if part.strip()]
+    except ValueError as exc:
+        raise SystemExit(f"Invalid --split-way spec: {spec!r}") from exc
+    if not node_ids:
+        raise SystemExit(f"--split-way needs at least one node id: {spec!r}")
+    return way_id, node_ids
+
+
+def apply_way_splits(data: dict[str, Any], specs: list[tuple[int, list[int]]]) -> None:
+    """Replace ways in the Overpass response with sub-ways cut at the given nodes.
+
+    Sub-ways get synthetic ids (way_id * 100 + part index) so the cycle search can
+    stitch alternate routings, e.g. a chicane bypass, through the cut points.
+    """
+    elements = data.get("elements", [])
+    for way_id, node_ids in specs:
+        element = next(
+            (e for e in elements if e.get("type") == "way" and e.get("id") == way_id),
+            None,
+        )
+        if element is None:
+            raise SystemExit(f"--split-way: way {way_id} not found in input")
+        nodes = element.get("nodes") or []
+        geometry = element.get("geometry") or []
+        cut_indices = sorted(
+            {index for index, node in enumerate(nodes) if node in set(node_ids)}
+        )
+        missing = [node for node in node_ids if node not in nodes]
+        if missing:
+            raise SystemExit(f"--split-way: nodes {missing} not on way {way_id}")
+        cut_indices = [index for index in cut_indices if 0 < index < len(nodes) - 1]
+        if not cut_indices:
+            raise SystemExit(f"--split-way: no internal cut points for way {way_id}")
+
+        boundaries = [0, *cut_indices, len(nodes) - 1]
+        parts = []
+        for part_index, (start, end) in enumerate(zip(boundaries, boundaries[1:])):
+            part = dict(element)
+            part["id"] = way_id * 100 + part_index
+            part["nodes"] = nodes[start : end + 1]
+            part["geometry"] = geometry[start : end + 1]
+            parts.append(part)
+        position = elements.index(element)
+        elements[position : position + 1] = parts
+
+
+def chain_pit_ways(ways: list[OsmWay], way_ids: list[int]) -> list[dict[str, float]]:
+    points: list[dict[str, float]] = []
+    for way_id in way_ids:
+        way = find_way(ways, way_id=way_id)
+        if way is None:
+            raise SystemExit(f"--pit-way-ids: way {way_id} not found")
+        if points:
+            if not same_lonlat(points[-1], way.geometry[0]):
+                raise SystemExit(f"--pit-way-ids: way {way_id} does not continue the chain")
+            points.extend(way.geometry[1:])
+        else:
+            points.extend(way.geometry)
+    return points
 
 
 def parse_raceway_ways(data: dict[str, Any], *, include_karting: bool = False) -> list[OsmWay]:

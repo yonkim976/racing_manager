@@ -24,6 +24,8 @@ const TRACK_SAMPLE_SPACING = 0.75;
 const CAMERA_HEIGHT_M = 1400;
 const CAMERA_TRAILING_M = 430;
 const KERB_PATTERN_LENGTH_M = 16;
+const TRACK_EDGE_LINE_WIDTH_M = 0.22;
+const TRACK_EDGE_LINE_HEIGHT_M = 0.045;
 
 function useStableStructuredValue(value) {
   const stableRef = useRef(null);
@@ -185,7 +187,7 @@ function smoothCircularBoundary(points, passes = 18, strength = 0.45) {
   return smoothed;
 }
 
-function buildRibbonGeometry(points, widthAt, heightM = 0, extraWidthM = 0) {
+function buildSmoothedRibbonEdges(points, widthAt, extraWidthM = 0) {
   const count = points.length;
   const rawLeftEdge = [];
   const rawRightEdge = [];
@@ -212,8 +214,19 @@ function buildRibbonGeometry(points, widthAt, heightM = 0, extraWidthM = 0) {
   // Offset curves can form a visible cusp when the inside radius approaches
   // the half-width of a tight corner. Smooth render boundaries only; vehicle
   // physics, telemetry and the authoritative centreline remain unchanged.
-  const leftEdge = smoothCircularBoundary(rawLeftEdge);
-  const rightEdge = smoothCircularBoundary(rawRightEdge);
+  return {
+    leftEdge: smoothCircularBoundary(rawLeftEdge),
+    rightEdge: smoothCircularBoundary(rawRightEdge),
+  };
+}
+
+function buildRibbonGeometry(points, widthAt, heightM = 0, extraWidthM = 0) {
+  const count = points.length;
+  const { leftEdge, rightEdge } = buildSmoothedRibbonEdges(
+    points,
+    widthAt,
+    extraWidthM,
+  );
   const vertices = [];
   const uvs = [];
   const indices = [];
@@ -244,6 +257,107 @@ function buildRibbonGeometry(points, widthAt, heightM = 0, extraWidthM = 0) {
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   return geometry;
+}
+
+function offsetClosedPath(points, offsetM) {
+  const count = points.length;
+  return points.map((point, index) => {
+    const previous = points[(index - 1 + count) % count];
+    const next = points[(index + 1) % count];
+    const dx = next[0] - previous[0];
+    const dy = next[1] - previous[1];
+    const length = Math.max(1e-9, Math.hypot(dx, dy));
+    return [
+      point[0] - dy / length * offsetM,
+      point[1] + dx / length * offsetM,
+    ];
+  });
+}
+
+function buildClosedRibbonGeometry(points, widthM, heightM = 0) {
+  const count = points.length;
+  if (count < 3) return new THREE.BufferGeometry();
+  const vertices = [];
+  const uvs = [];
+  const indices = [];
+  const halfWidth = widthM / 2;
+  for (let index = 0; index < count; index += 1) {
+    const previous = points[(index - 1 + count) % count];
+    const point = points[index];
+    const next = points[(index + 1) % count];
+    const dx = next[0] - previous[0];
+    const dy = next[1] - previous[1];
+    const length = Math.max(1e-9, Math.hypot(dx, dy));
+    const normalX = -dy / length;
+    const normalY = dx / length;
+    vertices.push(
+      point[0] + normalX * halfWidth,
+      heightM,
+      point[1] + normalY * halfWidth,
+      point[0] - normalX * halfWidth,
+      heightM,
+      point[1] - normalY * halfWidth,
+    );
+    uvs.push(index / count, 0, index / count, 1);
+    const nextIndex = (index + 1) % count;
+    indices.push(
+      index * 2,
+      nextIndex * 2,
+      index * 2 + 1,
+      index * 2 + 1,
+      nextIndex * 2,
+      nextIndex * 2 + 1,
+    );
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function closedIndexPoseAtProgress(points, rawProgress) {
+  const count = points.length;
+  if (!count) return { x: 0, y: 0, heading: 0 };
+  const progress = ((Number(rawProgress) % 1) + 1) % 1;
+  const scaledIndex = progress * count;
+  const index = Math.floor(scaledIndex) % count;
+  const nextIndex = (index + 1) % count;
+  const ratio = scaledIndex - Math.floor(scaledIndex);
+  const point = points[index];
+  const next = points[nextIndex];
+  const previous = points[(index - 1 + count) % count];
+  const following = points[(index + 2) % count];
+  return {
+    x: point[0] + (next[0] - point[0]) * ratio,
+    y: point[1] + (next[1] - point[1]) * ratio,
+    heading: Math.atan2(
+      following[1] - previous[1],
+      following[0] - previous[0],
+    ),
+  };
+}
+
+function buildBoundaryOffsetSegmentPoints(
+  boundaryPoints,
+  start,
+  end,
+  offsetM,
+  referenceLengthM,
+  stepM = 2,
+) {
+  let range = Number(end) - Number(start);
+  if (range < 0) range += 1;
+  const steps = Math.max(2, Math.ceil(range * referenceLengthM / stepM));
+  return Array.from({ length: steps + 1 }, (_, index) => {
+    const progress = (Number(start) + range * index / steps) % 1;
+    const pose = closedIndexPoseAtProgress(boundaryPoints, progress);
+    return [
+      pose.x - Math.sin(pose.heading) * offsetM,
+      pose.y + Math.cos(pose.heading) * offsetM,
+    ];
+  });
 }
 
 function buildOpenRibbonGeometry(
@@ -1272,6 +1386,10 @@ export default function ThreeTrackCanvas({
     const roadTexture = createRoadTexture(renderer);
     const kerbTexture = createKerbTexture(renderer);
     const widthAt = buildWidthSampler(stableTrackWidthProfile, trackWidthM);
+    const roadBoundaryEdges = buildSmoothedRibbonEdges(
+      worldTrackPoints,
+      widthAt,
+    );
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(boundsWidth * 2.5, boundsHeight * 2.5),
       new THREE.MeshStandardMaterial({ color: 0x17331c, roughness: 1 }),
@@ -1299,7 +1417,33 @@ export default function ThreeTrackCanvas({
         roughness: 0.94,
       }),
     );
-    root.add(shoulder, road);
+    const trackEdgeLineMaterial = new THREE.MeshBasicMaterial({
+      color: 0xf7f7f4,
+      toneMapped: false,
+    });
+    const leftTrackEdgeLine = new THREE.Mesh(
+      buildClosedRibbonGeometry(
+        offsetClosedPath(
+          roadBoundaryEdges.leftEdge,
+          -TRACK_EDGE_LINE_WIDTH_M / 2,
+        ),
+        TRACK_EDGE_LINE_WIDTH_M,
+        TRACK_EDGE_LINE_HEIGHT_M,
+      ),
+      trackEdgeLineMaterial,
+    );
+    const rightTrackEdgeLine = new THREE.Mesh(
+      buildClosedRibbonGeometry(
+        offsetClosedPath(
+          roadBoundaryEdges.rightEdge,
+          TRACK_EDGE_LINE_WIDTH_M / 2,
+        ),
+        TRACK_EDGE_LINE_WIDTH_M,
+        TRACK_EDGE_LINE_HEIGHT_M,
+      ),
+      trackEdgeLineMaterial,
+    );
+    root.add(shoulder, road, leftTrackEdgeLine, rightTrackEdgeLine);
 
     const runoffColors = {
       asphalt_runoff: 0x55555d,
@@ -1310,17 +1454,16 @@ export default function ThreeTrackCanvas({
       const sideSign = zone.side === 'right' ? -1 : 1;
       const kerbWidthM = Math.max(0.1, Number(zone.kerb_width_m || 1.2));
       const runoffWidthM = Math.max(0, Number(zone.runoff_width_m || 0));
-      const edgeOffsetAt = (progress) => {
-        const widths = widthAt(progress);
-        return sideSign * (sideSign > 0 ? widths.left : widths.right);
-      };
+      const boundaryPoints = sideSign > 0
+        ? roadBoundaryEdges.leftEdge
+        : roadBoundaryEdges.rightEdge;
       if (runoffWidthM > 0) {
-        const runoffPoints = buildOffsetSegmentPoints(
-          trackMetrics,
+        const runoffPoints = buildBoundaryOffsetSegmentPoints(
+          boundaryPoints,
           Number(zone.start || 0),
           Number(zone.end || 0),
-          (progress) => edgeOffsetAt(progress)
-            + sideSign * (kerbWidthM + runoffWidthM / 2),
+          sideSign * (kerbWidthM + runoffWidthM / 2),
+          trackMetrics.totalLength,
         );
         root.add(new THREE.Mesh(
           buildOpenRibbonGeometry(
@@ -1335,18 +1478,18 @@ export default function ThreeTrackCanvas({
           }),
         ));
       }
-      const kerbPoints = buildOffsetSegmentPoints(
-        trackMetrics,
+      const kerbPoints = buildBoundaryOffsetSegmentPoints(
+        boundaryPoints,
         Number(zone.start || 0),
         Number(zone.end || 0),
-        (progress) => edgeOffsetAt(progress) + sideSign * kerbWidthM / 2,
+        sideSign * kerbWidthM / 2,
+        trackMetrics.totalLength,
       );
       root.add(new THREE.Mesh(
         buildOpenRibbonGeometry(
           kerbPoints,
           kerbWidthM,
           zone.kerb_height === 'high' ? 0.055 : 0.035,
-          { taperStartM: 4, taperEndM: 4 },
         ),
         new THREE.MeshStandardMaterial({
           color: 0xffffff,

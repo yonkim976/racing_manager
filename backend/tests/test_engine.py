@@ -56,6 +56,7 @@ from simulation.race_engine import (
     SC_CLEANUP_SECONDS,
     SC_MAX_GAP_CAR_LENGTHS,
     SC_NEAR_QUEUE_MAX_SPEED_KPH,
+    SC_ORDER_RESTORE_RELEASE_CAR_LENGTHS,
     SC_QUEUE_JOIN_MAX_RELATIVE_SPEED_KPH,
     SC_QUEUE_TARGET_CAR_LENGTHS,
     TIMING_CROSSING_LAPS_TO_RETAIN,
@@ -99,6 +100,11 @@ def _make_engine(seed: int = 42) -> RaceEngine:
         seed=seed,
         start_sequence_enabled=False,
     )
+
+
+def _real_circuit_ids() -> tuple[int, ...]:
+    """All seed circuits backed by a real-world geo source."""
+    return tuple(c.id for c in load_circuits() if c.geo is not None)
 
 
 def _make_engine_for_circuit(circuit_id: int, seed: int = 42) -> RaceEngine:
@@ -512,7 +518,11 @@ class RaceSetupTests(unittest.TestCase):
 
     def test_circuit_track_coords_do_not_self_intersect(self) -> None:
         for circuit in load_circuits():
-            self.assertEqual(self_intersections(circuit.track_coords), [], circuit.name)
+            intersections = self_intersections(circuit.track_coords)
+            if circuit.allows_self_intersection:
+                self.assertEqual(len(intersections), 1, circuit.name)
+            else:
+                self.assertEqual(intersections, [], circuit.name)
 
     def test_circuit_geometry_validation_passes_for_seed_data(self) -> None:
         for circuit in load_circuits():
@@ -718,7 +728,7 @@ class RaceSetupTests(unittest.TestCase):
     def test_source_pit_lanes_are_anchored_to_rendered_track(self) -> None:
         circuits = {circuit.id: circuit for circuit in load_circuits()}
 
-        for circuit_id in (3, 4, 5, 6, 7):
+        for circuit_id in _real_circuit_ids():
             circuit = circuits[circuit_id]
             first = circuit.pit_lane_coords[0]
             last = circuit.pit_lane_coords[-1]
@@ -954,6 +964,216 @@ class RaceSetupTests(unittest.TestCase):
         )
 
         self.assertGreater(exit_vector[0] * tangent[0] + exit_vector[1] * tangent[1], 0.0)
+
+    def test_monza_geo_source_matches_official_layout_anchors(self) -> None:
+        circuit = next(c for c in load_circuits() if c.id == 8)
+
+        self.assertIsNotNone(circuit.geo)
+        self.assertEqual(circuit.geo.source_id, "osm:monza-gp")
+        self.assertAlmostEqual(circuit.geo.source_length_m, 5798.0, delta=12.0)
+        self.assertAlmostEqual(circuit.geo.computed_length_m, 5793.0, delta=0.5)
+        self.assertAlmostEqual(circuit.pit_lane.entry_progress, 0.903, delta=0.015)
+        self.assertAlmostEqual(circuit.pit_lane.exit_progress, 0.032, delta=0.015)
+
+    def test_monza_drs_zones_and_landmarks_match_fia_sections(self) -> None:
+        circuit = next(c for c in load_circuits() if c.id == 8)
+        zones = {zone.name: zone for zone in circuit.drs_zones}
+        landmarks = {landmark.label: landmark.progress for landmark in circuit.landmarks}
+
+        self.assertEqual(set(zones), {"Main Straight", "Serraglio Straight"})
+        self.assertGreater(zones["Main Straight"].start, zones["Main Straight"].end)
+        for zone in zones.values():
+            self.assertEqual(segment_at_progress(circuit, zone.start).type, TrackSegmentType.STRAIGHT)
+            self.assertEqual(segment_at_progress(circuit, zone.end - 0.001).type, TrackSegmentType.STRAIGHT)
+        # FIA 2025: DRS activation 1 is 170m after Turn 7, activation 2 is 20m
+        # after Turn 11 (the map lists activation 2 relative to the corner exit).
+        self.assertAlmostEqual(
+            (zones["Serraglio Straight"].start - landmarks["T7"]) * circuit.track_length_m,
+            190.0,
+            delta=25.0,
+        )
+        self.assertAlmostEqual(landmarks["T1"], 0.107, delta=0.001)
+        self.assertAlmostEqual(landmarks["T8"], 0.628, delta=0.001)
+        self.assertAlmostEqual(landmarks["T11"], 0.845, delta=0.001)
+
+    def test_monza_pit_exit_follows_race_direction(self) -> None:
+        circuit = next(c for c in load_circuits() if c.id == 8)
+        previous_point = circuit.pit_lane_coords[-2]
+        exit_point = circuit.pit_lane_coords[-1]
+        _, tangent = _point_and_tangent_at_progress(
+            circuit.track_coords,
+            circuit.pit_lane.exit_progress,
+        )
+        exit_vector = (
+            exit_point[0] - previous_point[0],
+            exit_point[1] - previous_point[1],
+        )
+
+        self.assertGreater(exit_vector[0] * tangent[0] + exit_vector[1] * tangent[1], 0.0)
+
+    def test_zandvoort_geo_source_matches_official_layout_anchors(self) -> None:
+        circuit = next(c for c in load_circuits() if c.id == 9)
+
+        self.assertIsNotNone(circuit.geo)
+        self.assertEqual(circuit.geo.source_id, "osm:zandvoort-gp")
+        self.assertAlmostEqual(circuit.geo.source_length_m, 4261.9, delta=12.0)
+        self.assertAlmostEqual(circuit.geo.computed_length_m, 4259.0, delta=0.5)
+        self.assertAlmostEqual(circuit.pit_lane.entry_progress, 0.907, delta=0.015)
+        self.assertAlmostEqual(circuit.pit_lane.exit_progress, 0.093, delta=0.015)
+
+    def test_zandvoort_drs_zones_and_landmarks_match_fia_sections(self) -> None:
+        circuit = next(c for c in load_circuits() if c.id == 9)
+        zones = {zone.name: zone for zone in circuit.drs_zones}
+        landmarks = {landmark.label: landmark.progress for landmark in circuit.landmarks}
+
+        self.assertEqual(set(zones), {"Main Straight", "Back Straight"})
+        self.assertGreater(zones["Main Straight"].start, zones["Main Straight"].end)
+        for zone in zones.values():
+            self.assertEqual(segment_at_progress(circuit, zone.start).type, TrackSegmentType.STRAIGHT)
+            self.assertEqual(segment_at_progress(circuit, zone.end - 0.001).type, TrackSegmentType.STRAIGHT)
+        # FIA 2025: back-straight activation is 50m after Turn 10's exit.
+        self.assertGreater(zones["Back Straight"].start, landmarks["T10"])
+        self.assertLess(zones["Back Straight"].end, landmarks["T11"])
+        # T1 Tarzan sits 164m from the grid (RaceFans/FIA event data).
+        self.assertAlmostEqual(landmarks["T1"], 0.054, delta=0.002)
+        self.assertAlmostEqual(landmarks["T14"], 0.849, delta=0.002)
+
+    def test_zandvoort_pit_exit_follows_race_direction(self) -> None:
+        circuit = next(c for c in load_circuits() if c.id == 9)
+        previous_point = circuit.pit_lane_coords[-2]
+        exit_point = circuit.pit_lane_coords[-1]
+        _, tangent = _point_and_tangent_at_progress(
+            circuit.track_coords,
+            circuit.pit_lane.exit_progress,
+        )
+        exit_vector = (
+            exit_point[0] - previous_point[0],
+            exit_point[1] - previous_point[1],
+        )
+
+        self.assertGreater(exit_vector[0] * tangent[0] + exit_vector[1] * tangent[1], 0.0)
+
+    def test_barcelona_geo_source_matches_official_layout_anchors(self) -> None:
+        circuit = next(c for c in load_circuits() if c.id == 10)
+
+        self.assertIsNotNone(circuit.geo)
+        self.assertEqual(circuit.geo.source_id, "osm:barcelona-catalunya-gp")
+        # 2025 layout without the T14-15 chicane (OSM moto loop rerouted via the
+        # fast final-corner bypass ways).
+        self.assertAlmostEqual(circuit.geo.source_length_m, 4664.0, delta=12.0)
+        self.assertAlmostEqual(circuit.geo.computed_length_m, 4657.0, delta=0.5)
+        # Pit entry branches between T13 and T14 and cuts inside the final corner.
+        self.assertAlmostEqual(circuit.pit_lane.entry_progress, 0.88, delta=0.015)
+        self.assertAlmostEqual(circuit.pit_lane.exit_progress, 0.107, delta=0.015)
+
+    def test_barcelona_drs_zones_and_landmarks_match_fia_sections(self) -> None:
+        circuit = next(c for c in load_circuits() if c.id == 10)
+        zones = {zone.name: zone for zone in circuit.drs_zones}
+        landmarks = {landmark.label: landmark.progress for landmark in circuit.landmarks}
+
+        self.assertEqual(set(zones), {"Main Straight", "Back Straight"})
+        self.assertGreater(zones["Main Straight"].start, zones["Main Straight"].end)
+        for zone in zones.values():
+            self.assertEqual(segment_at_progress(circuit, zone.start).type, TrackSegmentType.STRAIGHT)
+            self.assertEqual(segment_at_progress(circuit, zone.end - 0.001).type, TrackSegmentType.STRAIGHT)
+        # FIA event data: back-straight activation sits 40m after Turn 9's exit.
+        self.assertGreater(zones["Back Straight"].start, landmarks["T9"])
+        self.assertLess(zones["Back Straight"].end, landmarks["T10"])
+        # Pole to the first braking zone is 565m with a 125m braking distance,
+        # so T1's apex lands 690m plus the corner arc into the lap.
+        self.assertAlmostEqual(landmarks["T1"], 0.154, delta=0.002)
+        self.assertAlmostEqual(landmarks["T10"], 0.723, delta=0.002)
+        self.assertAlmostEqual(landmarks["T14"], 0.899, delta=0.002)
+        # 14 corners on the 2025 layout: no chicane landmarks remain.
+        corner_labels = [lm.label for lm in circuit.landmarks if lm.type == "corner"]
+        self.assertEqual(len(corner_labels), 14)
+
+    def test_barcelona_pit_exit_follows_race_direction(self) -> None:
+        circuit = next(c for c in load_circuits() if c.id == 10)
+        previous_point = circuit.pit_lane_coords[-2]
+        exit_point = circuit.pit_lane_coords[-1]
+        _, tangent = _point_and_tangent_at_progress(
+            circuit.track_coords,
+            circuit.pit_lane.exit_progress,
+        )
+        exit_vector = (
+            exit_point[0] - previous_point[0],
+            exit_point[1] - previous_point[1],
+        )
+
+        self.assertGreater(exit_vector[0] * tangent[0] + exit_vector[1] * tangent[1], 0.0)
+
+    def test_suzuka_geo_source_matches_official_layout_anchors(self) -> None:
+        circuit = next(c for c in load_circuits() if c.id == 11)
+
+        self.assertIsNotNone(circuit.geo)
+        self.assertEqual(circuit.geo.source_id, "osm:suzuka-gp")
+        self.assertAlmostEqual(circuit.geo.source_length_m, 5811.4, delta=12.0)
+        self.assertAlmostEqual(circuit.geo.computed_length_m, 5807.0, delta=0.5)
+        # Pit lane parallels the main straight from Casio exit to Turn 1.
+        self.assertAlmostEqual(circuit.pit_lane.entry_progress, 0.909, delta=0.015)
+        self.assertAlmostEqual(circuit.pit_lane.exit_progress, 0.063, delta=0.015)
+
+    def test_suzuka_drs_zones_and_landmarks_match_fia_sections(self) -> None:
+        circuit = next(c for c in load_circuits() if c.id == 11)
+        zones = {zone.name: zone for zone in circuit.drs_zones}
+        landmarks = {landmark.label: landmark.progress for landmark in circuit.landmarks}
+
+        # 2025 Japanese GP: single DRS zone on the main straight.
+        self.assertEqual(set(zones), {"Main Straight"})
+        self.assertGreater(zones["Main Straight"].start, zones["Main Straight"].end)
+        self.assertEqual(
+            segment_at_progress(circuit, zones["Main Straight"].start).type,
+            TrackSegmentType.STRAIGHT,
+        )
+        self.assertEqual(
+            segment_at_progress(circuit, zones["Main Straight"].end - 0.001).type,
+            TrackSegmentType.STRAIGHT,
+        )
+        # Pole to first braking zone is 277m; T1 apex follows shortly after.
+        self.assertAlmostEqual(landmarks["T1"], 0.076, delta=0.003)
+        self.assertAlmostEqual(landmarks["T8"], 0.268, delta=0.003)
+        self.assertAlmostEqual(landmarks["T15"], 0.828, delta=0.003)
+        corner_labels = [lm.label for lm in circuit.landmarks if lm.type == "corner"]
+        self.assertEqual(len(corner_labels), 18)
+
+    def test_suzuka_pit_exit_follows_race_direction(self) -> None:
+        circuit = next(c for c in load_circuits() if c.id == 11)
+        previous_point = circuit.pit_lane_coords[-2]
+        exit_point = circuit.pit_lane_coords[-1]
+        _, tangent = _point_and_tangent_at_progress(
+            circuit.track_coords,
+            circuit.pit_lane.exit_progress,
+        )
+        exit_vector = (
+            exit_point[0] - previous_point[0],
+            exit_point[1] - previous_point[1],
+        )
+
+        self.assertGreater(exit_vector[0] * tangent[0] + exit_vector[1] * tangent[1], 0.0)
+
+    def test_real_circuits_have_complete_pit_lane_operational_config(self) -> None:
+        """Tier A: every geo circuit pins its pit operational landmarks."""
+        for circuit in load_circuits():
+            if circuit.geo is None:
+                continue
+            pit = circuit.pit_lane
+            self.assertIsNotNone(pit, circuit.name)
+            self.assertIsNotNone(pit.entry_progress, circuit.name)
+            self.assertIsNotNone(pit.exit_progress, circuit.name)
+            self.assertIsNotNone(pit.safety_car_line_2_progress, circuit.name)
+            self.assertAlmostEqual(
+                pit.safety_car_line_2_progress,
+                pit.exit_progress,
+                delta=0.002,
+                msg=circuit.name,
+            )
+            self.assertEqual(pit.speed_limit_kph, 80.0, circuit.name)
+            self.assertLess(pit.side_entry_progress, pit.speed_limit_start, circuit.name)
+            self.assertLess(pit.speed_limit_start, pit.box_progress, circuit.name)
+            self.assertLess(pit.box_progress, pit.speed_limit_end, circuit.name)
+            self.assertLess(pit.speed_limit_end, pit.side_rejoin_progress, circuit.name)
+            self.assertGreaterEqual(pit.lane_width_m, 3.0, circuit.name)
 
 
 class TireModelTests(unittest.TestCase):
@@ -2043,6 +2263,47 @@ class RaceEngineTests(unittest.TestCase):
             {"sc_track_join", "sc_queue", "sc_in_this_lap", "sc_pit", "sc_end"}
             .issubset(event_types)
         )
+
+    def test_sc_physical_order_inversion_activates_smooth_place_give_back(self) -> None:
+        engine = _make_engine_for_circuit(3, seed=99)
+        engine._trigger_safety_car([])
+        engine.safety_car_stage = "collecting"
+        running = engine._sc_ordered_on_track_states()
+        predecessor, yielding = running[:2]
+        engine._safety_car_total_progress = (
+            predecessor.total_progress + engine._sc_target_gap_progress()
+        )
+        engine._set_state_total_progress(
+            yielding,
+            predecessor.total_progress + 15.0 / engine.track_length_m,
+        )
+        predecessor.speed_kph = 120.0
+        yielding.speed_kph = 160.0
+
+        engine._sync_safety_car_queue([])
+
+        self.assertEqual(
+            engine._sc_order_yield_targets.get(yielding.driver_id),
+            predecessor.driver_id,
+        )
+        self.assertLess(
+            engine._race_control_speed_cap_mps(yielding),
+            predecessor.speed_kph / 3.6,
+        )
+        self.assertLess(predecessor.position, yielding.position)
+
+        engine._set_state_total_progress(
+            predecessor,
+            yielding.total_progress
+            + (
+                SC_CAR_LENGTH_M
+                * SC_ORDER_RESTORE_RELEASE_CAR_LENGTHS
+                / engine.track_length_m
+            ),
+        )
+        engine._sync_safety_car_queue([])
+
+        self.assertNotIn(yielding.driver_id, engine._sc_order_yield_targets)
 
     def test_p1_is_always_leader(self) -> None:
         engine = _make_engine()
@@ -3578,7 +3839,7 @@ class RaceEngineTests(unittest.TestCase):
         )
 
     def test_safety_car_deploys_from_configured_pit_exit_on_real_circuits(self) -> None:
-        for circuit_id in (3, 4, 5, 6, 7):
+        for circuit_id in _real_circuit_ids():
             engine = _make_engine_for_circuit(circuit_id)
             leader = engine._on_track_leader()
             exit_progress = engine.circuit.pit_lane.exit_progress
@@ -4078,7 +4339,7 @@ class RaceEngineTests(unittest.TestCase):
         engine._tick_phase = TickPhase.TELEMETRY
 
     def test_real_circuit_pit_order_progress_is_monotonic(self) -> None:
-        for circuit_id in (3, 4, 5, 6, 7):
+        for circuit_id in _real_circuit_ids():
             engine = _make_engine_for_circuit(circuit_id)
             driver_id = 1
             state = engine.driver_states[driver_id]
@@ -4383,7 +4644,11 @@ class RaceEngineTests(unittest.TestCase):
         remaining_m = (
             pit_lane.side_rejoin_progress - lane_progress
         ) * route_length_m
-        time_to_rejoin_s = remaining_m / speed_mps
+        # Match _pit_rejoin_decision: long pit-exit legs are capped at 5s.
+        time_to_rejoin_s = min(
+            5.0,
+            max(PHYSICS_STEP_SECONDS, remaining_m / speed_mps),
+        )
         entry = engine._pit_entry_progress()
         exit_ = engine._pit_exit_progress()
         assert entry is not None and exit_ is not None

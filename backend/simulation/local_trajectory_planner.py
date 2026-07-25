@@ -18,6 +18,11 @@ from simulation.vehicle_physics import (
 )
 from simulation.vehicle_dynamics import MAX_ACCELERATION_MPS2, MAX_BRAKING_MPS2
 
+# Owned here so RaceEngine mixins can share the cadence without importing the
+# race_engine facade.  1 Hz leaves nine tactical opportunities between routine
+# path rebuilds at the 10 Hz tactical decision rate.
+LOCAL_TRAJECTORY_PLAN_INTERVAL_SECONDS = 1.00
+
 
 @dataclass(frozen=True)
 class LocalTrajectoryPlannerConfig:

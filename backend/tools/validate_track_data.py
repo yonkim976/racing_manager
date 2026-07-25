@@ -74,7 +74,7 @@ def validate_circuit(circuit: Circuit) -> list[str]:
     line_coords = profile.racing_line_coords
     if len(line_coords) < 4 or line_coords[0] != line_coords[-1]:
         errors.append("racing line is not a closed path")
-    elif self_intersections(line_coords):
+    elif self_intersections(line_coords) and not circuit.allows_self_intersection:
         errors.append("racing line has self-intersections")
 
     sample_count = len(profile.samples)

@@ -364,9 +364,11 @@
       "lane_offset": 22,
       "wall_offset": 11,
       "box_offset": 10,
+      "lane_width_m": 4.0,
       "speed_limit_kph": 80,
       "side_entry_progress": 0.02,
       "speed_limit_start": 0.30,
+      "box_progress": 0.5,
       "speed_limit_end": 0.70,
       "side_rejoin_progress": 0.94,
       "safety_car_line_2_progress": 0.102,
@@ -2133,6 +2135,14 @@
       "lane_offset": 28,
       "wall_offset": 14,
       "box_offset": 10,
+      "lane_width_m": 4.0,
+      "speed_limit_kph": 80,
+      "side_entry_progress": 0.02,
+      "speed_limit_start": 0.30,
+      "box_progress": 0.5,
+      "speed_limit_end": 0.70,
+      "side_rejoin_progress": 0.94,
+      "safety_car_line_2_progress": 0.119,
       "entry_blend": 0.014,
       "exit_blend": 0.018,
       "samples": 56
@@ -3388,6 +3398,14 @@
       "lane_offset": 0,
       "wall_offset": -10,
       "box_offset": 10,
+      "lane_width_m": 4.0,
+      "speed_limit_kph": 80,
+      "side_entry_progress": 0.02,
+      "speed_limit_start": 0.30,
+      "box_progress": 0.5,
+      "speed_limit_end": 0.70,
+      "side_rejoin_progress": 0.94,
+      "safety_car_line_2_progress": 0.131,
       "entry_blend": 0.01,
       "exit_blend": 0.01,
       "samples": 50
@@ -4059,7 +4077,15 @@
     ],
     "pit_lane": {
       "wall_offset": 12,
-      "box_offset": 10
+      "box_offset": 10,
+      "lane_width_m": 4.0,
+      "speed_limit_kph": 80,
+      "side_entry_progress": 0.02,
+      "speed_limit_start": 0.30,
+      "box_progress": 0.5,
+      "speed_limit_end": 0.70,
+      "side_rejoin_progress": 0.94,
+      "safety_car_line_2_progress": 0.059
     },
     "drs_zones": [
       {
@@ -4372,7 +4398,15 @@
     ],
     "pit_lane": {
       "wall_offset": 11,
-      "box_offset": 10
+      "box_offset": 10,
+      "lane_width_m": 4.0,
+      "speed_limit_kph": 80,
+      "side_entry_progress": 0.02,
+      "speed_limit_start": 0.30,
+      "box_progress": 0.5,
+      "speed_limit_end": 0.70,
+      "side_rejoin_progress": 0.94,
+      "safety_car_line_2_progress": 0.138
     },
     "drs_zones": [
       {
@@ -4864,5 +4898,689 @@
       "racing_line_reference_weight": 0.65,
       "racing_line_initial_smoothing_passes": 1
     }
+  },
+  {
+    "id": 8,
+    "name": "Autodromo Nazionale Monza",
+    "country": "Italy",
+    "base_lap_time": 80.5,
+    "total_laps": 53,
+    "pit_loss_time": 24.0,
+    "track_length_m": 5793.0,
+    "overtaking_difficulty": 0.35,
+    "geo_file": "circuit_sources/monza_osm_geo.json",
+    "physics_calibration": {
+      "source": "hand-tuned planner configuration (no telemetry reference)",
+      "planner_braking_utilization": 0.55,
+      "controller_sample_distance_m": 10.0,
+      "racing_line_reference_weight": 0.4,
+      "racing_line_initial_smoothing_passes": 1
+    },
+    "sectors": [
+      {
+        "name": "Sector 1",
+        "type": "rettifilo_curva_grande_roggia",
+        "speed_factor": 1.05
+      },
+      {
+        "name": "Sector 2",
+        "type": "lesmos_serraglio_ascari",
+        "speed_factor": 0.98
+      },
+      {
+        "name": "Sector 3",
+        "type": "back_straight_parabolica",
+        "speed_factor": 1.04
+      }
+    ],
+    "pit_lane": {
+      "wall_offset": -2.7,
+      "box_offset": 10,
+      "lane_width_m": 4.0,
+      "speed_limit_kph": 80,
+      "side_entry_progress": 0.02,
+      "speed_limit_start": 0.30,
+      "box_progress": 0.5,
+      "speed_limit_end": 0.70,
+      "side_rejoin_progress": 0.94,
+      "safety_car_line_2_progress": 0.032
+    },
+    "drs_zones": [
+      {
+        "name": "Main Straight",
+        "start": 0.95,
+        "end": 0.081
+      },
+      {
+        "name": "Serraglio Straight",
+        "start": 0.478,
+        "end": 0.602
+      }
+    ],
+    "landmarks": [
+      {
+        "type": "start_finish",
+        "label": "S/F",
+        "progress": 0.0
+      },
+      {
+        "type": "pit",
+        "label": "PIT LANE",
+        "progress": 0.904
+      },
+      {
+        "type": "corner",
+        "label": "T1",
+        "progress": 0.107
+      },
+      {
+        "type": "corner",
+        "label": "T2",
+        "progress": 0.115
+      },
+      {
+        "type": "corner",
+        "label": "T3",
+        "progress": 0.209
+      },
+      {
+        "type": "corner",
+        "label": "T4",
+        "progress": 0.317
+      },
+      {
+        "type": "corner",
+        "label": "T5",
+        "progress": 0.325
+      },
+      {
+        "type": "corner",
+        "label": "T6",
+        "progress": 0.389
+      },
+      {
+        "type": "corner",
+        "label": "T7",
+        "progress": 0.445
+      },
+      {
+        "type": "corner",
+        "label": "T8",
+        "progress": 0.628
+      },
+      {
+        "type": "corner",
+        "label": "T9",
+        "progress": 0.644
+      },
+      {
+        "type": "corner",
+        "label": "T10",
+        "progress": 0.659
+      },
+      {
+        "type": "corner",
+        "label": "T11",
+        "progress": 0.845
+      }
+    ],
+    "segments": [
+      {
+        "name": "Main Straight",
+        "start": 0.0,
+        "end": 0.083,
+        "type": "straight",
+        "speed_factor": 1.22
+      },
+      {
+        "name": "Rettifilo Braking",
+        "start": 0.083,
+        "end": 0.113,
+        "type": "heavy_braking",
+        "speed_factor": 0.5
+      },
+      {
+        "name": "Variante del Rettifilo",
+        "start": 0.113,
+        "end": 0.145,
+        "type": "traction",
+        "speed_factor": 0.62
+      },
+      {
+        "name": "Curva Grande",
+        "start": 0.145,
+        "end": 0.285,
+        "type": "sweeping",
+        "speed_factor": 1.1
+      },
+      {
+        "name": "Roggia Braking",
+        "start": 0.285,
+        "end": 0.316,
+        "type": "heavy_braking",
+        "speed_factor": 0.55
+      },
+      {
+        "name": "Variante della Roggia",
+        "start": 0.316,
+        "end": 0.348,
+        "type": "technical",
+        "speed_factor": 0.65
+      },
+      {
+        "name": "Roggia to Lesmo",
+        "start": 0.348,
+        "end": 0.378,
+        "type": "straight",
+        "speed_factor": 1.05
+      },
+      {
+        "name": "Lesmo 1",
+        "start": 0.378,
+        "end": 0.41,
+        "type": "traction",
+        "speed_factor": 0.82
+      },
+      {
+        "name": "Lesmo Link",
+        "start": 0.41,
+        "end": 0.44,
+        "type": "straight",
+        "speed_factor": 1.04
+      },
+      {
+        "name": "Lesmo 2",
+        "start": 0.44,
+        "end": 0.472,
+        "type": "traction",
+        "speed_factor": 0.8
+      },
+      {
+        "name": "Serraglio Straight",
+        "start": 0.472,
+        "end": 0.605,
+        "type": "straight",
+        "speed_factor": 1.18
+      },
+      {
+        "name": "Ascari Braking",
+        "start": 0.605,
+        "end": 0.635,
+        "type": "heavy_braking",
+        "speed_factor": 0.58
+      },
+      {
+        "name": "Variante Ascari",
+        "start": 0.635,
+        "end": 0.67,
+        "type": "technical",
+        "speed_factor": 0.75
+      },
+      {
+        "name": "Back Straight",
+        "start": 0.67,
+        "end": 0.83,
+        "type": "straight",
+        "speed_factor": 1.2
+      },
+      {
+        "name": "Parabolica Braking",
+        "start": 0.83,
+        "end": 0.86,
+        "type": "heavy_braking",
+        "speed_factor": 0.72
+      },
+      {
+        "name": "Curva Parabolica",
+        "start": 0.86,
+        "end": 0.947,
+        "type": "sweeping",
+        "speed_factor": 0.95
+      },
+      {
+        "name": "Main Straight Approach",
+        "start": 0.947,
+        "end": 1.0,
+        "type": "straight",
+        "speed_factor": 1.2
+      }
+    ]
+  },
+  {
+    "id": 9,
+    "name": "Circuit Zandvoort",
+    "country": "Netherlands",
+    "base_lap_time": 70.0,
+    "total_laps": 72,
+    "pit_loss_time": 20.0,
+    "track_length_m": 4259.0,
+    "overtaking_difficulty": 0.7,
+    "geo_file": "circuit_sources/zandvoort_osm_geo.json",
+    "sectors": [
+      {
+        "name": "Sector 1",
+        "type": "tarzan_to_hunzerug",
+        "speed_factor": 0.99
+      },
+      {
+        "name": "Sector 2",
+        "type": "slotemaker_scheivlak_masters",
+        "speed_factor": 1.0
+      },
+      {
+        "name": "Sector 3",
+        "type": "hans_ernst_and_banking",
+        "speed_factor": 1.01
+      }
+    ],
+    "pit_lane": {
+      "wall_offset": -3,
+      "box_offset": 10,
+      "lane_width_m": 4.0,
+      "speed_limit_kph": 80,
+      "side_entry_progress": 0.02,
+      "speed_limit_start": 0.30,
+      "box_progress": 0.5,
+      "speed_limit_end": 0.70,
+      "side_rejoin_progress": 0.94,
+      "safety_car_line_2_progress": 0.093
+    },
+    "drs_zones": [
+      {
+        "name": "Main Straight",
+        "start": 0.888,
+        "end": 0.015
+      },
+      {
+        "name": "Back Straight",
+        "start": 0.585,
+        "end": 0.655
+      }
+    ],
+    "landmarks": [
+      {
+        "type": "start_finish",
+        "label": "S/F",
+        "progress": 0.0
+      },
+      {
+        "type": "pit",
+        "label": "PIT LANE",
+        "progress": 0.907
+      },
+      {
+        "type": "corner",
+        "label": "T1",
+        "progress": 0.054
+      },
+      {
+        "type": "corner",
+        "label": "T2",
+        "progress": 0.129
+      },
+      {
+        "type": "corner",
+        "label": "T3",
+        "progress": 0.165
+      },
+      {
+        "type": "corner",
+        "label": "T4",
+        "progress": 0.195
+      },
+      {
+        "type": "corner",
+        "label": "T5",
+        "progress": 0.28
+      },
+      {
+        "type": "corner",
+        "label": "T6",
+        "progress": 0.35
+      },
+      {
+        "type": "corner",
+        "label": "T7",
+        "progress": 0.448
+      },
+      {
+        "type": "corner",
+        "label": "T8",
+        "progress": 0.478
+      },
+      {
+        "type": "corner",
+        "label": "T9",
+        "progress": 0.5
+      },
+      {
+        "type": "corner",
+        "label": "T10",
+        "progress": 0.545
+      },
+      {
+        "type": "corner",
+        "label": "T11",
+        "progress": 0.695
+      },
+      {
+        "type": "corner",
+        "label": "T12",
+        "progress": 0.715
+      },
+      {
+        "type": "corner",
+        "label": "T13",
+        "progress": 0.808
+      },
+      {
+        "type": "corner",
+        "label": "T14",
+        "progress": 0.849
+      }
+    ],
+    "segments": [
+      {
+        "name": "Start/Finish Straight",
+        "start": 0.0,
+        "end": 0.03,
+        "type": "straight",
+        "speed_factor": 1.15
+      },
+      {
+        "name": "Tarzan Braking",
+        "start": 0.03,
+        "end": 0.062,
+        "type": "heavy_braking",
+        "speed_factor": 0.52
+      },
+      {
+        "name": "Tarzan Exit",
+        "start": 0.062,
+        "end": 0.094,
+        "type": "traction",
+        "speed_factor": 0.7
+      },
+      {
+        "name": "Run to Gerlach",
+        "start": 0.094,
+        "end": 0.124,
+        "type": "straight",
+        "speed_factor": 1.05
+      },
+      {
+        "name": "Gerlach",
+        "start": 0.124,
+        "end": 0.155,
+        "type": "sweeping",
+        "speed_factor": 0.85
+      },
+      {
+        "name": "Hugenholtz",
+        "start": 0.155,
+        "end": 0.185,
+        "type": "technical",
+        "speed_factor": 0.68
+      },
+      {
+        "name": "Hunzerug Crest",
+        "start": 0.185,
+        "end": 0.245,
+        "type": "sweeping",
+        "speed_factor": 1.0
+      },
+      {
+        "name": "Slotemaker",
+        "start": 0.245,
+        "end": 0.32,
+        "type": "sweeping",
+        "speed_factor": 0.92
+      },
+      {
+        "name": "Scheivlak",
+        "start": 0.32,
+        "end": 0.4,
+        "type": "sweeping",
+        "speed_factor": 0.95
+      },
+      {
+        "name": "Run to Masters",
+        "start": 0.4,
+        "end": 0.437,
+        "type": "straight",
+        "speed_factor": 1.05
+      },
+      {
+        "name": "Mastersbocht",
+        "start": 0.437,
+        "end": 0.468,
+        "type": "traction",
+        "speed_factor": 0.78
+      },
+      {
+        "name": "Turns 8-9",
+        "start": 0.468,
+        "end": 0.52,
+        "type": "technical",
+        "speed_factor": 0.75
+      },
+      {
+        "name": "CM.com Bocht",
+        "start": 0.52,
+        "end": 0.583,
+        "type": "traction",
+        "speed_factor": 0.72
+      },
+      {
+        "name": "Back Straight",
+        "start": 0.583,
+        "end": 0.658,
+        "type": "straight",
+        "speed_factor": 1.12
+      },
+      {
+        "name": "Hans Ernst Braking",
+        "start": 0.658,
+        "end": 0.69,
+        "type": "heavy_braking",
+        "speed_factor": 0.58
+      },
+      {
+        "name": "Hans Ernst Chicane",
+        "start": 0.69,
+        "end": 0.735,
+        "type": "technical",
+        "speed_factor": 0.62
+      },
+      {
+        "name": "Panorama Run",
+        "start": 0.735,
+        "end": 0.798,
+        "type": "sweeping",
+        "speed_factor": 1.02
+      },
+      {
+        "name": "Turn 13",
+        "start": 0.798,
+        "end": 0.83,
+        "type": "sweeping",
+        "speed_factor": 0.9
+      },
+      {
+        "name": "Arie Luyendyk Banking",
+        "start": 0.83,
+        "end": 0.885,
+        "type": "sweeping",
+        "speed_factor": 0.98
+      },
+      {
+        "name": "Main Straight",
+        "start": 0.885,
+        "end": 1.0,
+        "type": "straight",
+        "speed_factor": 1.15
+      }
+    ]
+  },
+  {
+    "id": 10,
+    "name": "Circuit de Barcelona-Catalunya",
+    "country": "Spain",
+    "base_lap_time": 78.0,
+    "total_laps": 66,
+    "pit_loss_time": 20.0,
+    "track_length_m": 4657.0,
+    "overtaking_difficulty": 0.62,
+    "geo_file": "circuit_sources/barcelona_catalunya_osm_geo.json",
+    "sectors": [
+      {"name": "Sector 1", "type": "elf_to_renault", "speed_factor": 1.02},
+      {"name": "Sector 2", "type": "repsol_seat_campsa", "speed_factor": 0.97},
+      {"name": "Sector 3", "type": "stadium_new_holland", "speed_factor": 1.0}
+    ],
+    "pit_lane": {
+      "entry_progress": 0.88,
+      "exit_progress": 0.107,
+      "wall_offset": -3,
+      "box_offset": 10,
+      "lane_width_m": 4.0,
+      "speed_limit_kph": 80,
+      "side_entry_progress": 0.02,
+      "speed_limit_start": 0.26,
+      "box_progress": 0.448,
+      "speed_limit_end": 0.615,
+      "side_rejoin_progress": 0.94,
+      "safety_car_line_2_progress": 0.107
+    },
+    "drs_zones": [
+      {"name": "Main Straight", "start": 0.983, "end": 0.12},
+      {"name": "Back Straight", "start": 0.646, "end": 0.701}
+    ],
+    "landmarks": [
+      {"type": "start_finish", "label": "S/F", "progress": 0.0},
+      {"type": "pit", "label": "PIT LANE", "progress": 0.88},
+      {"type": "corner", "label": "T1", "progress": 0.154},
+      {"type": "corner", "label": "T2", "progress": 0.181},
+      {"type": "corner", "label": "T3", "progress": 0.228},
+      {"type": "corner", "label": "T4", "progress": 0.345},
+      {"type": "corner", "label": "T5", "progress": 0.435},
+      {"type": "corner", "label": "T6", "progress": 0.489},
+      {"type": "corner", "label": "T7", "progress": 0.52},
+      {"type": "corner", "label": "T8", "progress": 0.545},
+      {"type": "corner", "label": "T9", "progress": 0.6},
+      {"type": "corner", "label": "T10", "progress": 0.723},
+      {"type": "corner", "label": "T11", "progress": 0.761},
+      {"type": "corner", "label": "T12", "progress": 0.788},
+      {"type": "corner", "label": "T13", "progress": 0.854},
+      {"type": "corner", "label": "T14", "progress": 0.899}
+    ],
+    "segments": [
+      {"name": "Main Straight", "start": 0.0, "end": 0.121, "type": "straight", "speed_factor": 1.18},
+      {"name": "Elf Braking", "start": 0.121, "end": 0.155, "type": "heavy_braking", "speed_factor": 0.55},
+      {"name": "Elf Complex", "start": 0.155, "end": 0.202, "type": "traction", "speed_factor": 0.68},
+      {"name": "Renault Curve", "start": 0.202, "end": 0.29, "type": "sweeping", "speed_factor": 1.0},
+      {"name": "Run to Repsol", "start": 0.29, "end": 0.323, "type": "straight", "speed_factor": 1.08},
+      {"name": "Repsol Braking", "start": 0.323, "end": 0.36, "type": "heavy_braking", "speed_factor": 0.6},
+      {"name": "Downhill to Seat", "start": 0.36, "end": 0.404, "type": "sweeping", "speed_factor": 0.92},
+      {"name": "Seat Braking", "start": 0.404, "end": 0.437, "type": "heavy_braking", "speed_factor": 0.55},
+      {"name": "Seat Exit", "start": 0.437, "end": 0.473, "type": "traction", "speed_factor": 0.7},
+      {"name": "Stadium Left Complex", "start": 0.473, "end": 0.536, "type": "technical", "speed_factor": 0.78},
+      {"name": "Turn 8 Kink", "start": 0.536, "end": 0.586, "type": "technical", "speed_factor": 0.85},
+      {"name": "Campsa", "start": 0.586, "end": 0.637, "type": "sweeping", "speed_factor": 0.95},
+      {"name": "Back Straight", "start": 0.637, "end": 0.702, "type": "straight", "speed_factor": 1.12},
+      {"name": "La Caixa Braking", "start": 0.702, "end": 0.7335, "type": "heavy_braking", "speed_factor": 0.5},
+      {"name": "La Caixa Exit", "start": 0.7335, "end": 0.768, "type": "traction", "speed_factor": 0.72},
+      {"name": "Banc Sabadell", "start": 0.768, "end": 0.804, "type": "sweeping", "speed_factor": 0.88},
+      {"name": "Run to Turn 13", "start": 0.804, "end": 0.835, "type": "straight", "speed_factor": 1.05},
+      {"name": "Turn 13", "start": 0.835, "end": 0.866, "type": "sweeping", "speed_factor": 0.92},
+      {"name": "Pit Entry Link", "start": 0.866, "end": 0.897, "type": "straight", "speed_factor": 1.05},
+      {"name": "New Holland", "start": 0.897, "end": 0.968, "type": "sweeping", "speed_factor": 0.95},
+      {"name": "Main Straight Approach", "start": 0.968, "end": 1.0, "type": "straight", "speed_factor": 1.15}
+    ]
+  },
+  {
+    "id": 11,
+    "name": "Suzuka International Racing Course",
+    "country": "Japan",
+    "base_lap_time": 90.5,
+    "total_laps": 53,
+    "pit_loss_time": 22.0,
+    "track_length_m": 5807.0,
+    "overtaking_difficulty": 0.72,
+    "allows_self_intersection": true,
+    "geo_file": "circuit_sources/suzuka_osm_geo.json",
+    "physics_calibration": {
+      "source": "hand-tuned planner configuration (no telemetry reference)",
+      "planner_braking_utilization": 0.55,
+      "controller_sample_distance_m": 10.0,
+      "racing_line_reference_weight": 0.4,
+      "racing_line_initial_smoothing_passes": 1
+    },
+    "sectors": [
+      {"name": "Sector 1", "type": "first_curve_esses_dunlop", "speed_factor": 1.0},
+      {"name": "Sector 2", "type": "degner_hairpin_spoon", "speed_factor": 0.98},
+      {"name": "Sector 3", "type": "130r_casio_main", "speed_factor": 1.02}
+    ],
+    "pit_lane": {
+      "entry_progress": 0.909,
+      "exit_progress": 0.063,
+      "wall_offset": -3,
+      "box_offset": 10,
+      "lane_width_m": 4.0,
+      "speed_limit_kph": 80,
+      "side_entry_progress": 0.02,
+      "speed_limit_start": 0.22,
+      "box_progress": 0.445,
+      "speed_limit_end": 0.665,
+      "side_rejoin_progress": 0.94,
+      "safety_car_line_2_progress": 0.063
+    },
+    "drs_zones": [
+      {"name": "Main Straight", "start": 0.955, "end": 0.045}
+    ],
+    "landmarks": [
+      {"type": "start_finish", "label": "S/F", "progress": 0.0},
+      {"type": "pit", "label": "PIT LANE", "progress": 0.909},
+      {"type": "corner", "label": "T1", "progress": 0.076},
+      {"type": "corner", "label": "T2", "progress": 0.104},
+      {"type": "corner", "label": "T3", "progress": 0.149},
+      {"type": "corner", "label": "T4", "progress": 0.161},
+      {"type": "corner", "label": "T5", "progress": 0.197},
+      {"type": "corner", "label": "T6", "progress": 0.214},
+      {"type": "corner", "label": "T7", "progress": 0.249},
+      {"type": "corner", "label": "T8", "progress": 0.268},
+      {"type": "corner", "label": "T9", "progress": 0.352},
+      {"type": "corner", "label": "T10", "progress": 0.378},
+      {"type": "corner", "label": "T11", "progress": 0.456},
+      {"type": "corner", "label": "T12", "progress": 0.507},
+      {"type": "corner", "label": "T13", "progress": 0.608},
+      {"type": "corner", "label": "T14", "progress": 0.645},
+      {"type": "corner", "label": "T15", "progress": 0.828},
+      {"type": "corner", "label": "T16", "progress": 0.886},
+      {"type": "corner", "label": "T17", "progress": 0.894},
+      {"type": "corner", "label": "T18", "progress": 0.911}
+    ],
+    "segments": [
+      {"name": "Main Straight", "start": 0.0, "end": 0.048, "type": "straight", "speed_factor": 1.2},
+      {"name": "T1 Braking", "start": 0.048, "end": 0.079, "type": "heavy_braking", "speed_factor": 0.55},
+      {"name": "First Curve", "start": 0.079, "end": 0.11, "type": "sweeping", "speed_factor": 0.82},
+      {"name": "Turn 2", "start": 0.11, "end": 0.142, "type": "traction", "speed_factor": 0.75},
+      {"name": "Esses Entry", "start": 0.142, "end": 0.185, "type": "technical", "speed_factor": 0.88},
+      {"name": "Esses Mid", "start": 0.185, "end": 0.235, "type": "technical", "speed_factor": 0.9},
+      {"name": "Dunlop", "start": 0.235, "end": 0.295, "type": "sweeping", "speed_factor": 0.92},
+      {"name": "Run to Degner", "start": 0.295, "end": 0.34, "type": "straight", "speed_factor": 1.08},
+      {"name": "Degner 1", "start": 0.34, "end": 0.372, "type": "heavy_braking", "speed_factor": 0.7},
+      {"name": "Degner 2", "start": 0.372, "end": 0.42, "type": "traction", "speed_factor": 0.78},
+      {"name": "Hairpin Approach", "start": 0.42, "end": 0.452, "type": "straight", "speed_factor": 1.05},
+      {"name": "Hairpin", "start": 0.452, "end": 0.492, "type": "heavy_braking", "speed_factor": 0.48},
+      {"name": "Hairpin Exit", "start": 0.492, "end": 0.55, "type": "traction", "speed_factor": 0.72},
+      {"name": "Run to Spoon", "start": 0.55, "end": 0.595, "type": "sweeping", "speed_factor": 1.0},
+      {"name": "Spoon Entry", "start": 0.595, "end": 0.635, "type": "heavy_braking", "speed_factor": 0.65},
+      {"name": "Spoon Curve", "start": 0.635, "end": 0.68, "type": "sweeping", "speed_factor": 0.8},
+      {"name": "West Straight", "start": 0.68, "end": 0.795, "type": "straight", "speed_factor": 1.18},
+      {"name": "130R", "start": 0.795, "end": 0.86, "type": "sweeping", "speed_factor": 1.05},
+      {"name": "Casio Braking", "start": 0.86, "end": 0.891, "type": "heavy_braking", "speed_factor": 0.5},
+      {"name": "Casio Triangle", "start": 0.891, "end": 0.94, "type": "technical", "speed_factor": 0.6},
+      {"name": "Main Straight Approach", "start": 0.94, "end": 1.0, "type": "straight", "speed_factor": 1.15}
+    ]
   }
 ]

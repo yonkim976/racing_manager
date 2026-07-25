@@ -743,6 +743,14 @@ class Circuit(BaseModel):
     track_width_profile: list[TrackWidthSample] = Field(default_factory=list)
     track_conditions: list[TrackConditionSample] = Field(default_factory=list)
     overtaking_difficulty: float = Field(default=0.5, ge=0.0, le=1.0)
+    allows_self_intersection: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "allows_self_intersection",
+            "allowsSelfIntersection",
+        ),
+        description="True for figure-eight layouts (e.g. Suzuka) with an intentional bridge crossing.",
+    )
     sectors: list[Sector] = Field(default_factory=list)
     layout_segments: list[TrackLayoutSegment] = Field(default_factory=list)
     track_coords: list[TrackCoord] = Field(default_factory=list)
