@@ -84,6 +84,13 @@
   letter-spacing: 0.08em;
 }
 
+.race-header__renderer-label {
+  color: #61dafb;
+  font-size: 0.56rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
 .race-header__status--connected {
   color: var(--accent-green);
 }

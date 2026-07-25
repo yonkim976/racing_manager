@@ -23,6 +23,18 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 
 
 class BahrainTelemetryCalibrationTests(unittest.TestCase):
+    def test_t1_keeps_official_total_width_without_folding_inside_edge(self) -> None:
+        circuit = next(item for item in load_circuits() if item.id == 3)
+        t1_apex = next(
+            sample
+            for sample in circuit.track_width_profile
+            if math.isclose(sample.progress, 0.125)
+        )
+
+        self.assertEqual(t1_apex.left_width_m, 7.0)
+        self.assertEqual(t1_apex.right_width_m, 15.0)
+        self.assertEqual(t1_apex.left_width_m + t1_apex.right_width_m, 22.0)
+
     def test_bahrain_keeps_a_measured_five_lap_reference(self) -> None:
         circuit = next(item for item in load_circuits() if item.id == 3)
         calibration = circuit.physics_calibration

@@ -97,7 +97,10 @@ export default function EventFeed({ events, playerDriverCodes = [] }) {
         {visibleEvents.map((evt, i) => {
           const message = language === 'ko' ? evt.message_ko || evt.message : evt.message;
           return (
-            <div key={`${evt.type}-${evt.driver}-${i}`} className={`event-feed__item event-feed__item--${evt.type}`}>
+            <div
+              key={evt.event_id || `${evt.type}-${evt.driver}-${evt.message}-${i}`}
+              className={`event-feed__item event-feed__item--${evt.type}`}
+            >
               {evt.driver && <span className="event-feed__driver">{evt.driver}</span>}
               <span className="event-feed__message">{message}</span>
             </div>

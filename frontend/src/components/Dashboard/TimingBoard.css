@@ -156,15 +156,12 @@
 
 /* Retired driver */
 .timing-row--retired {
-  opacity: 0.35;
-}
-
-.timing-row--retired .timing-row__name::after {
-  content: 'RET';
-  margin-left: 6px;
-  font-size: 0.6rem;
-  color: var(--accent-red);
-  font-weight: 700;
+  opacity: 0.62;
+  background: linear-gradient(90deg,
+    rgba(255, 23, 68, 0.10) 0%,
+    rgba(255, 23, 68, 0.025) 48%,
+    transparent 100%
+  );
 }
 
 .timing-row--finished {
@@ -222,12 +219,27 @@
 
 .timing-row__name {
   min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.04em;
+  text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.timing-row__name:hover,
+.timing-row__name:focus-visible {
+  color: var(--accent-yellow);
+  outline: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .timing-row__sector {
@@ -258,6 +270,16 @@
 .timing-row__status-badge--pit {
   color: var(--accent-yellow);
   background: rgba(243, 156, 18, 0.15);
+}
+
+.timing-row__status-badge--ret {
+  color: #fff;
+  background: rgba(255, 23, 68, 0.82);
+}
+
+.timing-row__status-badge--fin {
+  color: #06140c;
+  background: var(--accent-green);
 }
 
 .timing-row__status-badge--yel {
@@ -312,6 +334,19 @@
   font-weight: 700;
   color: var(--accent-green);
   letter-spacing: 0.05em;
+}
+
+.timing-row__gap-retired {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--accent-red);
+  letter-spacing: 0.05em;
+}
+
+.timing-row__gap-estimate {
+  margin-right: 2px;
+  color: var(--accent-yellow);
+  font-weight: 900;
 }
 
 /* Last lap time */

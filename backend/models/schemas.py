@@ -219,11 +219,17 @@ class PitLaneConfig(BaseModel):
     wall_offset: Optional[float] = None
     box_offset: float = 11.0
     lane_width_m: float = Field(default=4.0, ge=3.0, le=8.0)
+    speed_limit_kph: float = Field(default=80.0, ge=40.0, le=120.0)
     side_entry_progress: float = Field(default=0.02, ge=0.0, le=1.0)
     speed_limit_start: float = Field(default=0.12, ge=0.0, le=1.0)
     box_progress: float = Field(default=0.50, ge=0.0, le=1.0)
     speed_limit_end: float = Field(default=0.88, ge=0.0, le=1.0)
     side_rejoin_progress: float = Field(default=0.94, ge=0.0, le=1.0)
+    safety_car_line_2_progress: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+    )
     entry_blend: float = Field(default=0.015, ge=0.0, le=0.25)
     exit_blend: float = Field(default=0.015, ge=0.0, le=0.25)
     samples: int = Field(default=44, ge=8, le=180)
@@ -881,6 +887,7 @@ class DriverRaceState(BaseModel):
 
 class RaceEvent(BaseModel):
     """An event that occurred during the race."""
+    event_id: int = 0
     type: str
     driver: str = ""
     message: str = ""
@@ -911,6 +918,53 @@ class VehicleTrajectorySample(BaseModel):
     lateral_offset_m: float
     in_pit: bool = False
     pit_lane_progress: float = 0.0
+
+
+class DriverPoseInfo(BaseModel):
+    """Minimal per-driver state required by the 60 FPS pose player."""
+
+    driver_id: int
+    simulation_time_s: float = 0.0
+    physics_frame: int = 0
+    world_x_m: float = 0.0
+    world_y_m: float = 0.0
+    heading_rad: float = 0.0
+    retired: bool = False
+    hazard_active: bool = False
+    trajectory_samples: list[VehicleTrajectorySample] = Field(default_factory=list)
+
+
+class RacePoseState(BaseModel):
+    """Compact 30 Hz pose stream, independent from dashboard telemetry."""
+
+    type: str = "pose_tick"
+    physics_frame: int = 0
+    speed_multiplier: int = 1
+    paused: bool = False
+    positions: list[DriverPoseInfo] = Field(default_factory=list)
+
+
+class RaceEventsMessage(BaseModel):
+    """Event-driven public race-feed update."""
+
+    type: str = "race_events"
+    events: list[RaceEvent] = Field(default_factory=list)
+
+
+class DriverRaceHistoryInfo(BaseModel):
+    """Low-frequency completed-lap history for one driver."""
+
+    driver_id: int
+    start_index: int = Field(default=0, ge=0)
+    lap_history: list[LapTimeInfo] = Field(default_factory=list)
+
+
+class RaceHistoryState(BaseModel):
+    """Completed-lap histories, emitted only when a history changes."""
+
+    type: str = "race_history"
+    full_snapshot: bool = True
+    histories: list[DriverRaceHistoryInfo] = Field(default_factory=list)
 
 
 class RaceTickState(BaseModel):
@@ -983,11 +1037,17 @@ class DriverPositionInfo(BaseModel):
     gap_seconds: Optional[float] = None
     interval_seconds: Optional[float] = None
     timing_gap_valid: bool = False
+    interval_timing_gap_valid: bool = False
+    timing_gap_source: str = "estimated"  # live | estimated
+    interval_timing_gap_source: str = "estimated"  # live | estimated
     current_sector: int = 1
     current_mini_sector: int = 1
     current_timing_loop: int = 1
     last_sector_time: float = 0.0
     last_mini_sector_time: float = 0.0
+    last_mini_sector_delta_to_best: Optional[float] = None
+    mini_sector_splits: list[Optional[float]] = Field(default_factory=list)
+    mini_sector_statuses: list[str] = Field(default_factory=list)
     tire_compound: str
     tire_age: int
     tire_wear: float
@@ -1021,6 +1081,7 @@ class DriverPositionInfo(BaseModel):
     pit_merge_conflict_group_member_ids: list[int] = Field(default_factory=list)
     pit_lane_progress: float = 0.0  # 0=pit entry, 1=pit exit
     pit_lane_progress_rate: float = 0.0  # pit-lane progress per game second
+    pit_box_progress: float = 0.5  # assigned team stop position on the pit route
     pit_elapsed: float = 0.0  # total time spent in this pit stop (grows)
     pit_stop_elapsed: float = 0.0  # stationary tire-change time so far (grows)
     lap_history: list[LapTimeInfo] = Field(default_factory=list)
@@ -1063,6 +1124,7 @@ class DriverPositionInfo(BaseModel):
     side_by_side_active: bool = False
     maneuver_corner_active: bool = False
     maneuver_corner_authorized: bool = False
+    maneuver_line_committed: bool = False
     maneuver_corridor: Optional[str] = None
     maneuver_corner_turn_direction: int = 0
     maneuver_corner_entry_advantage_m: float = 0.0
@@ -1203,6 +1265,7 @@ class RaceInfoMessage(BaseModel):
     pit_wall_coords: list[list[float]] = []
     pit_box_offset: float = 11.0
     pit_lane_width_m: float = 4.0
+    pit_speed_limit_kph: float = 80.0
     pit_side_entry_progress: float = 0.02
     pit_speed_limit_start: float = 0.12
     pit_box_progress: float = 0.50

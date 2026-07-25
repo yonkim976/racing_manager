@@ -32,6 +32,8 @@ export default function DevRaceControl({
   effectiveSpeedMultiplier = 0,
   simulationBacklogSeconds = 0,
   broadcastJitterMs = 0,
+  transportKilobytesPerSecond = 0,
+  transportMessagesPerSecond = 0,
   onSetPhase,
 }) {
   const controls = [
@@ -82,6 +84,10 @@ export default function DevRaceControl({
           RATE {Number(effectiveSpeedMultiplier).toFixed(2)}x / {requestedSpeedMultiplier}x
           {' · '}BACKLOG {Math.round(Number(simulationBacklogSeconds) * 1000)}MS
           {' · '}JITTER {Number(broadcastJitterMs).toFixed(1)}MS
+        </span>
+        <span>
+          NET {Number(transportKilobytesPerSecond).toFixed(0)}KB/S
+          {' · '}MESSAGES {Number(transportMessagesPerSecond).toFixed(0)}/S
         </span>
       </div>
     </section>

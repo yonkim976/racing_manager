@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import DriverDataCenter from './DriverDataCenter';
 import './TimingBoard.css';
 
 /**
@@ -47,13 +48,15 @@ function tireLifePercent(wear) {
 }
 
 function getStatusBadge(driver, isFinished) {
+  if (driver.retired) return 'RET';
+  if (isFinished) return 'FIN';
   if (driver.in_pit) return 'PIT';
-  if (driver.local_yellow_active && !isFinished) return 'YEL';
-  if (driver.maneuver_group_size >= 4 && !isFinished) return '4W';
-  if (driver.maneuver_group_size === 3 && !isFinished) return '3W';
-  if (driver.side_by_side_active && !isFinished) return 'SBS';
-  if (driver.drs_active && !isFinished) return 'DRS';
-  if (driver.dirty_air_active && !driver.drs_active && !isFinished) return 'AIR';
+  if (driver.local_yellow_active) return 'YEL';
+  if (driver.maneuver_group_size >= 4) return '4W';
+  if (driver.maneuver_group_size === 3) return '3W';
+  if (driver.side_by_side_active) return 'SBS';
+  if (driver.drs_active) return 'DRS';
+  if (driver.dirty_air_active && !driver.drs_active) return 'AIR';
   return '';
 }
 
@@ -77,8 +80,9 @@ function formatSpeed(driver) {
 /**
  * F1 TV-style timing board showing all drivers in position order.
  */
-export default function TimingBoard({ positions, playerDriverIds }) {
+export default function TimingBoard({ positions, playerDriverIds, sectors = [] }) {
   const [gapMode, setGapMode] = useState('gap');
+  const [dataCenterDriverId, setDataCenterDriverId] = useState(null);
   const playerSet = useMemo(
     () => new Set(playerDriverIds || []),
     [playerDriverIds]
@@ -97,6 +101,9 @@ export default function TimingBoard({ positions, playerDriverIds }) {
   }
 
   const sorted = [...positions].sort((a, b) => a.position - b.position);
+  const selectedDriver = sorted.find(
+    (driver) => driver.driver_id === dataCenterDriverId,
+  ) || null;
 
   return (
     <div className="timing-board glass-panel">
@@ -132,6 +139,20 @@ export default function TimingBoard({ positions, playerDriverIds }) {
           const isFinished = driver.finished;
           const tireLife = tireLifePercent(driver.tire_wear);
           const statusBadge = getStatusBadge(driver, isFinished);
+          const displayedTimingValid = isGapMode
+            ? driver.timing_gap_valid
+            : driver.interval_timing_gap_valid;
+          const displayedTimingSource = isGapMode
+            ? driver.timing_gap_source
+            : driver.interval_timing_gap_source;
+          const displayedTimingTitle = displayedTimingSource === 'live'
+            ? 'Live gap anchored to official timing loops'
+            : 'Live estimate until a valid common timing-loop anchor exists';
+          const gapTitle = isRetired
+            ? 'Driver retired'
+            : isFinished
+              ? 'Driver finished'
+              : displayedTimingTitle;
 
           return (
             <div
@@ -151,7 +172,15 @@ export default function TimingBoard({ positions, playerDriverIds }) {
                   className="timing-row__team-bar"
                   style={{ backgroundColor: driver.team_color }}
                 />
-                <span className="timing-row__name">{driver.name}</span>
+                <button
+                  type="button"
+                  className="timing-row__name"
+                  onClick={() => setDataCenterDriverId(driver.driver_id)}
+                  aria-label={`Open ${driver.full_name || driver.name} data center`}
+                  title="Open driver data center"
+                >
+                  {driver.name}
+                </button>
                 <span
                   className="timing-row__sector"
                   title={`Sector ${driver.current_sector || 1}, mini-sector ${driver.current_mini_sector || 1}`}
@@ -170,14 +199,21 @@ export default function TimingBoard({ positions, playerDriverIds }) {
 
               <span
                 className="timing-row__gap"
-                title={driver.timing_gap_valid ? 'Measured at timing loop' : 'Provisional until next common timing loop'}
+                title={gapTitle}
               >
-                {isFinished ? (
+                {isRetired ? (
+                  <span className="timing-row__gap-retired">RET</span>
+                ) : isFinished ? (
                   <span className="timing-row__gap-finished">FIN</span>
                 ) : isGapMode && driver.gap === 'LEADER' ? (
                   <span className="timing-row__gap-leader">LEADER</span>
                 ) : (
-                  <span>{isGapMode ? driver.gap : driver.interval || '—'}</span>
+                  <span>
+                    {!displayedTimingValid && driver.position > 1 && (
+                      <span className="timing-row__gap-estimate">~</span>
+                    )}
+                    {isGapMode ? driver.gap : driver.interval || '—'}
+                  </span>
                 )}
               </span>
 
@@ -205,6 +241,13 @@ export default function TimingBoard({ positions, playerDriverIds }) {
           );
         })}
       </div>
+      {selectedDriver && (
+        <DriverDataCenter
+          driver={selectedDriver}
+          sectors={sectors}
+          onClose={() => setDataCenterDriverId(null)}
+        />
+      )}
     </div>
   );
 }

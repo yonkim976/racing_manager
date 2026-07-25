@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure the real RaceSession cadence at Bahrain for 1x, 2x, and 3x.
+"""Measure the real RaceSession cadence at Bahrain for 1x and 2x.
 
 The default is a short developer check.  ``--full`` runs a ten-minute total
 soak (200 wall-clock seconds per speed) using the same authoritative session
@@ -172,7 +172,11 @@ def percentile(values: list[float], fraction: float) -> float:
     return ordered[index]
 
 
-async def measure_speed(speed: int, wall_seconds: float) -> dict[str, float | int | bool]:
+async def measure_speed(
+    speed: int,
+    wall_seconds: float,
+    race_phase: str = "green",
+) -> dict[str, float | int | bool | str]:
     drivers = load_drivers()
     teams = load_teams()
     team_map = {team.id: team for team in teams}
@@ -190,6 +194,8 @@ async def measure_speed(speed: int, wall_seconds: float) -> dict[str, float | in
     )
     if not engine.set_speed(speed):
         raise RuntimeError(f"unsupported speed: {speed}")
+    if race_phase != "green":
+        engine.set_race_control_phase_for_testing(race_phase)
 
     session = RaceSession(
         session_id=f"bahrain-soak-{speed}x",
@@ -244,6 +250,7 @@ async def measure_speed(speed: int, wall_seconds: float) -> dict[str, float | in
     )
     return {
         "speed": speed,
+        "race_phase": race_phase,
         "wall_seconds": wall_seconds,
         "ticks": len(stable_ticks),
         "median_effective_speed": median_rate,
@@ -302,8 +309,8 @@ async def main() -> int:
         "--speeds",
         type=int,
         nargs="+",
-        default=(1, 2, 3),
-        choices=(1, 2, 3),
+        default=(1, 2),
+        choices=(1, 2),
     )
     parser.add_argument(
         "--full",
@@ -322,6 +329,12 @@ async def main() -> int:
         default=None,
         help="write the full JSON result to this path",
     )
+    parser.add_argument(
+        "--race-phase",
+        choices=("green", "sc", "vsc"),
+        default="green",
+        help="start the measured session in this race-control phase",
+    )
     args = parser.parse_args()
     seconds_per_speed = 200.0 if args.full else max(2.0, args.seconds_per_speed)
 
@@ -332,11 +345,12 @@ async def main() -> int:
             if args.simulation_minutes is not None
             else seconds_per_speed
         )
-        result = await measure_speed(speed, wall_seconds)
+        result = await measure_speed(speed, wall_seconds, args.race_phase)
         results.append(result)
         status = "PASS" if result["passed"] else "FAIL"
         print(
-            f"{speed}x {status}: effective={result['median_effective_speed']:.3f}x "
+            f"{speed}x {args.race_phase.upper()} {status}: "
+            f"effective={result['median_effective_speed']:.3f}x "
             f"backlog_p95={result['p95_backlog_ms']:.1f}ms "
             f"jitter_p95={result['p95_jitter_ms']:.1f}ms "
             f"trajectory_max_step={result['maximum_trajectory_step_m']:.2f}m"
@@ -367,6 +381,7 @@ async def main() -> int:
                 {
                     "circuit": "Bahrain International Circuit",
                     "car_count": 20,
+                    "race_phase": args.race_phase,
                     "simulation_minutes_per_speed": args.simulation_minutes,
                     "results": results,
                     "passed": all(bool(result["passed"]) for result in results),

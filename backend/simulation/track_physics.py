@@ -383,6 +383,11 @@ _VEHICLE_TRACK_PHYSICS_CACHE: dict[
 def clear_track_physics_caches() -> None:
     """Clear all profile caches for independent validation builds/tests."""
     _TRACK_PHYSICS_CACHE.clear()
+    clear_vehicle_track_physics_cache()
+
+
+def clear_vehicle_track_physics_cache() -> None:
+    """Release the large vehicle-specific profiles owned by finished sessions."""
     _VEHICLE_TRACK_PHYSICS_CACHE.clear()
 
 

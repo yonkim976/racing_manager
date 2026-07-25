@@ -86,6 +86,7 @@ def run_qualifying_session(request: QualifyingRequest):
 @app.post("/api/race/setup", response_model=RaceSetupResponse)
 async def setup_race(request: RaceSetupRequest):
     try:
+        await session_manager.clear_async()
         session = session_manager.create_session(request, _drivers, _teams, _circuits)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -103,8 +104,8 @@ async def setup_race(request: RaceSetupRequest):
 
 
 @app.delete("/api/race/session")
-def clear_race_session():
-    session_manager.clear()
+async def clear_race_session():
+    await session_manager.clear_async()
     return {"status": "cleared"}
 
 

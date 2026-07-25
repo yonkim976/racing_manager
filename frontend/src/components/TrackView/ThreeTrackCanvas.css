@@ -1,0 +1,167 @@
+.track-canvas--three .track-canvas__viewport {
+  cursor: default;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(35, 55, 39, 0.34), transparent 56%),
+    #080b0d;
+}
+
+.track-canvas--three canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.track-canvas--three .track-canvas__minimap {
+  cursor: crosshair;
+  pointer-events: auto;
+}
+
+.three-track__minimap-viewport {
+  fill: rgba(97, 218, 251, 0.10);
+  stroke: #61dafb;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.three-track__camera-mode {
+  padding: 2px 5px;
+  border: 1px solid rgba(97, 218, 251, 0.48);
+  border-radius: 3px;
+  color: #61dafb;
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.three-track__performance {
+  min-width: 150px;
+  color: #61dafb;
+  font-size: 0.54rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.three-track__labels {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.three-track__label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: none;
+  padding: 2px 5px;
+  border: 1px solid color-mix(in srgb, var(--team-color, #fff) 68%, transparent);
+  border-radius: 3px;
+  background: rgba(5, 7, 10, 0.78);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.32);
+  color: #f7f8fb;
+  font-size: 0.55rem;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  transform-origin: 0 0;
+  translate: 8px -22px;
+  will-change: transform;
+}
+
+.three-track__label--player {
+  border-width: 2px;
+  color: #fff;
+}
+
+.three-track__driver-label {
+  display: block;
+}
+
+.three-track__label--pit {
+  min-width: 82px;
+  padding: 0;
+  overflow: hidden;
+  border-color: #ffb000;
+  background: rgba(8, 9, 12, 0.94);
+  box-shadow:
+    0 0 0 1px rgba(255, 176, 0, 0.18),
+    0 4px 14px rgba(0, 0, 0, 0.48);
+  translate: 8px -40px;
+}
+
+.three-track__label--pit .three-track__driver-label {
+  padding: 2px 5px;
+  border-left: 3px solid var(--team-color, #fff);
+  color: #f5f6f8;
+  font-size: 0.50rem;
+}
+
+.three-track__pit-timing {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 7px;
+  padding: 3px 5px;
+  border-top: 1px solid rgba(255, 176, 0, 0.34);
+  background: linear-gradient(90deg, rgba(255, 176, 0, 0.22), rgba(255, 176, 0, 0.05));
+  color: #ffcf57;
+  font-variant-numeric: tabular-nums;
+}
+
+.three-track__pit-timing strong {
+  color: #ffffff;
+  font-size: 0.56rem;
+  letter-spacing: 0.035em;
+}
+
+.three-track__pit-timing > span {
+  font-size: 0.54rem;
+}
+
+.three-track__label--pit-stop {
+  border-color: #29f28c;
+  box-shadow:
+    0 0 0 1px rgba(41, 242, 140, 0.20),
+    0 0 14px rgba(41, 242, 140, 0.24);
+}
+
+.three-track__label--pit-stop .three-track__pit-timing {
+  border-top-color: rgba(41, 242, 140, 0.36);
+  background: linear-gradient(90deg, rgba(41, 242, 140, 0.24), rgba(41, 242, 140, 0.05));
+  color: #75ffc0;
+}
+
+.three-track__label--pit-yield,
+.three-track__label--pit-hold {
+  border-color: #ff5b57;
+}
+
+.three-track__label--pit-yield .three-track__pit-timing,
+.three-track__label--pit-hold .three-track__pit-timing {
+  border-top-color: rgba(255, 91, 87, 0.38);
+  background: linear-gradient(90deg, rgba(255, 91, 87, 0.24), rgba(255, 91, 87, 0.05));
+  color: #ff8b88;
+}
+
+.three-track__safety-car-label {
+  border: 1px solid #f7d038;
+  background: rgba(33, 27, 3, 0.92);
+  box-shadow: 0 0 14px rgba(247, 208, 56, 0.42);
+  color: #f7d038;
+  translate: 10px -25px;
+}
+
+.three-track__safety-car-minimap {
+  filter: drop-shadow(0 0 4px rgba(247, 208, 56, 0.9));
+  pointer-events: none;
+}
+
+@media (max-width: 1400px) {
+  .three-track__performance {
+    display: none;
+  }
+}

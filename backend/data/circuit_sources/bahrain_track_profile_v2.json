@@ -5,7 +5,7 @@
       "https://www.fia.com/sites/default/files/media_kit_1.pdf",
       "https://www.works.gov.bh/English/Hidden%20Roads%20Projects/Strategic/Arabic/129.aspx"
     ],
-    "width_evidence": "Grand Prix track width is 14-22m; T1 is the 22m maximum. Intermediate widening samples are a symmetric linear reconstruction because left/right survey edges are not public.",
+    "width_evidence": "Grand Prix track width is 14-22m; T1 is the 22m maximum. Public sources do not provide separate left/right survey edges. The reconstruction keeps the T1 inside edge at the 7m baseline and assigns the documented widening to the outside edge so the tight inside radius does not fold inward.",
     "elevation_source": "Copernicus DEM GLO-30 2024_1, N26 E050",
     "elevation_source_url": "https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM",
     "elevation_notice": "produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved",
@@ -21,11 +21,11 @@
   "track_width_profile": [
     {"progress": 0.0, "left_width_m": 7.0, "right_width_m": 7.0},
     {"progress": 0.085, "left_width_m": 7.0, "right_width_m": 7.0},
-    {"progress": 0.1, "left_width_m": 8.0, "right_width_m": 8.0},
-    {"progress": 0.115, "left_width_m": 9.5, "right_width_m": 9.5},
-    {"progress": 0.125, "left_width_m": 11.0, "right_width_m": 11.0},
-    {"progress": 0.145, "left_width_m": 11.0, "right_width_m": 11.0},
-    {"progress": 0.16, "left_width_m": 8.5, "right_width_m": 8.5},
+    {"progress": 0.1, "left_width_m": 7.0, "right_width_m": 9.0},
+    {"progress": 0.115, "left_width_m": 7.0, "right_width_m": 12.0},
+    {"progress": 0.125, "left_width_m": 7.0, "right_width_m": 15.0},
+    {"progress": 0.145, "left_width_m": 7.0, "right_width_m": 15.0},
+    {"progress": 0.16, "left_width_m": 7.0, "right_width_m": 10.0},
     {"progress": 0.175, "left_width_m": 7.0, "right_width_m": 7.0}
   ],
   "track_conditions": [

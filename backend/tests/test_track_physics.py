@@ -25,6 +25,7 @@ from simulation.track_physics import (
     _path_physics,
     build_track_physics_profile,
     build_vehicle_track_physics_profile,
+    clear_vehicle_track_physics_cache,
 )
 from simulation.track_surface import TrackSurfaceProfile
 from simulation.tire_model import compute_tire_physics_factors
@@ -33,6 +34,18 @@ from models.schemas import TireCompound
 
 
 class TrackPhysicsProfileTests(unittest.TestCase):
+    def test_session_cleanup_clears_only_vehicle_profile_cache(self) -> None:
+        base_marker = object()
+        vehicle_marker = object()
+        _TRACK_PHYSICS_CACHE[("base",)] = base_marker
+        _VEHICLE_TRACK_PHYSICS_CACHE[("vehicle",)] = vehicle_marker
+
+        clear_vehicle_track_physics_cache()
+
+        self.assertIs(_TRACK_PHYSICS_CACHE[("base",)], base_marker)
+        self.assertEqual(_VEHICLE_TRACK_PHYSICS_CACHE, {})
+        _TRACK_PHYSICS_CACHE.pop(("base",), None)
+
     def test_vehicle_lines_are_body_safe_and_continuous_on_all_circuits(self) -> None:
         team = next(team for team in load_teams() if team.id == 1)
         vehicle = VehicleTrajectorySpec.from_car_performance(

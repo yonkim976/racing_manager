@@ -15,7 +15,7 @@ const CIRCUIT_DISPLAY_ROTATION_OVERRIDES = {
 const DEV_RACE_CONTROLS_ENABLED = import.meta.env.DEV
   || import.meta.env.VITE_ENABLE_RACE_DEV_CONTROLS === 'true';
 const EMPTY_TRACK_DATA = Object.freeze([]);
-const TrackCanvas = lazy(() => import('./components/TrackView/TrackCanvas'));
+const ThreeTrackCanvas = lazy(() => import('./components/TrackView/ThreeTrackCanvas'));
 
 function formatRaceTime(seconds) {
   if (!seconds || seconds <= 0) return '—';
@@ -122,6 +122,7 @@ export default function App() {
     raceEnd,
     connected,
     connectionState,
+    transportStats,
     sendCommand,
     resetState,
   } = useRaceWebSocket(phase === 'race');
@@ -134,11 +135,14 @@ export default function App() {
   };
 
   const handleBackToSetup = async () => {
-    fetch('/api/race/session', { method: 'DELETE' }).catch(() => {});
-    setPhase('setup');
-    setSetupResult(null);
-    setPendingPaused(null);
-    resetState();
+    try {
+      await fetch('/api/race/session', { method: 'DELETE' });
+    } finally {
+      setPhase('setup');
+      setSetupResult(null);
+      setPendingPaused(null);
+      resetState();
+    }
   };
 
   useEffect(() => {
@@ -219,7 +223,6 @@ export default function App() {
     ? (lightsOut ? 'LIGHTS OUT' : 'ON THE GRID')
     : (connectionState === 'connected' ? '● LIVE' : connectionState.toUpperCase());
   const statusClass = startLightsActive ? 'connecting' : connectionState;
-
   return (
     <div className="race-app carbon-bg">
       <header className="race-header glass-panel">
@@ -260,6 +263,7 @@ export default function App() {
           )}
         </div>
         <div className="race-header__right">
+          <span className="race-header__renderer-label">THREE.JS</span>
           <span className={`race-header__status race-header__status--${statusClass}`}>
             {statusText}
           </span>
@@ -315,12 +319,13 @@ export default function App() {
             positions={raceState?.positions}
             poseTickRef={poseTickRef}
             playerDriverIds={playerDriverIds}
+            sectors={sectors}
           />
         </aside>
 
         <section className="race-layout__main">
           <Suspense fallback={<div className="track-canvas track-canvas--loading">Loading track…</div>}>
-            <TrackCanvas
+            <ThreeTrackCanvas
             trackCoords={trackCoords}
             trackLengthM={trackLengthM}
             worldCoordinateFrame={worldCoordinateFrame}
@@ -348,6 +353,7 @@ export default function App() {
             displayRotationDeg={circuitDisplayRotationDeg}
             showBearing={showCircuitBearing}
             positions={raceState?.positions}
+            poseTickRef={poseTickRef}
             playerDriverIds={playerDriverIds}
             speedMultiplier={raceState?.speed_multiplier || 1}
             paused={displayedPaused}
@@ -388,6 +394,8 @@ export default function App() {
               effectiveSpeedMultiplier={raceState?.effective_speed_multiplier || 0}
               simulationBacklogSeconds={raceState?.simulation_backlog_seconds || 0}
               broadcastJitterMs={raceState?.broadcast_jitter_ms || 0}
+              transportKilobytesPerSecond={transportStats.kilobytesPerSecond}
+              transportMessagesPerSecond={transportStats.messagesPerSecond}
               onSetPhase={(nextPhase) => sendCommand({
                 type: 'dev_set_race_phase',
                 phase: nextPhase,

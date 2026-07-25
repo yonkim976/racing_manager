@@ -19,7 +19,7 @@
         "speed_factor": 1.03,
         "start": 0.0,
         "end": 0.345,
-        "mini_sector_count": 6
+        "mini_sector_count": 9
       },
       {
         "name": "Sector 2",
@@ -27,7 +27,7 @@
         "speed_factor": 0.94,
         "start": 0.345,
         "end": 0.7821308,
-        "mini_sector_count": 6
+        "mini_sector_count": 12
       },
       {
         "name": "Sector 3",
@@ -364,8 +364,12 @@
       "lane_offset": 22,
       "wall_offset": 11,
       "box_offset": 10,
+      "speed_limit_kph": 80,
       "side_entry_progress": 0.02,
+      "speed_limit_start": 0.30,
+      "speed_limit_end": 0.70,
       "side_rejoin_progress": 0.94,
+      "safety_car_line_2_progress": 0.102,
       "entry_blend": 0.018,
       "exit_blend": 0.02,
       "samples": 64

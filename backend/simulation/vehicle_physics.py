@@ -35,6 +35,8 @@ LOCKUP_SLIP_RATIO_THRESHOLD = 0.05
 TRACTION_LOSS_SLIP_RATIO_THRESHOLD = 0.05
 AXLE_SLIP_CLASSIFICATION_THRESHOLD_RAD = 0.16
 AXLE_SLIP_BALANCE_MARGIN_RAD = 0.025
+FOLLOWING_PREDICTIVE_DECELERATION_MPS2 = 24.0
+FOLLOWING_CONTROL_REACTION_SECONDS = 0.12
 _CONTROLLER_SCALE_CACHE: dict[tuple[float, ...], float] = {}
 
 
@@ -66,6 +68,7 @@ class VehiclePhysicsModifiers:
     surface_drag_deceleration_mps2: float = 0.0
     brake_modulation_error: float = 0.0
     throttle_modulation_error: float = 0.0
+    emergency_braking: bool = False
     wheelbase_m: float = 3.4
     yaw_inertia_kgm2: float = 1700.0
 
@@ -599,6 +602,22 @@ class LongitudinalVehiclePhysics:
                     following.leader_end_speed_mps - following.leader_speed_mps
                 ) * elapsed_ratio
                 gap = leader_distance - distance
+                usable_gap_m = max(0.0, gap - following.minimum_gap_m)
+                reaction_distance_m = max(
+                    0.0,
+                    speed - leader_speed,
+                ) * FOLLOWING_CONTROL_REACTION_SECONDS
+                braking_gap_m = max(0.0, usable_gap_m - reaction_distance_m)
+                kinematic_safe_speed_mps = sqrt(
+                    max(
+                        0.0,
+                        leader_speed * leader_speed
+                        + 2.0
+                        * FOLLOWING_PREDICTIVE_DECELERATION_MPS2
+                        * braking_gap_m,
+                    )
+                )
+                target = min(target, kinematic_safe_speed_mps)
                 if gap < following.desired_gap_m:
                     following_target = (
                         leader_speed
@@ -719,9 +738,15 @@ class LongitudinalVehiclePhysics:
                 # Normal threshold braking stays just below a reportable
                 # lockup. An emergency speed-limit request deliberately has
                 # less modulation reserve and may cross the combined limit.
+                # A low target caused by SC/VSC pace is a planned lift-and-
+                # brake sequence, not an emergency stop.  Using the generic
+                # speed-limit factor here made every neutralisation look like
+                # panic braking and produced a field-wide lockup burst.  Only
+                # an explicit emergency command gets the reduced modulation
+                # reserve.
                 brake_overdrive = min(
                     0.35,
-                    (0.10 if modifiers.speed_limit_factor < 0.60 else 0.06)
+                    (0.10 if modifiers.emergency_braking else 0.06)
                     + max(0.0, modifiers.brake_modulation_error),
                 )
                 controlled_brake_limit_n = available_brake_force_n * (
@@ -829,21 +854,10 @@ class LongitudinalVehiclePhysics:
 
             next_speed = max(0.0, speed + acceleration * step)
             next_distance = distance + 0.5 * (speed + next_speed) * step
-            if following is not None and leader_distance is not None:
-                next_elapsed_ratio = min(
-                    1.0,
-                    (elapsed + step) / max(delta_seconds, 1e-9),
-                )
-                leader_next_distance = following.leader_distance_m + (
-                    following.leader_end_distance_m - following.leader_distance_m
-                ) * next_elapsed_ratio
-                maximum_distance = leader_next_distance - following.minimum_gap_m
-                if next_distance > maximum_distance:
-                    next_distance = maximum_distance
-                    next_speed = min(next_speed, following.leader_end_speed_mps)
-                    acceleration = min(0.0, (next_speed - speed) / step)
-                    throttle = 0.0
-                    brake = 1.0
+            # Do not snap distance or copy the leader's speed when a physically
+            # impossible initial gap cannot be recovered in one 20 ms step.
+            # Predictive braking above remains tyre-force limited; the race
+            # engine's swept-body solver owns any real contact that remains.
             distance = next_distance
             speed = next_speed
 

@@ -287,6 +287,31 @@ class TrackSurfaceProfile:
             + self.trajectory_kerb_allowance_m(progress, TrackSide.RIGHT),
         )
 
+    def trajectory_body_widths(
+        self,
+        progress: float,
+    ) -> tuple[float, float]:
+        """Return the body envelope available over a complete low kerb.
+
+        The optimized nominal line still uses only the conservative 0.60m
+        kerb allowance above.  A local traffic candidate may, however, place
+        two wheels on a low kerb while the other two remain inside the white
+        line.  Using the complete low-kerb width for body validation permits
+        that legal racecraft without making the racing line target the kerb.
+        """
+        track = self.track_profile.at_progress(progress)
+
+        def allowance(side: TrackSide) -> float:
+            zone = self.zone_at(progress, side)
+            if zone is None or zone.kerb_height != "low":
+                return 0.0
+            return zone.kerb_width_m
+
+        return (
+            track.left_width_m + allowance(TrackSide.LEFT),
+            track.right_width_m + allowance(TrackSide.RIGHT),
+        )
+
     def trajectory_body_lateral_bounds(
         self,
         progress: float,
@@ -294,7 +319,7 @@ class TrackSurfaceProfile:
         body_width_m: float,
         edge_margin_m: float,
     ) -> tuple[float, float]:
-        left_width_m, right_width_m = self.trajectory_optimization_widths(progress)
+        left_width_m, right_width_m = self.trajectory_body_widths(progress)
         half_width_m = max(0.0, body_width_m) / 2.0
         return (
             -right_width_m + half_width_m + edge_margin_m,

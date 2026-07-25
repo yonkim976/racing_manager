@@ -1,6 +1,6 @@
 import './SpeedControl.css';
 
-const SPEEDS = [1, 2, 3];
+const SPEEDS = [1, 2];
 
 export default function SpeedControl({
   connected,

@@ -55,7 +55,10 @@ from simulation.race_engine import (
     SC_CAUGHT_MAX_SPEED_KPH,
     SC_CLEANUP_SECONDS,
     SC_MAX_GAP_CAR_LENGTHS,
+    SC_NEAR_QUEUE_MAX_SPEED_KPH,
+    SC_QUEUE_JOIN_MAX_RELATIVE_SPEED_KPH,
     SC_QUEUE_TARGET_CAR_LENGTHS,
+    TIMING_CROSSING_LAPS_TO_RETAIN,
     VSC_DURATION_SECONDS,
     RaceEngine,
 )
@@ -762,6 +765,11 @@ class RaceSetupTests(unittest.TestCase):
         dot = exit_vector[0] * tangent[0] + exit_vector[1] * tangent[1]
 
         self.assertGreater(dot, 0.0)
+        self.assertAlmostEqual(
+            circuit.pit_lane.safety_car_line_2_progress,
+            circuit.pit_lane.exit_progress,
+            delta=0.002,
+        )
 
     def test_bahrain_geo_source_matches_official_layout_anchors(self) -> None:
         circuit = next(c for c in load_circuits() if c.id == 3)
@@ -792,7 +800,7 @@ class RaceSetupTests(unittest.TestCase):
         self.assertEqual(segment_at_progress(circuit, 0.92).type, TrackSegmentType.TRACTION)
         self.assertEqual(segment_at_progress(circuit, 0.97).type, TrackSegmentType.STRAIGHT)
 
-    def test_bahrain_uses_fia_major_sector_lines_and_six_minisectors_each(self) -> None:
+    def test_bahrain_uses_major_sector_lines_and_twenty_seven_timing_loops(self) -> None:
         circuit = next(c for c in load_circuits() if c.id == 3)
 
         self.assertEqual(len(circuit.sectors), 3)
@@ -800,8 +808,9 @@ class RaceSetupTests(unittest.TestCase):
             [(sector.start, sector.end) for sector in circuit.sectors],
             [(0.0, 0.345), (0.345, 0.7821308), (0.7821308, 1.0)],
         )
-        self.assertTrue(
-            all(sector.mini_sector_count == 6 for sector in circuit.sectors)
+        self.assertEqual(
+            [sector.mini_sector_count for sector in circuit.sectors],
+            [9, 12, 6],
         )
 
     def test_bahrain_drs_zones_avoid_corner_landmarks(self) -> None:
@@ -1724,6 +1733,27 @@ class RaceEngineTests(unittest.TestCase):
         self.assertLessEqual(follower.speed_kph, leader.speed_kph + 1e-6)
         self.assertLess(leader.position, follower.position)
 
+    def test_close_gap_resolution_never_copies_speed_after_physics(self) -> None:
+        engine = _make_engine_for_circuit(3, seed=99)
+        leader, follower = sorted(
+            engine.driver_states.values(),
+            key=lambda state: state.position,
+        )[:2]
+        engine._set_state_total_progress(leader, 1.12)
+        engine._set_state_total_progress(
+            follower,
+            leader.total_progress
+            - (PHYSICAL_CAR_LENGTH_M + 0.5) / engine.track_length_m,
+        )
+        leader.lateral_offset_m = follower.lateral_offset_m = 0.0
+        leader.speed_kph = 120.0
+        follower.speed_kph = 300.0
+
+        engine._resolve_physics_v2_same_line_gaps()
+
+        self.assertEqual(leader.speed_kph, 120.0)
+        self.assertEqual(follower.speed_kph, 300.0)
+
     def test_green_close_chase_targets_a_small_bumper_gap(self) -> None:
         engine = _make_engine_for_circuit(4, seed=99)
         leader, follower = sorted(
@@ -1819,6 +1849,11 @@ class RaceEngineTests(unittest.TestCase):
             engine.driver_states.values(),
             key=lambda state: state.position,
         )[:2]
+        engine._set_state_total_progress(
+            attacker,
+            defender.total_progress - 2.0 / engine.track_length_m,
+        )
+        attacker.lateral_offset_m = defender.lateral_offset_m + 2.3
         engine._start_side_by_side_battle(
             attacker.driver_id,
             defender.driver_id,
@@ -1828,11 +1863,6 @@ class RaceEngineTests(unittest.TestCase):
         )
         battle = engine._side_by_side_battle_for_driver(attacker.driver_id)
         assert battle is not None
-        engine._set_state_total_progress(
-            attacker,
-            defender.total_progress - 2.0 / engine.track_length_m,
-        )
-        attacker.lateral_offset_m = defender.lateral_offset_m + 2.3
 
         desired_gap_m, minimum_gap_m = engine._maneuver_following_gaps_m(
             attacker,
@@ -2080,8 +2110,145 @@ class RaceEngineTests(unittest.TestCase):
             follower_start - leader_start,
             places=6,
         )
+        for state in engine.driver_states.values():
+            if state.driver_id not in {leader.driver_id, follower.driver_id}:
+                state.retired = True
+        leader.position = 1
+        follower.position = 2
+        engine._tick_phase = TickPhase.RULES
+        expected_live_gap, anchored = engine._live_timing_gap_seconds_between(
+            leader,
+            follower,
+        )
+        engine._update_gaps()
+        tick = engine.build_tick_state()
+        follower_tick = next(
+            position for position in tick.positions
+            if position.driver_id == follower.driver_id
+        )
+        self.assertTrue(follower_tick.timing_gap_valid)
+        self.assertTrue(follower_tick.interval_timing_gap_valid)
+        self.assertEqual(follower_tick.timing_gap_source, "live")
+        self.assertEqual(follower_tick.interval_timing_gap_source, "live")
+        self.assertTrue(anchored)
+        self.assertIsNotNone(expected_live_gap)
+        self.assertAlmostEqual(
+            follower_tick.gap_seconds or 0.0,
+            expected_live_gap or 0.0,
+            places=3,
+        )
 
-    def test_completed_lap_contains_three_sector_and_eighteen_mini_times(self) -> None:
+    def test_reversed_latest_timing_crossing_does_not_collapse_gap_to_zero(self) -> None:
+        engine = _make_engine_for_circuit(3, seed=99)
+        leader = engine.driver_states[1]
+        follower = engine.driver_states[5]
+        for state in engine.driver_states.values():
+            if state.driver_id not in {leader.driver_id, follower.driver_id}:
+                state.retired = True
+        leader.position = 1
+        follower.position = 2
+        engine._set_state_total_progress(leader, 1.20)
+        engine._set_state_total_progress(follower, 1.18)
+        leader.speed_kph = 190.0
+        follower.speed_kph = 205.0
+        loop_index = engine._timing_loops[2].index
+        # This is a stale pre-pass ordering: the current leader crossed later.
+        engine._timing_crossings[leader.driver_id][(1, loop_index)] = 11.0
+        engine._timing_crossings[follower.driver_id][(1, loop_index)] = 10.0
+
+        self.assertIsNone(engine._timing_gap_seconds_between(leader, follower))
+        engine._tick_phase = TickPhase.RULES
+        engine._update_gaps()
+        follower_tick = next(
+            item for item in engine.build_tick_state().positions
+            if item.driver_id == follower.driver_id
+        )
+
+        self.assertGreater(follower_tick.gap_seconds or 0.0, 0.001)
+        self.assertGreater(follower_tick.interval_seconds or 0.0, 0.001)
+        self.assertNotEqual(follower_tick.gap, "+0.000")
+        self.assertNotEqual(follower_tick.interval, "+0.000")
+        self.assertFalse(follower_tick.timing_gap_valid)
+        self.assertFalse(follower_tick.interval_timing_gap_valid)
+        self.assertEqual(follower_tick.timing_gap_source, "estimated")
+        self.assertEqual(follower_tick.interval_timing_gap_source, "estimated")
+
+    def test_live_gap_changes_between_timing_loop_crossings(self) -> None:
+        engine = _make_engine_for_circuit(3, seed=99)
+        leader = engine.driver_states[1]
+        follower = engine.driver_states[5]
+        for state in engine.driver_states.values():
+            if state.driver_id not in {leader.driver_id, follower.driver_id}:
+                state.retired = True
+        leader.position = 1
+        follower.position = 2
+        loop_index = engine._timing_loops[2].index
+        engine._timing_crossings[leader.driver_id][(1, loop_index)] = 10.0
+        engine._timing_crossings[follower.driver_id][(1, loop_index)] = 11.5
+        engine._set_state_total_progress(leader, 1.20)
+        engine._set_state_total_progress(follower, 1.18)
+        leader.speed_kph = 190.0
+        follower.speed_kph = 210.0
+        engine._tick_phase = TickPhase.RULES
+
+        engine._update_gaps()
+        first_gap = follower.gap_to_leader
+        engine._set_state_total_progress(follower, 1.19)
+        follower.speed_kph = 230.0
+        engine._update_gaps()
+        second_gap = follower.gap_to_leader
+        follower_tick = next(
+            item for item in engine.build_tick_state().positions
+            if item.driver_id == follower.driver_id
+        )
+
+        self.assertNotAlmostEqual(first_gap, second_gap, places=3)
+        self.assertTrue(follower_tick.timing_gap_valid)
+        self.assertEqual(follower_tick.timing_gap_source, "live")
+
+    def test_live_mini_sector_splits_compare_overall_and_personal_best(self) -> None:
+        engine = _make_engine_for_circuit(3, seed=99)
+        leader = engine.driver_states[1]
+        follower = engine.driver_states[5]
+        for state in (leader, follower):
+            engine._timing_crossings[state.driver_id][(0, 0)] = 0.0
+        loop = engine._timing_loops[1]
+        previous = loop.progress - 0.005
+        current = loop.progress + 0.005
+        engine._record_timing_loop_crossings(
+            leader,
+            previous,
+            current,
+            10.0,
+            0.02,
+        )
+        engine._record_timing_loop_crossings(
+            follower,
+            previous,
+            current,
+            10.5,
+            0.02,
+        )
+
+        tick = engine.build_tick_state()
+        leader_tick = next(
+            position for position in tick.positions
+            if position.driver_id == leader.driver_id
+        )
+        follower_tick = next(
+            position for position in tick.positions
+            if position.driver_id == follower.driver_id
+        )
+
+        self.assertEqual(leader_tick.mini_sector_statuses[0], "overall_best")
+        self.assertEqual(follower_tick.mini_sector_statuses[0], "personal_best")
+        self.assertAlmostEqual(
+            follower_tick.last_mini_sector_delta_to_best or 0.0,
+            0.5,
+            places=3,
+        )
+
+    def test_completed_lap_contains_three_sector_and_twenty_seven_mini_times(self) -> None:
         engine = _make_engine_for_circuit(3, seed=99)
         driver_id = 1
         crossings = engine._timing_crossings[driver_id]
@@ -2091,8 +2258,61 @@ class RaceEngineTests(unittest.TestCase):
 
         sectors, minis = engine._lap_split_times(driver_id, lap=1)
 
-        self.assertEqual(sectors, [12.0, 12.0, 12.0])
-        self.assertEqual(minis, [2.0] * 18)
+        self.assertEqual(sectors, [18.0, 24.0, 12.0])
+        self.assertEqual(minis, [2.0] * 27)
+
+    def test_compact_dashboard_and_timing_match_full_tick_fields(self) -> None:
+        engine = _make_engine_for_circuit(3, seed=99)
+        runtime_metrics = {
+            "broadcast_hz": 30,
+            "effective_speed_multiplier": 1.75,
+            "simulation_backlog_seconds": 0.0123,
+            "broadcast_jitter_ms": 4.56,
+        }
+        full = engine.build_tick_state(
+            runtime_metrics=runtime_metrics,
+        ).model_dump()
+        dashboard = engine.build_dashboard_payload(runtime_metrics)
+        timing = engine.build_timing_payload()
+
+        for field, value in dashboard.items():
+            if field in {"type", "positions"}:
+                continue
+            self.assertEqual(value, full[field], field)
+
+        full_by_driver = {
+            position["driver_id"]: position
+            for position in full["positions"]
+        }
+        for position in dashboard["positions"]:
+            expected = full_by_driver[position["driver_id"]]
+            for field, value in position.items():
+                self.assertEqual(value, expected[field], field)
+        for position in timing["positions"]:
+            expected = full_by_driver[position["driver_id"]]
+            for field, value in position.items():
+                self.assertEqual(value, expected[field], field)
+
+    def test_raw_timing_crossings_are_bounded_after_lap_summary(self) -> None:
+        engine = _make_engine_for_circuit(3, seed=99)
+        driver_id = 1
+        crossings = engine._timing_crossings[driver_id]
+        for lap_index in range(12):
+            for loop in engine._timing_loops:
+                crossings[(lap_index, loop.index)] = float(
+                    lap_index * 100 + loop.index,
+                )
+
+        engine._prune_timing_crossings(driver_id, completed_lap=11)
+
+        self.assertEqual(
+            min(lap_index for lap_index, _ in crossings),
+            11 - TIMING_CROSSING_LAPS_TO_RETAIN,
+        )
+        self.assertLessEqual(
+            len(crossings),
+            (TIMING_CROSSING_LAPS_TO_RETAIN + 1) * len(engine._timing_loops),
+        )
 
     def test_grid_uses_distance_offset_at_lights_out(self) -> None:
         engine = _make_engine()
@@ -2396,6 +2616,19 @@ class RaceEngineTests(unittest.TestCase):
         )
         self.assertEqual(engine.race_phase, "sc")
         self.assertTrue(any(e.type == "retirement" for e in events))
+
+    def test_development_retirement_uses_real_hazard_and_sc_lifecycle(self) -> None:
+        engine = _make_engine()
+        target = next(iter(engine.driver_states))
+
+        events = engine.retire_driver_for_testing(target)
+
+        state = engine.driver_states[target]
+        self.assertTrue(state.retired)
+        self.assertTrue(state.hazard_active)
+        self.assertEqual(state.vehicle_status, "stopped_on_track")
+        self.assertEqual(engine.race_phase, "sc")
+        self.assertTrue(any(event.type == "retirement" for event in events))
 
     def test_driver_selects_clear_side_and_brakes_for_stopped_hazard(self) -> None:
         engine = _make_engine_for_circuit(3)
@@ -2968,6 +3201,7 @@ class RaceEngineTests(unittest.TestCase):
         engine._safety_car_progress_rate = 1.0 / (
             engine.circuit.base_lap_time * 1.8
         )
+        engine._safety_car_speed_mps = leader.speed_kph / 3.6
 
         following = engine._safety_car_following_constraint(
             leader,
@@ -2991,6 +3225,152 @@ class RaceEngineTests(unittest.TestCase):
             modifiers.maximum_speed_mps,
             SC_CAUGHT_MAX_SPEED_KPH / 3.6,
         )
+
+    def test_uncaught_leader_brakes_predictively_before_joining_sc(self) -> None:
+        engine = _make_engine()
+        engine._trigger_safety_car([])
+        leader = min(engine.driver_states.values(), key=lambda state: state.position)
+        engine.safety_car_stage = "collecting"
+        engine._safety_car_route = "track"
+        engine._safety_car_speed_mps = 80.0 / 3.6
+        engine._safety_car_progress_rate = (
+            engine._safety_car_speed_mps / engine.track_length_m
+        )
+        engine._safety_car_total_progress = (
+            leader.total_progress + 700.0 / engine.track_length_m
+        )
+        leader.speed_kph = 300.0
+
+        following = engine._safety_car_following_constraint(
+            leader,
+            None,
+            DRIVING_LINE_RACING,
+            GAME_TICK_SECONDS,
+        )
+        speed_cap = engine._race_control_speed_cap_mps(leader)
+
+        self.assertNotIn(leader.driver_id, engine._sc_caught_driver_ids)
+        self.assertIsNotNone(following)
+        assert following is not None
+        self.assertAlmostEqual(
+            following.desired_gap_m,
+            SC_CAR_LENGTH_M * SC_QUEUE_TARGET_CAR_LENGTHS,
+        )
+        self.assertIsNotNone(speed_cap)
+        assert speed_cap is not None
+        self.assertGreater(speed_cap, SC_NEAR_QUEUE_MAX_SPEED_KPH / 3.6)
+        self.assertLess(speed_cap, leader.speed_kph / 3.6)
+
+    def test_sc_queue_join_waits_for_safe_relative_speed(self) -> None:
+        engine = _make_engine()
+        engine._trigger_safety_car([])
+        leader = min(engine.driver_states.values(), key=lambda state: state.position)
+        engine.safety_car_stage = "collecting"
+        engine._safety_car_speed_mps = 80.0 / 3.6
+        engine._safety_car_total_progress = (
+            leader.total_progress + 40.0 / engine.track_length_m
+        )
+        leader.speed_kph = 200.0
+
+        engine._sync_safety_car_queue([])
+        self.assertNotIn(leader.driver_id, engine._sc_caught_driver_ids)
+
+        leader.speed_kph = 79.5 + SC_QUEUE_JOIN_MAX_RELATIVE_SPEED_KPH
+        engine._sync_safety_car_queue([])
+        self.assertIn(leader.driver_id, engine._sc_caught_driver_ids)
+
+    def test_caught_sc_queue_car_matches_predecessor_at_target_gap(self) -> None:
+        engine = _make_engine()
+        engine._trigger_safety_car([])
+        leader, follower = sorted(
+            engine.driver_states.values(),
+            key=lambda state: state.position,
+        )[:2]
+        for state in engine.driver_states.values():
+            if state.driver_id not in {leader.driver_id, follower.driver_id}:
+                state.retired = True
+        engine.safety_car_stage = "queued"
+        engine._sc_caught_driver_ids.update({leader.driver_id, follower.driver_id})
+        engine._set_state_total_progress(leader, 1.2)
+        engine._set_state_total_progress(
+            follower,
+            leader.total_progress
+            - SC_CAR_LENGTH_M
+            * SC_QUEUE_TARGET_CAR_LENGTHS
+            / engine.track_length_m,
+        )
+        leader.speed_kph = 100.0
+        follower.speed_kph = 160.0
+        snapshot = {
+            leader.driver_id: (leader.total_progress, leader.speed_kph / 3.6),
+            follower.driver_id: (follower.total_progress, follower.speed_kph / 3.6),
+        }
+
+        following = engine._physics_v2_following_constraint(
+            follower,
+            leader,
+            snapshot,
+            DRIVING_LINE_RACING,
+            GAME_TICK_SECONDS,
+        )
+        speed_cap = engine._race_control_speed_cap_mps(follower)
+
+        self.assertIsNotNone(following)
+        assert following is not None
+        self.assertAlmostEqual(
+            following.desired_gap_m,
+            SC_CAR_LENGTH_M * SC_QUEUE_TARGET_CAR_LENGTHS,
+        )
+        self.assertIsNotNone(speed_cap)
+        assert speed_cap is not None
+        self.assertLessEqual(speed_cap, leader.speed_kph / 3.6 + 1e-6)
+
+    def test_sc_queue_speed_control_propagates_to_rear_field(self) -> None:
+        engine = _make_engine()
+        engine._trigger_safety_car([])
+        leader, middle, rear, distant = sorted(
+            engine.driver_states.values(),
+            key=lambda state: state.position,
+        )[:4]
+        for state in engine.driver_states.values():
+            if state.driver_id not in {
+                leader.driver_id,
+                middle.driver_id,
+                rear.driver_id,
+                distant.driver_id,
+            }:
+                state.retired = True
+        engine.safety_car_stage = "collecting"
+        engine._safety_car_speed_mps = 80.0 / 3.6
+        engine._set_state_total_progress(leader, 1.2)
+        engine._set_state_total_progress(
+            middle,
+            leader.total_progress - 100.0 / engine.track_length_m,
+        )
+        engine._set_state_total_progress(
+            rear,
+            middle.total_progress - 100.0 / engine.track_length_m,
+        )
+        engine._set_state_total_progress(
+            distant,
+            rear.total_progress - 500.0 / engine.track_length_m,
+        )
+        engine._safety_car_total_progress = (
+            leader.total_progress + 35.0 / engine.track_length_m
+        )
+        engine._sc_caught_driver_ids.add(leader.driver_id)
+        leader.speed_kph = 80.0
+        middle.speed_kph = 180.0
+        rear.speed_kph = 300.0
+        distant.speed_kph = 300.0
+
+        self.assertTrue(engine._sc_queue_control_reaches(middle))
+        self.assertTrue(engine._sc_queue_control_reaches(rear))
+        self.assertFalse(engine._sc_queue_control_reaches(distant))
+        rear_cap = engine._race_control_speed_cap_mps(rear)
+        self.assertIsNotNone(rear_cap)
+        assert rear_cap is not None
+        self.assertLess(rear_cap, rear.speed_kph / 3.6)
 
     def test_safety_car_queue_does_not_catch_car_ahead_of_sc(self) -> None:
         engine = _make_engine()
@@ -3035,33 +3415,142 @@ class RaceEngineTests(unittest.TestCase):
         ]
         self.assertEqual(order_at_deploy, order_under_sc)
 
-    def test_safety_car_pit_lane_distance_updates_order_without_track_overtakes(self) -> None:
+    def test_safety_car_pit_exit_order_is_provisional_until_sc2_then_committed(self) -> None:
         engine = _make_engine_for_circuit(3)
         engine._trigger_safety_car([])
 
         ordered = sorted(engine.driver_states.values(), key=lambda state: state.position)
         pitting_car = ordered[0]
         next_on_track = ordered[1]
-        frozen_on_track_order = [state.driver_id for state in ordered[1:]]
+        third_on_track = ordered[2]
+        for state in ordered[3:]:
+            state.retired = True
+        sc2 = engine._safety_car_line_2_progress()
+        self.assertIsNotNone(sc2)
+        assert sc2 is not None
 
+        engine._remove_from_sc_running_order(pitting_car.driver_id)
         pitting_car.in_pit = True
-        pitting_car.total_progress = next_on_track.total_progress - 0.001
+        engine._set_state_total_progress(next_on_track, 1.0 + sc2 - 0.004)
+        engine._set_state_total_progress(third_on_track, 1.0 + sc2 - 0.008)
+        engine._set_state_total_progress(pitting_car, 1.0 + sc2 - 0.006)
         engine._update_positions()
 
         self.assertLess(next_on_track.position, pitting_car.position)
+        self.assertLess(pitting_car.position, third_on_track.position)
+
+        pitting_car.in_pit = False
+        engine._set_state_total_progress(pitting_car, 1.0 + sc2 - 0.001)
+        engine._begin_sc_pit_exit_ordering(pitting_car)
+        engine._update_positions()
+
+        self.assertEqual(pitting_car.position, 1)
+        self.assertIn(pitting_car.driver_id, engine._sc_pit_exit_order_targets)
+        self.assertNotIn(pitting_car.driver_id, engine._sc_running_order)
+
+        engine._set_state_total_progress(pitting_car, 1.0 + sc2 + 0.0001)
+        engine._update_positions()
+
+        self.assertNotIn(pitting_car.driver_id, engine._sc_pit_exit_order_targets)
         self.assertEqual(
-            frozen_on_track_order,
+            engine._sc_running_order,
             [
-                state.driver_id
-                for state in sorted(engine.driver_states.values(), key=lambda state: state.position)
-                if state is not pitting_car
+                pitting_car.driver_id,
+                next_on_track.driver_id,
+                third_on_track.driver_id,
             ],
         )
+        self.assertEqual(
+            engine._sc_queue_predecessor(next_on_track),
+            pitting_car,
+        )
 
-        position_at_pit_exit = pitting_car.position
+    def test_safety_car_pit_exit_behind_at_sc2_loses_place_and_order_stays_frozen(
+        self,
+    ) -> None:
+        engine = _make_engine_for_circuit(3)
+        engine._trigger_safety_car([])
+
+        ordered = sorted(engine.driver_states.values(), key=lambda state: state.position)
+        pitting_car = ordered[0]
+        next_on_track = ordered[1]
+        third_on_track = ordered[2]
+        for state in ordered[3:]:
+            state.retired = True
+        sc2 = engine._safety_car_line_2_progress()
+        self.assertIsNotNone(sc2)
+        assert sc2 is not None
+
+        engine._remove_from_sc_running_order(pitting_car.driver_id)
         pitting_car.in_pit = False
+        engine._set_state_total_progress(next_on_track, 1.0 + sc2 + 0.003)
+        engine._set_state_total_progress(pitting_car, 1.0 + sc2 + 0.001)
+        engine._set_state_total_progress(third_on_track, 1.0 + sc2 - 0.003)
+        engine._begin_sc_pit_exit_ordering(pitting_car)
         engine._update_positions()
-        self.assertEqual(pitting_car.position, position_at_pit_exit)
+
+        committed_order = [
+            next_on_track.driver_id,
+            pitting_car.driver_id,
+            third_on_track.driver_id,
+        ]
+        self.assertEqual(engine._sc_running_order, committed_order)
+        self.assertEqual(pitting_car.position, 2)
+
+        # A later numerical crossing cannot become an on-track pass under SC.
+        engine._set_state_total_progress(
+            pitting_car,
+            next_on_track.total_progress + 0.002,
+        )
+        engine._update_positions()
+
+        self.assertEqual(engine._sc_running_order, committed_order)
+        self.assertEqual(next_on_track.position, 1)
+        self.assertEqual(pitting_car.position, 2)
+
+    def test_safety_car_commits_two_pit_out_cars_in_physical_sc2_order(self) -> None:
+        engine = _make_engine_for_circuit(3)
+        engine._trigger_safety_car([])
+
+        ordered = sorted(engine.driver_states.values(), key=lambda state: state.position)
+        pit_out_a, pit_out_b, track_a, track_b = ordered[:4]
+        for state in ordered[4:]:
+            state.retired = True
+        sc2 = engine._safety_car_line_2_progress()
+        self.assertIsNotNone(sc2)
+        assert sc2 is not None
+
+        for state in (pit_out_a, pit_out_b):
+            engine._remove_from_sc_running_order(state.driver_id)
+            state.in_pit = False
+        engine._set_state_total_progress(track_a, 1.0 + sc2 + 0.004)
+        engine._set_state_total_progress(pit_out_a, 1.0 + sc2 + 0.003)
+        engine._set_state_total_progress(pit_out_b, 1.0 + sc2 + 0.002)
+        engine._set_state_total_progress(track_b, 1.0 + sc2 + 0.001)
+        engine._begin_sc_pit_exit_ordering(pit_out_a)
+        engine._begin_sc_pit_exit_ordering(pit_out_b)
+
+        engine._update_positions()
+
+        expected = [
+            track_a.driver_id,
+            pit_out_a.driver_id,
+            pit_out_b.driver_id,
+            track_b.driver_id,
+        ]
+        self.assertEqual(engine._sc_running_order, expected)
+        self.assertEqual(
+            [
+                state.driver_id
+                for state in sorted(
+                    (track_a, pit_out_a, pit_out_b, track_b),
+                    key=lambda state: state.position,
+                )
+            ],
+            expected,
+        )
+        self.assertEqual(engine._sc_queue_predecessor(pit_out_b), pit_out_a)
+        self.assertEqual(engine._sc_queue_predecessor(track_b), pit_out_b)
 
     def test_safety_car_progress_does_not_jump_back_when_leader_pits(self) -> None:
         engine = _make_engine_for_circuit(3)
@@ -3290,6 +3779,100 @@ class RaceEngineTests(unittest.TestCase):
         # 세이프티카 구간에서는 같은 시간 동안 전진량이 평상시보다 작다.
         self.assertLess(sc_advance, green_leader)
 
+    def test_sc_catch_up_never_raises_physical_corner_target_above_green(self) -> None:
+        engine = _make_engine_for_circuit(3)
+        state = engine.driver_states[1]
+        for other in engine.driver_states.values():
+            if other.driver_id != state.driver_id:
+                other.retired = True
+        engine._set_state_total_progress(state, 1.128)
+        track_profile = engine._track_physics_for_driver(state)
+        physics = engine._vehicle_physics_for_driver(state)[DRIVING_LINE_RACING]
+        distance_m = track_profile.line_distance_at_total_progress(
+            DRIVING_LINE_RACING,
+            state.total_progress,
+        )
+        green_target_mps = physics.target_speed_mps(
+            distance_m,
+            engine._physics_v2_modifiers(state),
+        )
+
+        engine._trigger_safety_car([])
+        engine.safety_car_stage = "collecting"
+        engine._safety_car_total_progress = state.total_progress + 0.5
+        engine._sc_caught_driver_ids.clear()
+        self.assertLess(engine._phase_lap_time_factor(state), 1.0)
+        sc_modifiers = engine._physics_v2_modifiers(state)
+        sc_target_mps = physics.target_speed_mps(distance_m, sc_modifiers)
+
+        self.assertEqual(sc_modifiers.speed_limit_factor, 1.0)
+        self.assertLessEqual(sc_target_mps, green_target_mps + 1e-9)
+
+    def test_safety_car_activation_clears_drs_and_wake_physics(self) -> None:
+        engine = _make_engine_for_circuit(3)
+        leader = engine.driver_states[1]
+        chaser = engine.driver_states[2]
+        corner_progress = max(
+            engine._track_physics.samples,
+            key=lambda sample: abs(sample.turn_signal),
+        ).progress
+        engine._set_state_total_progress(chaser, 1.0 + corner_progress)
+        engine._set_state_total_progress(
+            leader,
+            chaser.total_progress + 30.0 / engine.track_length_m,
+        )
+        chaser.speed_kph = 280.0
+        leader.speed_kph = 280.0
+        leader.lateral_offset_m = chaser.lateral_offset_m
+
+        engine._update_wake_state(chaser, leader)
+        self.assertTrue(chaser.dirty_air_active)
+        self.assertLess(chaser.wake_downforce_multiplier, 1.0)
+
+        engine._trigger_safety_car([])
+
+        for state in engine.driver_states.values():
+            self.assertFalse(state.drs_active)
+            self.assertFalse(state.dirty_air_active)
+            self.assertEqual(state.wake_strength, 0.0)
+            self.assertEqual(state.wake_drag_multiplier, 1.0)
+            self.assertEqual(state.wake_downforce_multiplier, 1.0)
+            self.assertEqual(state.wake_braking_grip_multiplier, 1.0)
+            self.assertEqual(state.wake_lateral_grip_multiplier, 1.0)
+
+    def test_bahrain_sc_catch_up_does_not_run_wide_or_leave_track(self) -> None:
+        engine = _make_engine_for_circuit(3)
+        state = engine.driver_states[1]
+        for other in engine.driver_states.values():
+            if other.driver_id != state.driver_id:
+                other.retired = True
+        engine._update_positions()
+        engine._trigger_safety_car([])
+        engine.safety_car_stage = "collecting"
+        engine._safety_car_visible = True
+        engine._safety_car_route = "track"
+        engine._sc_cleanup_until = 1.0e9
+
+        run_wide_samples = 0
+        off_track_samples = 0
+        lockup_events = 0
+        for _ in range(600):
+            engine.safety_car_stage = "collecting"
+            engine._sc_caught_driver_ids.clear()
+            engine._safety_car_total_progress = state.total_progress + 0.5
+            engine._safety_car_speed_mps = 100.0 / 3.6
+            engine._safety_car_progress_rate = (
+                engine._safety_car_speed_mps / engine.track_length_m
+            )
+            events = engine.tick(GAME_TICK_SECONDS)
+            run_wide_samples += int(state.handling_state == "run_wide")
+            off_track_samples += int(state.off_track)
+            lockup_events += sum(event.type == "lockup" for event in events)
+
+        self.assertEqual(run_wide_samples, 0)
+        self.assertEqual(off_track_samples, 0)
+        self.assertEqual(lockup_events, 0)
+
     def test_grid_start_delay_eventually_launches_full_field(self) -> None:
         engine = _make_engine()
 
@@ -3328,7 +3911,10 @@ class RaceEngineTests(unittest.TestCase):
         )
         completed_lap = engine._lap_history[state.driver_id][0]
         self.assertEqual(len(completed_lap.sector_times), 3)
-        self.assertEqual(len(completed_lap.mini_sector_times), 18)
+        self.assertEqual(
+            len(completed_lap.mini_sector_times),
+            len(engine._timing_loops),
+        )
         self.assertAlmostEqual(
             sum(completed_lap.sector_times),
             completed_lap.lap_time,
@@ -3351,6 +3937,8 @@ class RaceEngineTests(unittest.TestCase):
         self.assertEqual(position.lap_history[0].stint, 1)
         self.assertEqual(position.lap_history[0].tire_compound, state.tire_compound.value)
         self.assertAlmostEqual(position.lap_history[0].lap_time, state.last_lap_time, places=3)
+        self.assertEqual(len(position.mini_sector_splits), len(engine._timing_loops))
+        self.assertEqual(len(position.mini_sector_statuses), len(engine._timing_loops))
 
     def test_pit_resets_tire_age(self) -> None:
         engine = _make_engine()
@@ -3630,7 +4218,7 @@ class RaceEngineTests(unittest.TestCase):
         self.assertEqual(driver.progress_rate, 0.0)
         self.assertGreater(driver.pit_lane_progress_rate, 0.0)
 
-    def test_pit_brakes_to_sixty_at_limit_line_then_accelerates_after_release(self) -> None:
+    def test_pit_brakes_to_configured_limit_then_accelerates_after_release(self) -> None:
         engine = _make_engine_for_circuit(3)
         driver_id = 1
         state = engine.driver_states[driver_id]
@@ -3687,6 +4275,91 @@ class RaceEngineTests(unittest.TestCase):
         self.assertAlmostEqual(state.speed_kph, PIT_LANE_SPEED_LIMIT_KPH, places=6)
         engine.tick(GAME_TICK_SECONDS)
         self.assertGreater(state.speed_kph, PIT_LANE_SPEED_LIMIT_KPH)
+
+    def test_bahrain_assigns_one_ordered_pit_box_per_team(self) -> None:
+        engine = _make_engine_for_circuit(3)
+        route_length_m = engine._pit_route_length_m()
+        boxes_by_team: dict[int, set[float]] = {}
+        for driver in engine.drivers.values():
+            boxes_by_team.setdefault(driver.team_id, set()).add(
+                engine._pit_box_progress_for_driver(driver.id)
+            )
+
+        self.assertEqual(len(boxes_by_team), 10)
+        self.assertTrue(all(len(progresses) == 1 for progresses in boxes_by_team.values()))
+        ordered = [next(iter(boxes_by_team[team_id])) for team_id in sorted(boxes_by_team)]
+        self.assertEqual(ordered, sorted(ordered))
+        for first, second in zip(ordered, ordered[1:]):
+            self.assertAlmostEqual(
+                (second - first) * route_length_m,
+                16.0,
+                places=6,
+            )
+
+    def test_pit_car_stops_at_its_team_garage_front(self) -> None:
+        engine = _make_engine_for_circuit(3)
+        driver_id = 1
+        state = engine.driver_states[driver_id]
+        for other in engine.driver_states.values():
+            if other.driver_id != driver_id:
+                other.retired = True
+        pit_lane = engine.circuit.pit_lane
+        self.assertIsNotNone(pit_lane)
+        assert pit_lane is not None
+        entry = pit_lane.entry_progress
+        self.assertIsNotNone(entry)
+        assert entry is not None
+
+        state.pit_request = TireCompound.HARD
+        state.progress = entry - 0.001
+        state.total_progress = state.current_lap + state.progress
+        engine.tick(GAME_TICK_SECONDS)
+        while state.in_pit and engine._pit_phase[driver_id] != "stop":
+            engine.tick(PHYSICS_STEP_SECONDS)
+
+        assigned = engine._pit_box_progress_for_driver(driver_id)
+        self.assertAlmostEqual(engine._pit_lane_progress(driver_id), assigned, places=9)
+        base_x, base_y, base_heading = engine._pit_lane_pose_at_progress_m(assigned)
+        lateral_displacement_m = (
+            (state.world_x_m - base_x) * -sin(base_heading)
+            + (state.world_y_m - base_y) * cos(base_heading)
+        )
+        self.assertAlmostEqual(
+            lateral_displacement_m,
+            pit_lane.box_offset,
+            delta=0.05,
+        )
+        tick_driver = next(
+            item
+            for item in engine.build_tick_state().positions
+            if item.driver_id == driver_id
+        )
+        self.assertAlmostEqual(tick_driver.pit_box_progress, assigned, places=7)
+
+    def test_bahrain_compact_eighty_kph_pit_zone_keeps_continuous_transit(self) -> None:
+        engine = _make_engine_for_circuit(3)
+        driver_id = 1
+        state = engine.driver_states[driver_id]
+        for other in engine.driver_states.values():
+            if other.driver_id != driver_id:
+                other.retired = True
+        pit_lane = engine.circuit.pit_lane
+        self.assertIsNotNone(pit_lane)
+        assert pit_lane is not None and pit_lane.entry_progress is not None
+        self.assertEqual(pit_lane.speed_limit_kph, 80.0)
+        self.assertEqual(pit_lane.speed_limit_start, 0.30)
+        self.assertEqual(pit_lane.speed_limit_end, 0.70)
+
+        state.pit_request = TireCompound.HARD
+        state.progress = pit_lane.entry_progress - 0.001
+        state.total_progress = state.current_lap + state.progress
+        engine.tick(GAME_TICK_SECONDS)
+        elapsed = 0.0
+        while state.in_pit:
+            engine.tick(PHYSICS_STEP_SECONDS)
+            elapsed += PHYSICS_STEP_SECONDS
+
+        self.assertAlmostEqual(elapsed, 28.78, delta=0.10)
 
     def test_pit_rejoin_rule_yields_holds_then_merges_when_occupancy_clears(self) -> None:
         drivers = load_drivers()[:3]
@@ -3826,19 +4499,19 @@ class RaceEngineTests(unittest.TestCase):
     def test_speed_multiplier_affects_progress(self) -> None:
         engine_slow = _make_engine(seed=99)
         engine_fast = _make_engine(seed=99)
-        engine_fast.set_speed(3)
+        engine_fast.set_speed(2)
         engine_slow.tick(GAME_TICK_SECONDS)
-        engine_fast.tick(GAME_TICK_SECONDS * 3)
+        engine_fast.tick(GAME_TICK_SECONDS * 2)
         slow_progress = engine_slow.driver_states[1].total_progress
         fast_progress = engine_fast.driver_states[1].total_progress
         self.assertGreater(fast_progress, slow_progress)
 
     def test_speed_multiplier_rejects_unsupported_values(self) -> None:
         engine = _make_engine(seed=99)
-        self.assertFalse(engine.set_speed(5))
+        self.assertFalse(engine.set_speed(3))
         self.assertEqual(engine.speed_multiplier, 1)
-        self.assertTrue(engine.set_speed(3))
-        self.assertEqual(engine.speed_multiplier, 3)
+        self.assertTrue(engine.set_speed(2))
+        self.assertEqual(engine.speed_multiplier, 2)
 
     def test_player_starting_tires_are_applied(self) -> None:
         engine = _make_engine_with_starting_tires({
@@ -4667,7 +5340,11 @@ class RaceEngineTests(unittest.TestCase):
             if "pass" in event_types:
                 break
 
-        self.assertIn("side_by_side", event_types)
+        # The predictive following controller may correctly make an identical
+        # car abandon the attempt before its front axle reaches overlap.  The
+        # maneuver must still produce a tactical intent and a resolved outcome
+        # without inventing a side-by-side state.
+        self.assertTrue({"attack", "defend"} & set(event_types))
         self.assertTrue({"pass", "overtake_abort"} & set(event_types))
         if pass_events:
             self.assertEqual(len(pass_events), 1)
@@ -5121,6 +5798,40 @@ class RaceEngineTests(unittest.TestCase):
         self.assertEqual(events, [])
         self.assertFalse(first.contact_active)
         self.assertFalse(second.contact_active)
+
+    def test_static_side_overlap_separates_without_artificial_lateral_kick(self) -> None:
+        engine = _make_engine_for_circuit(4, seed=99)
+        first, second = sorted(
+            engine.driver_states.values(),
+            key=lambda state: state.position,
+        )[:2]
+        for state in engine.driver_states.values():
+            if state.driver_id not in {first.driver_id, second.driver_id}:
+                state.retired = True
+        for state in (first, second):
+            engine._set_state_total_progress(state, 1.2)
+            state.speed_kph = 200.0
+            state.lateral_speed_mps = 0.0
+            state.slip_angle_rad = 0.0
+        first.lateral_offset_m = 0.0
+        second.lateral_offset_m = first.car_width_m - 0.08
+        start = {
+            first.driver_id: engine._body_pose(first),
+            second.driver_id: engine._body_pose(second),
+        }
+
+        events = engine._resolve_vehicle_collisions(start, 0.1)
+
+        self.assertEqual([event.type for event in events], ["minor_contact"])
+        self.assertAlmostEqual(first.lateral_speed_mps, 0.0, places=6)
+        self.assertAlmostEqual(second.lateral_speed_mps, 0.0, places=6)
+        self.assertAlmostEqual(first.slip_angle_rad, 0.0, places=6)
+        self.assertAlmostEqual(second.slip_angle_rad, 0.0, places=6)
+        overlap = oriented_body_overlap(
+            engine._body_pose(first),
+            engine._body_pose(second),
+        )
+        self.assertTrue(overlap is None or overlap[0] <= 0.003)
 
     def test_contact_pair_cooldown_prevents_duplicate_feed_event(self) -> None:
         engine = _make_engine_for_circuit(4, seed=99)
@@ -5588,7 +6299,11 @@ class RaceEngineTests(unittest.TestCase):
         self.assertGreater(battle.corner_prediction_minimum_clearance_m, 0.0)
         self.assertGreaterEqual(battle.corner_prediction_braking_margin_m, 0.0)
         self.assertEqual(battle.corner_prediction_rejection_reason, "")
-        self.assertEqual(battle.defender_line, ATTACK_LINE_OUTSIDE)
+        # Corner allocation is a corridor, not a second defensive move.  The
+        # defender retains the line selected before braking while the exposed
+        # corridor reports which car owns the outside.
+        self.assertEqual(battle.defender_line, DEFENDER_LINE_RACING)
+        self.assertTrue(battle.line_committed)
         targets = engine._corner_corridor_targets(battle, attacker.progress)
         assert targets is not None
         self.assertGreaterEqual(
@@ -5610,6 +6325,76 @@ class RaceEngineTests(unittest.TestCase):
         self.assertTrue(attacker_tick.maneuver_corner_active)
         self.assertEqual(attacker_tick.maneuver_corridor, "inside")
         self.assertEqual(defender_tick.maneuver_corridor, "outside")
+
+    def test_bahrain_t1_can_choose_outside_when_racing_line_is_occupied(self) -> None:
+        engine = _make_engine_for_circuit(3, seed=99)
+        defender, attacker = sorted(
+            engine.driver_states.values(),
+            key=lambda state: state.position,
+        )[:2]
+        engine._set_state_total_progress(attacker, 1.10)
+        engine._set_state_total_progress(
+            defender,
+            attacker.total_progress + 8.0 / engine.track_length_m,
+        )
+        defender.lateral_offset_m = engine._track_physics_for_driver(
+            defender
+        ).line_offset_at_progress(DRIVING_LINE_RACING, defender.progress)
+        defender.lateral_speed_mps = 0.0
+
+        self.assertEqual(
+            engine._choose_attack_line(attacker, defender),
+            ATTACK_LINE_OUTSIDE,
+        )
+
+    def test_corner_line_commitment_preserves_one_move_before_braking(self) -> None:
+        engine = _make_engine_for_circuit(3, seed=99)
+        defender, attacker = sorted(
+            engine.driver_states.values(),
+            key=lambda state: state.position,
+        )[:2]
+        engine._set_state_total_progress(attacker, 1.09)
+        engine._set_state_total_progress(
+            defender,
+            attacker.total_progress + 4.0 / engine.track_length_m,
+        )
+        attacker.speed_kph = defender.speed_kph = 270.0
+        defender.lateral_offset_m = -1.2
+        attacker.lateral_offset_m = 1.2
+        engine._start_side_by_side_battle(
+            attacker.driver_id,
+            defender.driver_id,
+            ATTACK_LINE_INSIDE,
+            DEFENDER_LINE_RACING,
+            phase="overlap",
+        )
+        battle = engine._side_by_side_battle_for_driver(attacker.driver_id)
+        assert battle is not None
+
+        engine._commit_maneuver_lines_before_braking(battle)
+
+        self.assertTrue(battle.line_committed)
+        committed_bias_m = battle.attacker_committed_lateral_bias_m
+        engine._set_state_total_progress(
+            attacker,
+            attacker.total_progress + 10.0 / engine.track_length_m,
+        )
+        defender.lateral_offset_m = 3.0
+        expected_target_m = (
+            engine._track_physics_for_driver(attacker).line_offset_at_progress(
+                DRIVING_LINE_RACING,
+                attacker.progress,
+            )
+            + committed_bias_m
+        )
+        target_m = engine._physics_v2_target_lateral_offset(
+            attacker,
+            engine._track_physics.at_progress(attacker.progress),
+            DRIVING_LINE_RACING,
+            defender,
+            None,
+        )
+        self.assertAlmostEqual(target_m, expected_target_m, places=6)
 
     def test_corner_rejects_attack_without_required_longitudinal_overlap(self) -> None:
         engine = _make_engine_for_circuit(4, seed=99)
@@ -5642,8 +6427,99 @@ class RaceEngineTests(unittest.TestCase):
         events = engine._tick_side_by_side_battles(GAME_TICK_SECONDS)
 
         self.assertFalse(battle.corner_authorized)
-        self.assertEqual(battle.phase, "abort")
+        self.assertEqual(battle.phase, "yield")
         self.assertEqual([event.type for event in events], ["overtake_abort"])
+
+    def test_rejected_corner_holds_corridor_then_smoothly_rejoins(self) -> None:
+        engine = _make_engine_for_circuit(4, seed=99)
+        defender, attacker = sorted(
+            engine.driver_states.values(),
+            key=lambda state: state.position,
+        )[:2]
+        corner = max(
+            engine._track_physics.samples,
+            key=lambda sample: abs(sample.turn_signal),
+        )
+        defender_total = 1.0 + corner.progress
+        engine._set_state_total_progress(defender, defender_total)
+        engine._set_state_total_progress(
+            attacker,
+            defender_total - 5.9 / engine.track_length_m,
+        )
+        attacker.lateral_offset_m = 1.15
+        defender.lateral_offset_m = -1.15
+        attacker.brake = 0.5
+        engine._start_side_by_side_battle(
+            attacker.driver_id,
+            defender.driver_id,
+            ATTACK_LINE_INSIDE,
+            DEFENDER_LINE_RACING,
+            phase="overlap",
+        )
+        battle = engine._side_by_side_battle_for_driver(attacker.driver_id)
+        assert battle is not None
+        battle.corner_entry_candidate = True
+
+        engine._tick_side_by_side_battles(GAME_TICK_SECONDS)
+
+        self.assertEqual(battle.phase, "yield")
+        track_sample = engine._track_physics.at_progress(attacker.progress)
+        held_target_m = engine._physics_v2_target_lateral_offset(
+            attacker,
+            track_sample,
+            DRIVING_LINE_RACING,
+            defender,
+            None,
+        )
+        self.assertAlmostEqual(held_target_m, 1.15, places=6)
+
+        full_rear_gap_m = PHYSICAL_CAR_LENGTH_M + 1.35
+        engine._set_state_total_progress(
+            attacker,
+            defender.total_progress - full_rear_gap_m / engine.track_length_m,
+        )
+        engine._tick_side_by_side_battles(0.2)
+        self.assertEqual(battle.phase, "abort")
+
+        rejoin_start_m = engine._physics_v2_target_lateral_offset(
+            attacker,
+            engine._track_physics.at_progress(attacker.progress),
+            DRIVING_LINE_RACING,
+            defender,
+            None,
+        )
+        self.assertAlmostEqual(rejoin_start_m, 1.15, places=6)
+        engine._tick_side_by_side_battles(GAME_TICK_SECONDS)
+        self.assertTrue(battle.abort_rejoin_started)
+        targets_m: list[float] = []
+        for step in range(64):
+            battle.abort_rejoin_elapsed_seconds = step * GAME_TICK_SECONDS
+            targets_m.append(
+                engine._physics_v2_target_lateral_offset(
+                    attacker,
+                    engine._track_physics.at_progress(attacker.progress),
+                    DRIVING_LINE_RACING,
+                    defender,
+                    None,
+                )
+            )
+
+        largest_target_step_m = max(
+            abs(current - previous)
+            for previous, current in zip(targets_m, targets_m[1:])
+        )
+        # The old direct overlap -> abort transition jumped by roughly 3.4 m
+        # in one tick at Bahrain T1.  Rejoin now moves the target progressively.
+        self.assertLess(largest_target_step_m, 0.25)
+        battle.abort_rejoin_elapsed_seconds = 2.0
+        settled_target_m = engine._physics_v2_target_lateral_offset(
+            attacker,
+            engine._track_physics.at_progress(attacker.progress),
+            DRIVING_LINE_RACING,
+            defender,
+            None,
+        )
+        self.assertAlmostEqual(targets_m[-1], settled_target_m, places=6)
 
     def test_corner_prediction_rejects_insufficient_braking_distance(self) -> None:
         engine = _make_engine_for_circuit(4, seed=99)
@@ -5686,7 +6562,7 @@ class RaceEngineTests(unittest.TestCase):
             "insufficient_braking",
         )
         self.assertLess(battle.corner_prediction_braking_margin_m, 0.0)
-        self.assertEqual(battle.phase, "abort")
+        self.assertEqual(battle.phase, "yield")
         self.assertEqual([event.type for event in events], ["overtake_abort"])
 
     def test_corner_prediction_rejects_overlapping_body_occupancy(self) -> None:
@@ -5726,7 +6602,7 @@ class RaceEngineTests(unittest.TestCase):
             battle.corner_prediction_rejection_reason,
             "predicted_collision",
         )
-        self.assertEqual(battle.phase, "abort")
+        self.assertEqual(battle.phase, "yield")
         self.assertEqual([event.type for event in events], ["overtake_abort"])
 
     def test_corner_battle_replans_local_paths_without_legacy_lines(self) -> None:

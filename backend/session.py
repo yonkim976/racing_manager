@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import os
+import struct
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -14,13 +16,15 @@ from models.schemas import (
     Circuit,
     Driver,
     PaceMode,
+    RaceEvent,
+    RaceEventsMessage,
     RaceInfoMessage,
     RaceSetupRequest,
     Team,
-    VehicleTrajectorySample,
 )
 from simulation.pit_stop import parse_tire_choice
-from simulation.race_engine import RaceEngine
+from simulation.race_engine import PIT_LANE_SPEED_LIMIT_KPH, RaceEngine
+from simulation.track_physics import clear_vehicle_track_physics_cache
 from simulation.vehicle_physics import PHYSICS_STEP_SECONDS
 from simulation.vehicle_dimensions import (
     PHYSICAL_CAR_LENGTH_M,
@@ -28,11 +32,119 @@ from simulation.vehicle_dimensions import (
     PHYSICAL_CAR_WHEELBASE_M,
 )
 
-BROADCAST_HZ = 30
-BROADCAST_INTERVAL = 1.0 / BROADCAST_HZ
+POSE_BROADCAST_HZ = 30
+POSE_BROADCAST_INTERVAL = 1.0 / POSE_BROADCAST_HZ
+DASHBOARD_BROADCAST_HZ = 4
+DASHBOARD_BROADCAST_INTERVAL = 1.0 / DASHBOARD_BROADCAST_HZ
+TIMING_BROADCAST_HZ = 1
+TIMING_BROADCAST_INTERVAL = 1.0 / TIMING_BROADCAST_HZ
+PAUSED_BROADCAST_HZ = 1
+PAUSED_BROADCAST_INTERVAL = 1.0 / PAUSED_BROADCAST_HZ
+# Compatibility names used by cadence metrics and existing integrations.
+BROADCAST_HZ = POSE_BROADCAST_HZ
+BROADCAST_INTERVAL = POSE_BROADCAST_INTERVAL
 MAX_PHYSICS_STEPS_PER_SLICE = 5
 MAX_SIMULATION_BACKLOG_SECONDS = 0.5
 MAX_TRAJECTORY_SAMPLES_PER_DRIVER = 64
+MAX_PUBLIC_EVENTS_PER_PACKET = 8
+INTERNAL_EVENT_TYPES = {
+    "maneuver_group_corner_yield",
+    "maneuver_group_dissolved",
+    "maneuver_group_formed",
+}
+EVENT_FEED_COOLDOWN_SECONDS = {
+    "attack": 10.0,
+    "defend": 12.0,
+    "side_by_side": 6.0,
+    "overtake_abort": 12.0,
+    "minor_contact": 5.0,
+    "lockup": 8.0,
+    "traction_loss": 8.0,
+    "wheelspin": 8.0,
+    "run_wide": 8.0,
+    "forced_wide": 8.0,
+}
+ROUTINE_BATTLE_EVENT_TYPES = {"attack", "defend", "overtake_abort"}
+ROUTINE_BATTLE_GLOBAL_COOLDOWN_SECONDS = 1.5
+POSE_PACKET_MAGIC = b"F1P1"
+POSE_PACKET_HEADER = struct.Struct("<4sIBBB")
+POSE_DRIVER_HEADER = struct.Struct("<HBB")
+POSE_SAMPLE = struct.Struct("<fIfff")
+DashboardInclude = dict[str, Any]
+DASHBOARD_STATE_FIELDS = {
+    "lap",
+    "total_laps",
+    "race_phase",
+    "race_phase_remaining_seconds",
+    "race_phase_remaining_laps",
+    "safety_car_stage",
+    "safety_car_visible",
+    "safety_car_route",
+    "safety_car_progress",
+    "safety_car_progress_rate",
+    "safety_car_pit_lane_progress",
+    "pit_window_open",
+    "start_sequence_phase",
+    "start_light_count",
+    "speed_multiplier",
+    "paused",
+    "physics_hz",
+    "broadcast_hz",
+    "effective_speed_multiplier",
+    "simulation_backlog_seconds",
+    "broadcast_jitter_ms",
+}
+DASHBOARD_POSITION_FIELDS = {
+    "driver_id",
+    "name",
+    "full_name",
+    "team",
+    "team_color",
+    "position",
+    "speed_kph",
+    "gap",
+    "interval",
+    "timing_gap_valid",
+    "interval_timing_gap_valid",
+    "timing_gap_source",
+    "interval_timing_gap_source",
+    "current_sector",
+    "current_mini_sector",
+    "current_timing_loop",
+    "tire_compound",
+    "tire_age",
+    "tire_wear",
+    "pace_mode",
+    "pace_mode_from",
+    "pace_mode_transition_progress",
+    "last_lap_time",
+    "best_lap_time",
+    "in_pit",
+    "pit_count",
+    "pit_phase",
+    "pit_merge_state",
+    "pit_box_progress",
+    "pit_elapsed",
+    "pit_stop_elapsed",
+    "retired",
+    "finished",
+    "drs_active",
+    "dirty_air_active",
+    "side_by_side_active",
+    "maneuver_group_size",
+    "hazard_active",
+    "local_yellow_active",
+}
+TIMING_POSITION_FIELDS = {
+    "last_mini_sector_time",
+    "last_mini_sector_delta_to_best",
+    "mini_sector_splits",
+    "mini_sector_statuses",
+}
+DASHBOARD_PAYLOAD_INCLUDE: DashboardInclude = {
+    **{field: True for field in DASHBOARD_STATE_FIELDS},
+    "positions": {"__all__": DASHBOARD_POSITION_FIELDS},
+}
 DEV_RACE_CONTROLS_ENABLED = os.getenv("F1_ENABLE_DEV_CONTROLS", "1").lower() in {
     "1",
     "true",
@@ -116,8 +228,13 @@ class RaceSession:
         self.player_drivers = player_drivers
         self.clients: set[WebSocket] = set()
         self._loop_task: asyncio.Task | None = None
-        self._trajectory_samples: dict[int, list[VehicleTrajectorySample]] = {}
+        self._trajectory_samples: dict[int, list[bytes]] = {}
         self._cadence_metrics = SessionCadenceMetrics()
+        self._latest_runtime_metrics: dict[str, float | int] = {}
+        self._event_sequence = 0
+        self._event_feed_last_sent_at: dict[tuple[str, str], float] = {}
+        self._routine_battle_event_last_sent_at = float("-inf")
+        self._last_history_lengths: dict[int, int] = {}
 
     @property
     def race_info(self) -> RaceInfoMessage:
@@ -174,6 +291,11 @@ class RaceSession:
             pit_lane_width_m=(
                 self.circuit.pit_lane.lane_width_m if self.circuit.pit_lane else 4.0
             ),
+            pit_speed_limit_kph=(
+                self.circuit.pit_lane.speed_limit_kph
+                if self.circuit.pit_lane
+                else PIT_LANE_SPEED_LIMIT_KPH
+            ),
             pit_side_entry_progress=(
                 self.circuit.pit_lane.side_entry_progress
                 if self.circuit.pit_lane
@@ -207,7 +329,47 @@ class RaceSession:
         self.engine.finished = True
         if self._loop_task is not None and not self._loop_task.done():
             self._loop_task.cancel()
+        self._loop_task = None
+        clients = tuple(self.clients)
         self.clients.clear()
+        self._trajectory_samples.clear()
+        self._event_feed_last_sent_at.clear()
+        self._routine_battle_event_last_sent_at = float("-inf")
+        self._last_history_lengths.clear()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is not None:
+            for ws in clients:
+                loop.create_task(ws.close(code=1001, reason="Race session closed"))
+
+    async def close(self) -> None:
+        """Stop the session and release tasks, sockets and per-race buffers."""
+        self.engine.finished = True
+        task = self._loop_task
+        self._loop_task = None
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        clients = tuple(self.clients)
+        self.clients.clear()
+        if clients:
+            await asyncio.gather(
+                *(
+                    ws.close(code=1001, reason="Race session closed")
+                    for ws in clients
+                ),
+                return_exceptions=True,
+            )
+        self._trajectory_samples.clear()
+        self._event_feed_last_sent_at.clear()
+        self._routine_battle_event_last_sent_at = float("-inf")
+        self._last_history_lengths.clear()
 
     async def _game_loop(self) -> None:
         """Advance authoritative physics independently from screen broadcasts.
@@ -219,9 +381,11 @@ class RaceSession:
         """
         loop = asyncio.get_running_loop()
         last_wall_time = loop.time()
-        next_broadcast_time = last_wall_time
+        next_pose_broadcast_time = last_wall_time
+        next_dashboard_broadcast_time = last_wall_time
+        next_timing_broadcast_time = last_wall_time
         simulation_credit = 0.0
-        pending_events: list = []
+        pending_events: list[RaceEvent] = []
         self._cadence_metrics.reset(last_wall_time, 1)
 
         while not self.engine.finished:
@@ -234,8 +398,12 @@ class RaceSession:
                 pending_events.clear()
                 self._trajectory_samples.clear()
                 self._cadence_metrics.reset(now, 1)
-                next_broadcast_time = now + BROADCAST_INTERVAL
-                await asyncio.sleep(BROADCAST_INTERVAL)
+                next_pose_broadcast_time = now + POSE_BROADCAST_INTERVAL
+                next_dashboard_broadcast_time = (
+                    now + DASHBOARD_BROADCAST_INTERVAL
+                )
+                next_timing_broadcast_time = now + TIMING_BROADCAST_INTERVAL
+                await asyncio.sleep(POSE_BROADCAST_INTERVAL)
                 continue
 
             if self.engine.paused:
@@ -262,34 +430,68 @@ class RaceSession:
                 self._record_trajectory_samples()
 
             now = loop.time()
-            if now >= next_broadcast_time or self.engine.finished:
+            if now >= next_pose_broadcast_time or self.engine.finished:
                 requested_speed = (
                     self.engine.speed_multiplier if self.engine.race_started else 1
                 )
                 runtime_metrics = self._cadence_metrics.snapshot(
                     now=now,
-                    scheduled_broadcast_at=next_broadcast_time,
+                    scheduled_broadcast_at=next_pose_broadcast_time,
                     simulation_backlog_seconds=simulation_credit,
                     requested_speed_multiplier=requested_speed,
                     paused=self.engine.paused,
                 )
-                tick = self.engine.build_tick_state(
-                    pending_events,
-                    self._trajectory_samples,
-                    runtime_metrics,
-                )
-                await self._broadcast(tick.model_dump())
+                self._latest_runtime_metrics = runtime_metrics
+                await self._broadcast_bytes(self._pose_payload())
+                if pending_events:
+                    await self._broadcast_public_events(
+                        pending_events,
+                        now=now,
+                    )
                 pending_events = []
                 self._trajectory_samples = {}
-                next_broadcast_time = now + BROADCAST_INTERVAL
+                pose_interval = (
+                    PAUSED_BROADCAST_INTERVAL
+                    if self.engine.paused
+                    else POSE_BROADCAST_INTERVAL
+                )
+                next_pose_broadcast_time = now + pose_interval
+
+            if now >= next_dashboard_broadcast_time or self.engine.finished:
+                dashboard_payload = self.engine.build_dashboard_payload(
+                    runtime_metrics=self._latest_runtime_metrics,
+                )
+                await self._broadcast(dashboard_payload)
+                await self._broadcast_history_if_changed()
+                if now >= next_timing_broadcast_time or self.engine.finished:
+                    await self._broadcast(self.engine.build_timing_payload())
+                    next_timing_broadcast_time = (
+                        now + TIMING_BROADCAST_INTERVAL
+                    )
+                dashboard_interval = (
+                    PAUSED_BROADCAST_INTERVAL
+                    if self.engine.paused
+                    else DASHBOARD_BROADCAST_INTERVAL
+                )
+                next_dashboard_broadcast_time = now + dashboard_interval
 
             if steps_run >= MAX_PHYSICS_STEPS_PER_SLICE:
                 await asyncio.sleep(0)
                 continue
 
-            time_until_broadcast = max(0.0, next_broadcast_time - loop.time())
+            time_until_broadcast = max(
+                0.0,
+                min(
+                    next_pose_broadcast_time,
+                    next_dashboard_broadcast_time,
+                )
+                - loop.time(),
+            )
             if self.engine.paused:
-                sleep_seconds = min(BROADCAST_INTERVAL, time_until_broadcast)
+                sleep_seconds = min(
+                    PAUSED_BROADCAST_INTERVAL,
+                    time_until_broadcast,
+                )
             else:
                 speed = self.engine.speed_multiplier if self.engine.race_started else 1
                 wall_until_step = max(
@@ -318,35 +520,200 @@ class RaceSession:
         for state in self.engine.driver_states.values():
             samples = self._trajectory_samples.setdefault(state.driver_id, [])
             samples.append(
-                VehicleTrajectorySample(
-                    simulation_time_s=state.simulation_time_s,
-                    physics_frame=state.physics_frame,
-                    world_x_m=state.world_x_m,
-                    world_y_m=state.world_y_m,
-                    heading_rad=state.heading_rad,
-                    progress=state.progress,
-                    lateral_offset_m=state.lateral_offset_m,
-                    in_pit=state.in_pit,
-                    pit_lane_progress=self.engine._pit_lane_progress(state.driver_id),
+                POSE_SAMPLE.pack(
+                    state.simulation_time_s,
+                    state.physics_frame,
+                    state.world_x_m,
+                    state.world_y_m,
+                    state.heading_rad,
                 )
             )
             if len(samples) > MAX_TRAJECTORY_SAMPLES_PER_DRIVER:
                 del samples[:-MAX_TRAJECTORY_SAMPLES_PER_DRIVER]
 
-    async def _broadcast(self, message: dict[str, Any]) -> None:
+    async def _send_to_clients(
+        self,
+        sender: Any,
+    ) -> None:
         dead: set[WebSocket] = set()
         for ws in list(self.clients):
             try:
-                await asyncio.wait_for(ws.send_json(message), timeout=1.0)
+                await asyncio.wait_for(sender(ws), timeout=1.0)
             except Exception:
                 dead.add(ws)
         self.clients -= dead
 
+    async def _broadcast(self, message: dict[str, Any]) -> None:
+        await self._send_to_clients(lambda ws: ws.send_json(message))
+
+    async def _broadcast_bytes(self, payload: bytes) -> None:
+        await self._send_to_clients(lambda ws: ws.send_bytes(payload))
+
+    def _pose_payload(self) -> bytes:
+        """Encode authoritative poses directly, without transient Pydantic models."""
+        states = tuple(self.engine.driver_states.values())
+        payload = bytearray(
+            POSE_PACKET_HEADER.pack(
+                POSE_PACKET_MAGIC,
+                self.engine._physics_frame,
+                self.engine.speed_multiplier,
+                1 if self.engine.paused else 0,
+                len(states),
+            )
+        )
+        for state in states:
+            samples = self._trajectory_samples.get(state.driver_id, ())
+            if not samples:
+                samples = (
+                    POSE_SAMPLE.pack(
+                        state.simulation_time_s,
+                        state.physics_frame,
+                        state.world_x_m,
+                        state.world_y_m,
+                        state.heading_rad,
+                    ),
+                )
+            flags = (1 if state.retired else 0) | (
+                2 if state.hazard_active else 0
+            )
+            payload.extend(
+                POSE_DRIVER_HEADER.pack(
+                    state.driver_id,
+                    flags,
+                    len(samples),
+                )
+            )
+            for sample in samples:
+                payload.extend(sample)
+        return bytes(payload)
+
+    @staticmethod
+    def _dashboard_payload(dashboard: Any) -> dict[str, Any]:
+        """Serialize a complete logical snapshot in compact JSON form."""
+        payload = dashboard.model_dump(
+            exclude_defaults=True,
+            include=DASHBOARD_PAYLOAD_INCLUDE,
+        )
+        payload["type"] = "race_state"
+        return payload
+
+    @staticmethod
+    def _timing_payload(dashboard: Any) -> dict[str, Any]:
+        return {
+            "type": "race_timing",
+            "positions": [
+                {
+                    "driver_id": driver.driver_id,
+                    **{
+                        field: getattr(driver, field)
+                        for field in TIMING_POSITION_FIELDS
+                    },
+                }
+                for driver in dashboard.positions
+            ],
+        }
+
+    def _history_lengths(self) -> dict[int, int]:
+        return {
+            state.driver_id: len(
+                self.engine._lap_history.get(state.driver_id, [])
+            )
+            for state in self.engine.driver_states.values()
+        }
+
+    async def _broadcast_history_if_changed(self) -> None:
+        lengths = self._history_lengths()
+        if lengths == self._last_history_lengths:
+            return
+        history_update = self.engine.build_history_state(
+            since_by_driver=self._last_history_lengths,
+        )
+        self._last_history_lengths = lengths
+        if history_update.histories:
+            await self._broadcast(history_update.model_dump())
+
+    def _prepare_public_events(
+        self,
+        events: list[RaceEvent],
+        *,
+        now: float,
+    ) -> list[RaceEvent]:
+        """Return a compact, stable-ID feed without altering physics events."""
+        prepared: list[RaceEvent] = []
+        seen_signatures: set[tuple[str, str, str]] = set()
+        for event in events:
+            if event.type in INTERNAL_EVENT_TYPES:
+                continue
+            signature = (event.type, event.driver, event.message)
+            if signature in seen_signatures:
+                continue
+            seen_signatures.add(signature)
+            cooldown = EVENT_FEED_COOLDOWN_SECONDS.get(event.type, 0.0)
+            cooldown_key = (event.type, event.driver)
+            last_sent_at = self._event_feed_last_sent_at.get(
+                cooldown_key,
+                float("-inf"),
+            )
+            if cooldown > 0 and now - last_sent_at < cooldown:
+                continue
+            if (
+                event.type in ROUTINE_BATTLE_EVENT_TYPES
+                and now - self._routine_battle_event_last_sent_at
+                < ROUTINE_BATTLE_GLOBAL_COOLDOWN_SECONDS
+            ):
+                continue
+            self._event_feed_last_sent_at[cooldown_key] = now
+            if event.type in ROUTINE_BATTLE_EVENT_TYPES:
+                self._routine_battle_event_last_sent_at = now
+            self._event_sequence += 1
+            prepared.append(
+                event.model_copy(update={"event_id": self._event_sequence})
+            )
+            if len(prepared) >= MAX_PUBLIC_EVENTS_PER_PACKET:
+                break
+        return prepared
+
+    async def _broadcast_public_events(
+        self,
+        events: list[RaceEvent],
+        *,
+        now: float | None = None,
+    ) -> None:
+        if not events:
+            return
+        current_time = (
+            now
+            if now is not None
+            else asyncio.get_running_loop().time()
+        )
+        prepared = self._prepare_public_events(events, now=current_time)
+        if prepared:
+            await self._broadcast(
+                RaceEventsMessage(events=prepared).model_dump()
+            )
+
+    async def _broadcast_immediate_snapshot(
+        self,
+        events: list[RaceEvent] | None = None,
+    ) -> None:
+        """Publish command-visible state without restoring the 30 Hz full tick."""
+        dashboard_payload = self.engine.build_dashboard_payload(
+            runtime_metrics=self._latest_runtime_metrics,
+        )
+        await self._broadcast_bytes(self._pose_payload())
+        await self._broadcast(dashboard_payload)
+        if events:
+            await self._broadcast_public_events(events)
+
     async def add_client(self, ws: WebSocket) -> None:
         self.clients.add(ws)
         await ws.send_json(self.race_info.model_dump())
-        tick = self.engine.build_tick_state()
-        await ws.send_json(tick.model_dump())
+        dashboard_payload = self.engine.build_dashboard_payload()
+        await ws.send_bytes(self._pose_payload())
+        await ws.send_json(dashboard_payload)
+        await ws.send_json(self.engine.build_history_state().model_dump())
+        await ws.send_json(self.engine.build_timing_payload())
+        self._last_history_lengths = self._history_lengths()
 
     def remove_client(self, ws: WebSocket) -> None:
         self.clients.discard(ws)
@@ -429,8 +796,8 @@ class RaceSession:
                 return {
                     "type": "command_error",
                     "command": "set_speed",
-                    "message": "Speed multiplier must be 1, 2, or 3",
-                    "message_ko": "배속은 1, 2, 3 중 하나여야 합니다",
+                    "message": "Speed multiplier must be 1 or 2",
+                    "message_ko": "배속은 1 또는 2여야 합니다",
                 }
             return {
                 "type": "command_ack",
@@ -442,7 +809,7 @@ class RaceSession:
 
         if cmd_type == "pause":
             self.engine.pause_race()
-            await self._broadcast(self.engine.build_tick_state().model_dump())
+            await self._broadcast_immediate_snapshot()
             return {
                 "type": "command_ack",
                 "command": "pause",
@@ -452,7 +819,7 @@ class RaceSession:
 
         if cmd_type == "resume":
             self.engine.resume_race()
-            await self._broadcast(self.engine.build_tick_state().model_dump())
+            await self._broadcast_immediate_snapshot()
             return {
                 "type": "command_ack",
                 "command": "resume",
@@ -479,7 +846,7 @@ class RaceSession:
                     "message_ko": f"지원하지 않는 레이스 상태입니다: {requested_phase}",
                 }
 
-            await self._broadcast(self.engine.build_tick_state(events).model_dump())
+            await self._broadcast_immediate_snapshot(events)
             active_phase = self.engine.race_phase.upper()
             if requested_phase == "green" and self.engine.race_phase == "sc":
                 return {
@@ -495,6 +862,37 @@ class RaceSession:
                 "race_phase": self.engine.race_phase,
                 "message": f"Development race control set to {active_phase}",
                 "message_ko": f"개발용 레이스 컨트롤을 {active_phase}(으)로 변경했습니다",
+            }
+
+        if cmd_type == "dev_retire_driver":
+            if not DEV_RACE_CONTROLS_ENABLED:
+                return {
+                    "type": "command_error",
+                    "message": "Development race controls are disabled",
+                    "message_ko": "개발용 레이스 컨트롤이 비활성화되어 있습니다",
+                }
+            driver_id = data.get("driver_id")
+            if driver_id is None:
+                return {
+                    "type": "command_error",
+                    "message": "driver_id required",
+                    "message_ko": "드라이버 ID가 필요합니다",
+                }
+            try:
+                events = self.engine.retire_driver_for_testing(int(driver_id))
+            except (TypeError, ValueError) as exc:
+                return {
+                    "type": "command_error",
+                    "message": str(exc),
+                    "message_ko": f"개발용 리타이어를 적용할 수 없습니다: {exc}",
+                }
+            await self._broadcast_immediate_snapshot(events)
+            return {
+                "type": "command_ack",
+                "command": "dev_retire_driver",
+                "driver_id": int(driver_id),
+                "message": f"Development retirement applied to driver {driver_id}",
+                "message_ko": f"드라이버 {driver_id}에게 개발용 리타이어를 적용했습니다",
             }
 
         return {
@@ -563,9 +961,24 @@ class SessionManager:
         return self._session
 
     def clear(self) -> None:
-        if self._session is not None:
-            self._session.stop_loop()
+        session = self._session
         self._session = None
+        if session is not None:
+            session.stop_loop()
+            del session
+            clear_vehicle_track_physics_cache()
+            gc.collect()
+
+    async def clear_async(self) -> None:
+        """Fully close the active session before allowing the next race."""
+        session = self._session
+        self._session = None
+        if session is None:
+            return
+        await session.close()
+        del session
+        clear_vehicle_track_physics_cache()
+        gc.collect()
 
 
 session_manager = SessionManager()

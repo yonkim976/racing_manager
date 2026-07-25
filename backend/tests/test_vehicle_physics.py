@@ -335,7 +335,10 @@ class LongitudinalVehiclePhysicsTests(unittest.TestCase):
             ),
             speed_mps=25.0,
             delta_seconds=PHYSICS_STEP_SECONDS,
-            modifiers=VehiclePhysicsModifiers(speed_limit_factor=0.2),
+            modifiers=VehiclePhysicsModifiers(
+                speed_limit_factor=0.2,
+                emergency_braking=True,
+            ),
         )
 
         self.assertEqual(result.handling_state, "lockup")
@@ -403,7 +406,7 @@ class LongitudinalVehiclePhysicsTests(unittest.TestCase):
         self.assertAlmostEqual(one_call.distance_m, repeated.distance_m, places=9)
         self.assertAlmostEqual(one_call.speed_mps, repeated.speed_mps, places=9)
 
-    def test_same_line_follower_cannot_cross_minimum_gap(self) -> None:
+    def test_impossible_following_gap_brakes_without_speed_or_position_snap(self) -> None:
         following = VehicleFollowingConstraint(
             leader_distance_m=100.0,
             leader_speed_mps=30.0,
@@ -420,11 +423,12 @@ class LongitudinalVehiclePhysicsTests(unittest.TestCase):
             following=following,
         )
 
-        self.assertLessEqual(
+        self.assertGreater(
             result.distance_m,
             following.leader_end_distance_m - PHYSICAL_CAR_LENGTH_M,
         )
-        self.assertLessEqual(result.speed_mps, following.leader_end_speed_mps)
+        self.assertGreater(result.speed_mps, 74.0)
+        self.assertLess(result.speed_mps, 80.0)
         self.assertGreater(result.brake, 0.0)
 
     def test_following_controller_slows_car_before_the_hard_limit(self) -> None:

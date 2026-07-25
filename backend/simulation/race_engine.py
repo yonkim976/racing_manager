@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from math import atan2, cos, floor, hypot, pi, sin, sqrt
 import random
@@ -9,11 +10,15 @@ import random
 from models.schemas import (
     Circuit,
     Driver,
+    DriverPoseInfo,
     DriverPositionInfo,
+    DriverRaceHistoryInfo,
     DriverRaceState,
     LapTimeInfo,
     PaceMode,
     RaceEvent,
+    RaceHistoryState,
+    RacePoseState,
     RaceTickState,
     Team,
     TireCompound,
@@ -115,6 +120,9 @@ from simulation.wake_model import (
     compute_wake_effects,
 )
 
+MAX_PHYSICS_DIAGNOSTIC_SAMPLES = 256
+TIMING_CROSSING_LAPS_TO_RETAIN = 4
+
 PACE_MODE_EFFECTS: dict[PaceMode, dict[str, float]] = {
     PaceMode.CONSERVE: {"lap_time_delta": 0.0, "tire_usage_multiplier": 0.82},
     PaceMode.STANDARD: {"lap_time_delta": 0.0, "tire_usage_multiplier": 1.0},
@@ -201,6 +209,7 @@ GRID_OVERTAKE_LOCKOUT_SECONDS = 0.50
 # still force an immediate replan by setting the per-driver plan age.
 LOCAL_TRAJECTORY_PLAN_INTERVAL_SECONDS = 1.00
 AI_TACTICAL_DECISION_INTERVAL_SECONDS = 0.10
+ATTACK_LINE_CHOICE_INTERVAL_SECONDS = 0.20
 LOCAL_TRAJECTORY_OPPONENT_RADIUS_M = 150.0
 LOCAL_TRAJECTORY_DENSE_TRAFFIC_RADIUS_M = 30.0
 LOCAL_TRAJECTORY_MAX_OPPONENTS = 4
@@ -211,6 +220,7 @@ MANEUVER_REAR_PLANNING_CLEARANCE_M = 20.0
 VSC_DURATION_SECONDS = 25.0
 VSC_LAP_TIME_FACTOR = 1.4
 SC_LAP_TIME_FACTOR = 1.8
+SC_COLLECTION_LAP_TIME_FACTOR = 2.5
 SC_CATCH_UP_FAST_LAP_TIME_FACTOR = 0.85
 SC_CATCH_UP_NEAR_LAP_TIME_FACTOR = 1.30
 SC_CAUGHT_RECOVERY_LAP_TIME_FACTOR = 1.60
@@ -224,6 +234,11 @@ SC_CATCH_UP_MAX_SPEED_KPH = 300.0
 SC_NEAR_QUEUE_MAX_SPEED_KPH = 220.0
 SC_NEAR_QUEUE_DISTANCE_CAR_LENGTHS = 40.0
 SC_CAUGHT_MAX_SPEED_KPH = 180.0
+SC_QUEUE_APPROACH_REACTION_SECONDS = 0.65
+SC_QUEUE_APPROACH_DECELERATION_MPS2 = 5.0
+SC_QUEUE_APPROACH_MAX_GAP_M = 800.0
+SC_QUEUE_PROPAGATION_HORIZON_M = 600.0
+SC_QUEUE_JOIN_MAX_RELATIVE_SPEED_KPH = 24.0
 SC_UNLAP_MAX_SPEED_KPH = 280.0
 SC_LEADER_ACQUISITION_SPEED_KPH = 5.0
 SC_DEPLOY_PIT_SECONDS = 2.5
@@ -232,11 +247,13 @@ SC_CLEANUP_SECONDS = 35.0
 SC_ADDITIONAL_INCIDENT_SECONDS = 18.0
 SC_PIT_WEAR_THRESHOLD = 0.30  # AI takes the "free" SC pit once tires are this worn
 SC_PIT_PROBABILITY = 0.4  # per-eligible-driver chance to dive in under SC (avoids all-stop)
-PIT_LANE_SPEED_LIMIT_KPH = 60.0
+PIT_LANE_SPEED_LIMIT_KPH = 80.0
 PIT_ENTRY_BRAKING_MPS2 = 35.0
 PIT_BOX_BRAKING_MPS2 = 10.0
 PIT_LANE_ACCELERATION_MPS2 = 5.0
 PIT_EXIT_ACCELERATION_MPS2 = 9.0
+PIT_TEAM_BOX_SPACING_M = 16.0
+PIT_BOX_LATERAL_BLEND_DISTANCE_M = 22.0
 PIT_MERGE_BRAKING_MPS2 = 7.0
 PIT_MERGE_HOLD_DISTANCE_M = 4.0
 PIT_MERGE_LONGITUDINAL_MARGIN_M = 7.0
@@ -282,7 +299,7 @@ MANEUVER_PREP_BUMPER_GAP_M = 1.25
 MANEUVER_TOW_PREP_BUMPER_GAP_M = 2.50
 MANEUVER_ATTACK_DECISION_BUMPER_GAP_M = 22.0
 MANEUVER_HEAVY_BRAKING_MAX_BUMPER_GAP_M = 4.5
-MANEUVER_PULL_OUT_BUMPER_GAP_M = 3.0
+MANEUVER_PULL_OUT_BUMPER_GAP_M = 4.5
 MANEUVER_CLEARANCE_MARGIN_M = 0.25
 MANEUVER_CONTACT_BUFFER_M = 0.25
 FOLLOWING_MIN_BUMPER_GAP_M = 1.25
@@ -291,9 +308,14 @@ MANEUVER_PASS_CLEARANCE_MARGIN_M = 0.10
 MANEUVER_MIN_STRAIGHT_DISTANCE_M = 70.0
 MANEUVER_PULL_OUT_CORNER_PREVIEW_SECONDS = 1.8
 MANEUVER_PULL_OUT_MIN_CORNER_PREVIEW_M = 55.0
+MANEUVER_LINE_COMMIT_PREVIEW_SECONDS = 1.55
+MANEUVER_LINE_COMMIT_MIN_PREVIEW_M = 70.0
 MANEUVER_CORNER_LUNGE_EXTENSION_M = 4.0
 MANEUVER_CLEAR_HOLD_SECONDS = 0.35
 MANEUVER_ABORT_HOLD_SECONDS = 0.8
+MANEUVER_YIELD_MIN_SECONDS = 0.12
+MANEUVER_YIELD_MAX_SECONDS = 4.0
+MANEUVER_ABORT_REJOIN_SECONDS = 1.25
 MANEUVER_REJOIN_TOLERANCE_M = 0.45
 CORNER_ENTRY_TURN_SIGNAL = 0.08
 CORNER_EXIT_TURN_SIGNAL = 0.035
@@ -393,6 +415,11 @@ class SideBySideBattle:
     phase_elapsed_seconds: float = 0.0
     committed_seconds: float = 0.0
     corner_entry_candidate: bool = False
+    line_committed: bool = False
+    line_commit_progress: float = 0.0
+    line_commit_distance_m: float = 0.0
+    attacker_committed_lateral_bias_m: float = 0.0
+    defender_committed_lateral_bias_m: float = 0.0
     corner_active: bool = False
     corner_authorized: bool = False
     corner_turn_direction: int = 0
@@ -416,6 +443,13 @@ class SideBySideBattle:
     pass_confirmed: bool = False
     pass_event_emitted: bool = False
     pass_clearance_m: float = 0.0
+    yielding_driver_id: int | None = None
+    yield_attacker_lateral_offset_m: float = 0.0
+    yield_defender_lateral_offset_m: float = 0.0
+    abort_attacker_lateral_offset_m: float = 0.0
+    abort_defender_lateral_offset_m: float = 0.0
+    abort_rejoin_started: bool = False
+    abort_rejoin_elapsed_seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -580,11 +614,17 @@ class RaceEngine:
         self.race_elapsed = 0.0
         self._physics_frame = 0
         self._physics_accumulator = FixedStepAccumulator(PHYSICS_STEP_SECONDS)
-        self._physics_step_deltas: list[float] = []
+        # These values are diagnostics, not race history. Keeping every 50 Hz
+        # tick for a full race made both containers grow without bound.
+        self._physics_step_deltas: deque[float] = deque(
+            maxlen=MAX_PHYSICS_DIAGNOSTIC_SAMPLES,
+        )
         self._tick_phase = TickPhase.TELEMETRY
         self._tick_phase_history: list[TickPhase] = []
         self._setup_mode = True
-        self._consumed_physics_frame_ids: set[int] = set()
+        self._consumed_physics_frame_ids: deque[int] = deque(
+            maxlen=MAX_PHYSICS_DIAGNOSTIC_SAMPLES,
+        )
         self._last_consumed_physics_frame_id = 0
         self.weather = "dry"
         self.safety_car = False
@@ -599,6 +639,8 @@ class RaceEngine:
         self._sc_caught_driver_ids: set[int] = set()
         self._sc_unlap_driver_ids: set[int] = set()
         self._sc_unlap_targets: dict[int, float] = {}
+        self._sc_running_order: list[int] = []
+        self._sc_pit_exit_order_targets: dict[int, float] = {}
         self._sc_withdraw_target: float | None = None
         self._sc_restart_target: float | None = None
         self._sc_restart_accel_progress: float | None = None
@@ -668,13 +710,25 @@ class RaceEngine:
         self._lap_history: dict[int, list[LapTimeInfo]] = {}
         self._timing_crossings: dict[int, dict[tuple[int, int], float]] = {}
         self._timing_gap_valid: dict[int, bool] = {}
+        self._interval_timing_gap_valid: dict[int, bool] = {}
+        self._live_interval_seconds: dict[int, float | None] = {}
         self._last_sector_time: dict[int, float] = {}
         self._last_mini_sector_time: dict[int, float] = {}
+        self._last_completed_mini_sector_index: dict[int, int | None] = {}
+        self._session_best_mini_sector_times: list[float | None] = [
+            None for _ in self._timing_loops
+        ]
+        self._personal_best_mini_sector_times: dict[
+            int,
+            list[float | None],
+        ] = {}
         self._driver_meta: dict[int, dict] = {}
         self._finish_order: list[int] = []
         self._battle_event_cooldown: dict[int, float] = {}
         self._battle_effects: dict[int, BattleEffect] = {}
         self._side_by_side_battles: dict[tuple[int, int], SideBySideBattle] = {}
+        self._attack_line_choice_cache_bucket = -1
+        self._attack_line_choice_cache: dict[tuple[int, int], str] = {}
         self._maneuver_groups: dict[str, ManeuverGroup] = {}
         self._maneuver_group_signatures: set[tuple[int, ...]] = set()
         self._forced_wide_by_driver: dict[int, int] = {}
@@ -1069,8 +1123,14 @@ class RaceEngine:
             if abs(grid_progress) <= 1e-12:
                 self._timing_crossings[driver.id][(0, 0)] = 0.0
             self._timing_gap_valid[driver.id] = False
+            self._interval_timing_gap_valid[driver.id] = False
+            self._live_interval_seconds[driver.id] = None
             self._last_sector_time[driver.id] = 0.0
             self._last_mini_sector_time[driver.id] = 0.0
+            self._last_completed_mini_sector_index[driver.id] = None
+            self._personal_best_mini_sector_times[driver.id] = [
+                None for _ in self._timing_loops
+            ]
             self._pace_mode_intensity[driver.id] = 0.0
             self._pace_mode_transition_source[driver.id] = 0.0
             self._pace_mode_transition_elapsed[driver.id] = (
@@ -1182,7 +1242,7 @@ class RaceEngine:
                 * battle_speed_factor
             ),
             speed_limit_factor=(
-                (1.0 / self._phase_lap_time_factor(state))
+                self._phase_vehicle_speed_factor(state)
                 * (0.35 if state.emergency_braking else 1.0)
                 * (drs_target_speed_factor if state.drs_active else 1.0)
             ),
@@ -1241,6 +1301,7 @@ class RaceEngine:
                 if input_error is not None and input_error.kind == "throttle"
                 else 0.0
             ),
+            emergency_braking=state.emergency_braking,
             wheelbase_m=state.wheelbase_m,
             yaw_inertia_kgm2=(
                 1700.0
@@ -1270,15 +1331,23 @@ class RaceEngine:
             return None
         if state.driver_id in self._sc_unlap_driver_ids:
             return SC_UNLAP_MAX_SPEED_KPH / 3.6
-        if state.driver_id in self._sc_caught_driver_ids:
-            return SC_CAUGHT_MAX_SPEED_KPH / 3.6
+        base_cap_mps = (
+            SC_CAUGHT_MAX_SPEED_KPH / 3.6
+            if state.driver_id in self._sc_caught_driver_ids
+            else SC_CATCH_UP_MAX_SPEED_KPH / 3.6
+        )
         predecessor = self._sc_queue_predecessor(state)
         if predecessor is None:
             ahead_total = self._safety_car_total_progress
             ahead_is_queued = True
+            ahead_speed_mps = self._safety_car_speed_mps
         else:
             ahead_total = predecessor.total_progress
-            ahead_is_queued = predecessor.driver_id in self._sc_caught_driver_ids
+            ahead_is_queued = (
+                predecessor.driver_id in self._sc_caught_driver_ids
+                or self._sc_queue_control_reaches(predecessor)
+            )
+            ahead_speed_mps = max(0.0, predecessor.speed_kph / 3.6)
         gap_m = (
             (ahead_total - state.total_progress) * self.track_length_m
             if ahead_total is not None
@@ -1287,10 +1356,33 @@ class RaceEngine:
         if (
             ahead_is_queued
             and 0.0 <= gap_m
-            <= SC_CAR_LENGTH_M * SC_NEAR_QUEUE_DISTANCE_CAR_LENGTHS
+            <= max(
+                SC_QUEUE_APPROACH_MAX_GAP_M,
+                SC_CAR_LENGTH_M * SC_NEAR_QUEUE_DISTANCE_CAR_LENGTHS,
+            )
         ):
-            return SC_NEAR_QUEUE_MAX_SPEED_KPH / 3.6
-        return SC_CATCH_UP_MAX_SPEED_KPH / 3.6
+            follower_speed_mps = max(0.0, state.speed_kph / 3.6)
+            closing_speed_mps = max(0.0, follower_speed_mps - ahead_speed_mps)
+            available_braking_distance_m = max(
+                0.0,
+                gap_m
+                - SC_CAR_LENGTH_M * SC_QUEUE_TARGET_CAR_LENGTHS
+                - closing_speed_mps * SC_QUEUE_APPROACH_REACTION_SECONDS,
+            )
+            safe_approach_speed_mps = sqrt(
+                ahead_speed_mps * ahead_speed_mps
+                + 2.0
+                * SC_QUEUE_APPROACH_DECELERATION_MPS2
+                * available_braking_distance_m
+            )
+            approach_cap_mps = min(base_cap_mps, safe_approach_speed_mps)
+            if gap_m <= SC_CAR_LENGTH_M * SC_NEAR_QUEUE_DISTANCE_CAR_LENGTHS:
+                approach_cap_mps = min(
+                    approach_cap_mps,
+                    SC_NEAR_QUEUE_MAX_SPEED_KPH / 3.6,
+                )
+            return approach_cap_mps
+        return base_cap_mps
 
     def _apply_surface_state(
         self,
@@ -1409,7 +1501,7 @@ class RaceEngine:
     def _maneuver_execution_factors(self, state: DriverRaceState) -> tuple[float, float]:
         """Map racecraft to small physical control margins during a maneuver."""
         battle = self._side_by_side_battle_for_driver(state.driver_id)
-        if battle is None or battle.phase in {"approach", "merge", "abort"}:
+        if battle is None or battle.phase in {"approach", "merge", "yield", "abort"}:
             return 1.0, 1.0
         meta = self._driver_meta[state.driver_id]
         skill = (
@@ -2291,7 +2383,7 @@ class RaceEngine:
         )
 
     def _cancel_maneuvers_for_neutralization(self) -> None:
-        """Remove unconfirmed competitive paths as SC/VSC takes control."""
+        """Remove competitive paths and wake penalties as SC/VSC takes control."""
         affected_driver_ids = {
             driver_id
             for battle in self._side_by_side_battles.values()
@@ -2306,6 +2398,8 @@ class RaceEngine:
                 LOCAL_TRAJECTORY_PLAN_INTERVAL_SECONDS
             )
             self._local_trajectory_selected_ages[driver_id] = 0.0
+        for state in self.driver_states.values():
+            self._reset_wake_state(state)
 
     def _reset_avoidance_state(self, state: DriverRaceState) -> None:
         state.avoidance_active = False
@@ -2770,7 +2864,7 @@ class RaceEngine:
         if battle is not None:
             if battle.phase == "overlap" and battle.corner_active:
                 return DRIVING_LINE_RACING
-            if battle.phase in {"approach", "merge", "abort"}:
+            if battle.phase in {"approach", "merge", "yield", "abort"}:
                 return DRIVING_LINE_RACING
             if state.driver_id == battle.attacker_id:
                 return battle.attacker_line
@@ -2838,34 +2932,69 @@ class RaceEngine:
             if maneuver_group is not None and maneuver_group.size >= 3
             else self._side_by_side_battle_for_driver(state.driver_id)
         )
-        if (
-            battle is not None
-            and battle.phase == "abort"
-            and state.driver_id == battle.attacker_id
-            and self._maneuver_longitudinal_advantage_m(battle)
-            > -(
-                0.5
-                * (
-                    state.car_length_m
-                    + self.driver_states[battle.defender_id].car_length_m
+        if battle is not None and battle.phase in {"yield", "abort"}:
+            # A rejected corner attempt must separate longitudinally before
+            # either car crosses back toward the racing line.  Freezing the
+            # live corridors removes the one-frame target jump that looked
+            # like the rear car was ejected at corner entry.
+            if state.driver_id == battle.attacker_id:
+                transition_start_m = (
+                    battle.yield_attacker_lateral_offset_m
+                    if battle.phase == "yield"
+                    else battle.abort_attacker_lateral_offset_m
                 )
-                + MANEUVER_PREP_BUMPER_GAP_M
-            )
-        ):
-            # Keep the abandoned car in its current corridor until it has
-            # dropped fully behind. Rejoining while the bodies still overlap
-            # laterally is the main source of secondary contact chains.
-            defender = self.driver_states[battle.defender_id]
-            side = 1.0 if state.lateral_offset_m >= defender.lateral_offset_m else -1.0
-            hold_target = defender.lateral_offset_m + side * (
-                PHYSICAL_CAR_WIDTH_M
-                + MANEUVER_CLEARANCE_MARGIN_M
-                + MANEUVER_CONTACT_BUFFER_M
-            )
+            else:
+                transition_start_m = (
+                    battle.yield_defender_lateral_offset_m
+                    if battle.phase == "yield"
+                    else battle.abort_defender_lateral_offset_m
+                )
+            target = transition_start_m
+            if battle.phase == "abort" and battle.abort_rejoin_started:
+                transition_ratio = min(
+                    1.0,
+                    battle.abort_rejoin_elapsed_seconds
+                    / MANEUVER_ABORT_REJOIN_SECONDS,
+                )
+                smooth_ratio = transition_ratio * transition_ratio * (
+                    3.0 - 2.0 * transition_ratio
+                )
+                target = transition_start_m + (
+                    base - transition_start_m
+                ) * smooth_ratio
             minimum_lateral, maximum_lateral = (
                 self._track_surface.safety_lateral_bounds(state.progress)
             )
-            return max(minimum_lateral, min(maximum_lateral, hold_target))
+            return max(minimum_lateral, min(maximum_lateral, target))
+        if (
+            battle is not None
+            and battle.line_committed
+            and battle.phase in {"pull_out", "overlap"}
+            and not battle.corner_active
+        ):
+            # Once deceleration is imminent neither driver may make a second
+            # reactive move.  Follow the curvature of the optimized reference
+            # line while retaining the corridor chosen before braking.
+            committed_bias_m = (
+                battle.attacker_committed_lateral_bias_m
+                if state.driver_id == battle.attacker_id
+                else battle.defender_committed_lateral_bias_m
+            )
+            target = (
+                track_profile.line_offset_at_progress(
+                    DRIVING_LINE_RACING,
+                    state.progress,
+                )
+                + committed_bias_m
+            )
+            minimum_lateral, maximum_lateral = (
+                self._track_surface.trajectory_body_lateral_bounds(
+                    state.progress,
+                    body_width_m=state.car_width_m,
+                    edge_margin_m=TRACK_EDGE_MARGIN_M,
+                )
+            )
+            return max(minimum_lateral, min(maximum_lateral, target))
         if (
             battle is not None
             and battle.phase == "overlap"
@@ -2895,6 +3024,15 @@ class RaceEngine:
                     DRIVING_LINE_RACING,
                     state.progress,
                 ) + battle.trajectory_lateral_bias_m
+            elif bumper_gap_m <= MANEUVER_ATTACK_DECISION_BUMPER_GAP_M:
+                # A tactical intent may be created between the slower lattice
+                # planner updates.  Use the already scored physical template
+                # rather than leaving the attacker trapped on the defender's
+                # racing line until the approach timer expires.
+                base = track_profile.line_offset_at_progress(
+                    battle.attacker_line,
+                    state.progress,
+                )
             else:
                 base = track_profile.line_offset_at_progress(
                     DRIVING_LINE_RACING,
@@ -3209,7 +3347,7 @@ class RaceEngine:
                 half_lengths_m + MANEUVER_PREP_BUMPER_GAP_M,
                 half_lengths_m + MANEUVER_CONTACT_BUFFER_M,
             )
-        if battle.phase == "abort":
+        if battle.phase in {"yield", "abort"}:
             return (
                 half_lengths_m + MANEUVER_PREP_BUMPER_GAP_M,
                 half_lengths_m + MANEUVER_CONTACT_BUFFER_M,
@@ -3278,6 +3416,65 @@ class RaceEngine:
             return False
         return lateral_clearance >= PHYSICAL_CAR_WIDTH_M + MANEUVER_CLEARANCE_MARGIN_M
 
+    def _nearest_physical_following_leader(
+        self,
+        state: DriverRaceState,
+        start_snapshot: dict[int, tuple[float, float]],
+        preferred_leader: DriverRaceState | None,
+    ) -> DriverRaceState | None:
+        """Find the nearest body in the projected lane, independent of timing order."""
+        follower_snapshot = start_snapshot.get(state.driver_id)
+        if follower_snapshot is None:
+            return preferred_leader
+        follower_progress, _ = follower_snapshot
+        candidates: list[tuple[float, DriverRaceState]] = []
+        for candidate in self.driver_states.values():
+            if (
+                candidate.driver_id == state.driver_id
+                or candidate.in_pit
+                or candidate.retired
+                or candidate.finished
+            ):
+                continue
+            leader_snapshot = start_snapshot.get(candidate.driver_id)
+            if leader_snapshot is None:
+                continue
+            progress_gap = leader_snapshot[0] - follower_progress
+            if progress_gap <= PROGRESS_EPSILON:
+                continue
+            longitudinal_gap_m = progress_gap * self.track_length_m
+            if longitudinal_gap_m > HAZARD_DETECTION_DISTANCE_M:
+                continue
+            current_lateral_gap_m = abs(
+                candidate.lateral_offset_m - state.lateral_offset_m
+            )
+            projected_lateral_gap_m = abs(
+                (
+                    candidate.lateral_offset_m
+                    + candidate.lateral_speed_mps * 0.6
+                )
+                - (
+                    state.lateral_offset_m
+                    + state.lateral_speed_mps * 0.6
+                )
+            )
+            required_lateral_clearance_m = (
+                0.5 * (state.car_width_m + candidate.car_width_m)
+                + MANEUVER_CLEARANCE_MARGIN_M
+            )
+            shares_projected_lane = (
+                min(current_lateral_gap_m, projected_lateral_gap_m)
+                < required_lateral_clearance_m
+            )
+            if not shares_projected_lane:
+                continue
+            if self._physics_v2_passing_authorized(state, candidate):
+                continue
+            candidates.append((longitudinal_gap_m, candidate))
+        if not candidates:
+            return None
+        return min(candidates, key=lambda item: item[0])[1]
+
     def _physics_v2_following_constraint(
         self,
         state: DriverRaceState,
@@ -3312,6 +3509,11 @@ class RaceEngine:
         )
         if safety_car_constraint is not None:
             return safety_car_constraint
+        car_ahead = self._nearest_physical_following_leader(
+            state,
+            start_snapshot,
+            car_ahead,
+        )
         if (
             car_ahead is None
             or car_ahead.in_pit
@@ -3364,7 +3566,10 @@ class RaceEngine:
         dynamic_gap_m = min(28.0, max(10.0, minimum_gap_m + follower_speed_mps * 0.22))
         if (
             self.race_phase == "sc"
-            and state.driver_id in self._sc_caught_driver_ids
+            and (
+                state.driver_id in self._sc_caught_driver_ids
+                or car_ahead.driver_id in self._sc_caught_driver_ids
+            )
         ):
             desired_gap_m = SC_CAR_LENGTH_M * SC_QUEUE_TARGET_CAR_LENGTHS
         elif self.race_phase == "sc":
@@ -3424,7 +3629,6 @@ class RaceEngine:
             self.race_phase != "sc"
             or self.safety_car_stage in {"deploying", "restart"}
             or self._safety_car_total_progress is None
-            or state.driver_id not in self._sc_caught_driver_ids
         ):
             return None
         on_track_leader = self._on_track_leader()
@@ -3440,18 +3644,25 @@ class RaceEngine:
 
         end_progress = self._safety_car_total_progress
         start_progress = end_progress - self._safety_car_progress_rate * max(0.0, delta)
-        line_length_m = track_profile.length_for_line(active_line)
-        safety_car_speed_mps = max(0.0, self._safety_car_progress_rate * line_length_m)
+        leader_distance_m = track_profile.line_distance_at_total_progress(
+            active_line,
+            start_progress,
+        )
+        leader_end_distance_m = track_profile.line_distance_at_total_progress(
+            active_line,
+            end_progress,
+        )
+        follower_distance_m = track_profile.line_distance_at_total_progress(
+            active_line,
+            state.total_progress,
+        )
+        if leader_end_distance_m <= follower_distance_m + PROGRESS_EPSILON:
+            return None
+        safety_car_speed_mps = max(0.0, self._safety_car_speed_mps)
         return VehicleFollowingConstraint(
-            leader_distance_m=track_profile.line_distance_at_total_progress(
-                active_line,
-                start_progress,
-            ),
+            leader_distance_m=leader_distance_m,
             leader_speed_mps=safety_car_speed_mps,
-            leader_end_distance_m=track_profile.line_distance_at_total_progress(
-                active_line,
-                end_progress,
-            ),
+            leader_end_distance_m=leader_end_distance_m,
             leader_end_speed_mps=safety_car_speed_mps,
             desired_gap_m=SC_CAR_LENGTH_M * SC_QUEUE_TARGET_CAR_LENGTHS,
             minimum_gap_m=SC_CAR_LENGTH_M + FOLLOWING_MIN_BUMPER_GAP_M,
@@ -3510,7 +3721,7 @@ class RaceEngine:
                 "PhysicsStepResult frame ids must be consumed exactly once "
                 "in strictly increasing order"
             )
-        self._consumed_physics_frame_ids.add(frame_id)
+        self._consumed_physics_frame_ids.append(frame_id)
         self._last_consumed_physics_frame_id = frame_id
 
     def _pit_route_points_m(
@@ -3669,6 +3880,93 @@ class RaceEngine:
             next_point[0] - point[0],
         )
 
+    def _pit_box_progress_for_team(self, team_id: int) -> float:
+        """Return one stable longitudinal pit-box position per constructor."""
+        pit_lane = self.circuit.pit_lane
+        route_length_m = self._pit_route_length_m()
+        if pit_lane is None or route_length_m <= 1e-9:
+            return 0.5
+        team_ids = sorted({driver.team_id for driver in self.drivers.values()})
+        if team_id not in team_ids or len(team_ids) <= 1:
+            return pit_lane.box_progress
+        team_index = team_ids.index(team_id)
+        centered_index = team_index - (len(team_ids) - 1) / 2.0
+        assigned = (
+            pit_lane.box_progress
+            + centered_index * PIT_TEAM_BOX_SPACING_M / route_length_m
+        )
+        operational_margin = max(
+            0.01,
+            (PIT_BOX_LATERAL_BLEND_DISTANCE_M + 4.0) / route_length_m,
+        )
+        return min(
+            pit_lane.speed_limit_end - operational_margin,
+            max(pit_lane.speed_limit_start + operational_margin, assigned),
+        )
+
+    def _pit_box_progress_for_driver(self, driver_id: int) -> float:
+        driver = self.drivers.get(driver_id)
+        if driver is None:
+            pit_lane = self.circuit.pit_lane
+            return pit_lane.box_progress if pit_lane is not None else 0.5
+        return self._pit_box_progress_for_team(driver.team_id)
+
+    def _pit_box_lateral_offset_m(
+        self,
+        driver_id: int,
+        lane_progress: float,
+    ) -> float:
+        """Blend from the pit travel lane into the assigned garage-front box."""
+        pit_lane = self.circuit.pit_lane
+        route_length_m = self._pit_route_length_m()
+        if pit_lane is None or route_length_m <= 1e-9:
+            return 0.0
+        stall_progress = self._pit_box_progress_for_driver(driver_id)
+        blend_progress = PIT_BOX_LATERAL_BLEND_DISTANCE_M / route_length_m
+        distance = abs(lane_progress - stall_progress)
+        if distance >= blend_progress:
+            return 0.0
+        normalized = 1.0 - distance / max(1e-9, blend_progress)
+        smooth = normalized * normalized * (3.0 - 2.0 * normalized)
+        return pit_lane.box_offset * smooth
+
+    def _pit_vehicle_pose_at_progress_m(
+        self,
+        driver_id: int,
+        lane_progress: float,
+        track_profile: TrackPhysicsProfile | None = None,
+    ) -> tuple[float, float, float]:
+        """Return the pit vehicle pose including the garage-front lateral path."""
+        track_profile = track_profile or self._track_physics
+        route_length_m = self._pit_route_length_m(track_profile)
+
+        def offset_point(progress: float) -> tuple[float, float]:
+            x, y, heading = self._pit_lane_pose_at_progress_m(
+                progress,
+                track_profile,
+            )
+            offset_m = self._pit_box_lateral_offset_m(driver_id, progress)
+            return (
+                x - sin(heading) * offset_m,
+                y + cos(heading) * offset_m,
+            )
+
+        clamped = min(1.0, max(0.0, lane_progress))
+        x, y = offset_point(clamped)
+        sample_progress = max(1e-6, 0.30 / max(1.0, route_length_m))
+        before = max(0.0, clamped - sample_progress)
+        after = min(1.0, clamped + sample_progress)
+        before_x, before_y = offset_point(before)
+        after_x, after_y = offset_point(after)
+        if after - before <= 1e-12:
+            _, _, heading = self._pit_lane_pose_at_progress_m(
+                clamped,
+                track_profile,
+            )
+        else:
+            heading = atan2(after_y - before_y, after_x - before_x)
+        return x, y, heading
+
     def _initialize_authoritative_vehicle_telemetry(self) -> None:
         """Place stopped cars in their actual grid boxes before the first light."""
         for state in self.driver_states.values():
@@ -3677,7 +3975,8 @@ class RaceEngine:
     def _set_authoritative_vehicle_telemetry(self, state: DriverRaceState) -> None:
         track_profile = self._track_physics_for_driver(state)
         if state.in_pit:
-            line_x, line_y, line_heading = self._pit_lane_pose_at_progress_m(
+            line_x, line_y, line_heading = self._pit_vehicle_pose_at_progress_m(
+                state.driver_id,
                 self._pit_lane_progress(state.driver_id),
                 track_profile,
             )
@@ -3903,13 +4202,17 @@ class RaceEngine:
             else:
                 first_speed, second_speed = slower_after, faster_after
         else:
-            energy_loss = min(8.0, 0.3 + 0.20 * impact)
+            # A static overlap is already resolved by positional correction.
+            # Do not invent a minimum loss or lateral kick when two cars have
+            # no closing speed; that made harmless close running look like a
+            # magnetic rejection.  Real impact still dissipates energy.
+            energy_loss = min(8.0, 0.16 * impact)
             first_speed -= energy_loss
             second_speed -= energy_loss
 
         first.speed_kph = round(max(0.0, first_speed) * 3.6, 3)
         second.speed_kph = round(max(0.0, second_speed) * 3.6, 3)
-        lateral_impulse = max(0.35, min(4.0, 0.25 * impact))
+        lateral_impulse = min(4.0, 0.18 * impact)
         first.lateral_speed_mps = max(
             -4.0,
             min(
@@ -3926,7 +4229,7 @@ class RaceEngine:
                 + contact.normal_lateral * lateral_impulse,
             ),
         )
-        yaw_impulse = min(0.12, 0.012 + 0.012 * impact)
+        yaw_impulse = min(0.12, 0.008 * impact)
         first.slip_angle_rad = max(
             -0.20,
             min(
@@ -4261,34 +4564,16 @@ class RaceEngine:
                 break
 
     def _resolve_physics_v2_same_line_gaps(self) -> None:
-        """Emergency speed cap; swept collision handling owns positional resolution."""
-        running = sorted(
-            (
-                state
-                for state in self.driver_states.values()
-                if not state.retired and not state.finished and not state.in_pit
-            ),
-            key=lambda state: (-state.total_progress, state.position),
-        )
-        minimum_gap = (
-            PHYSICAL_CAR_LENGTH_M + FOLLOWING_MIN_BUMPER_GAP_M
-        ) / self.track_length_m
-        for ahead, behind in zip(running, running[1:]):
-            lateral_overlap = (
-                abs(ahead.lateral_offset_m - behind.lateral_offset_m)
-                < PHYSICAL_CAR_WIDTH_M + MANEUVER_CLEARANCE_MARGIN_M
-            )
-            if not lateral_overlap:
-                continue
-            gap = ahead.total_progress - behind.total_progress
-            if gap >= minimum_gap - PROGRESS_EPSILON:
-                continue
-            behind.speed_kph = min(behind.speed_kph, ahead.speed_kph)
-            behind.acceleration_mps2 = min(behind.acceleration_mps2, 0.0)
-            self._progress_rate[behind.driver_id] = min(
-                self._progress_rate.get(behind.driver_id, 0.0),
-                self._progress_rate.get(ahead.driver_id, 0.0),
-            )
+        """Compatibility hook; physical following and swept bodies own gaps.
+
+        The former implementation copied the leading car's speed and progress
+        rate into a close follower after physics had already run.  At corner
+        entry this produced non-contact drops of more than 200 km/h in one
+        20 ms step—the visible "ejection" stutter.  A close car now decelerates
+        only through the tyre-force-limited controller above; actual overlap
+        remains the responsibility of swept collision resolution.
+        """
+        return
 
     def _reconcile_progress_rates(
         self,
@@ -5096,7 +5381,7 @@ class RaceEngine:
         while changed:
             changed = False
             for battle in self._side_by_side_battles.values():
-                if battle.phase in {"abort", "merge"}:
+                if battle.phase in {"yield", "abort", "merge"}:
                     continue
                 pair = {battle.attacker_id, battle.defender_id}
                 if members & pair and not pair <= members:
@@ -5149,7 +5434,7 @@ class RaceEngine:
         adjacency: dict[int, set[int]] = {}
         active_pairs: dict[tuple[int, int], SideBySideBattle] = {}
         for key, battle in self._side_by_side_battles.items():
-            if battle.phase in {"abort", "merge"}:
+            if battle.phase in {"yield", "abort", "merge"}:
                 continue
             active_pairs[key] = battle
             adjacency.setdefault(battle.attacker_id, set()).add(battle.defender_id)
@@ -5327,14 +5612,10 @@ class RaceEngine:
         return events
 
     def _maneuver_group_for_driver(self, driver_id: int) -> ManeuverGroup | None:
-        return next(
-            (
-                group
-                for group in self._maneuver_groups.values()
-                if driver_id in group.member_ids
-            ),
-            None,
-        )
+        for group in self._maneuver_groups.values():
+            if driver_id in group.member_ids:
+                return group
+        return None
 
     def _candidate_line_horizon_score(
         self,
@@ -5342,7 +5623,7 @@ class RaceEngine:
         line_name: str,
         opponent: DriverRaceState | None,
     ) -> float:
-        """Estimate short-horizon travel time and usable lateral space."""
+        """Estimate physical travel time and usable space through corner exit."""
         track_profile = self._track_physics_for_driver(state)
         physics_by_line = self._vehicle_physics_for_driver(state)
         physics = physics_by_line.get(
@@ -5350,35 +5631,65 @@ class RaceEngine:
             physics_by_line[DRIVING_LINE_RACING],
         )
         modifiers = self._physics_v2_modifiers(state)
-        horizon_offsets_m = (0.0, 60.0, 140.0, 220.0)
+        # The tactical comparison only needs the time shape across the 280 m
+        # braking/exit horizon.  The old 20 m segment loop queried each shared
+        # boundary twice (28 predictive speed calls per line).  Eight unique
+        # 40 m samples preserve the same trapezoidal travel-time comparison
+        # while keeping a 10 Hz, 20-car tactical pass affordable at 2x.
+        horizon_offsets_m = tuple(float(value) for value in range(0, 281, 40))
+        horizon_distances_m = [
+            track_profile.line_distance_at_total_progress(
+                line_name,
+                state.total_progress + offset_m / self.track_length_m,
+            )
+            for offset_m in horizon_offsets_m
+        ]
+        horizon_speeds_mps = [
+            physics.target_speed_mps(distance_m, modifiers)
+            for distance_m in horizon_distances_m
+        ]
         total_time = 0.0
-        for start_offset, end_offset in zip(horizon_offsets_m, horizon_offsets_m[1:]):
-            start_progress = state.total_progress + start_offset / self.track_length_m
-            end_progress = state.total_progress + end_offset / self.track_length_m
-            start_distance = track_profile.line_distance_at_total_progress(
-                line_name,
-                start_progress,
+        for start_distance, end_distance, start_speed, end_speed in zip(
+            horizon_distances_m,
+            horizon_distances_m[1:],
+            horizon_speeds_mps,
+            horizon_speeds_mps[1:],
+        ):
+            total_time += max(0.0, end_distance - start_distance) / max(
+                1.0,
+                0.5 * (start_speed + end_speed),
             )
-            end_distance = track_profile.line_distance_at_total_progress(
-                line_name,
-                end_progress,
-            )
-            target_speed = physics.target_speed_mps(start_distance, modifiers)
-            total_time += max(0.0, end_distance - start_distance) / max(1.0, target_speed)
 
         score = -total_time
         if opponent is not None:
-            lookahead_progress = state.progress + 100.0 / self.track_length_m
-            candidate_offset = track_profile.line_offset_at_progress(
-                line_name,
-                lookahead_progress,
-            )
-            opponent_offset = (
-                opponent.lateral_offset_m + opponent.lateral_speed_mps * 0.8
-            )
-            clearance = abs(candidate_offset - opponent_offset)
-            score -= max(0.0, PHYSICAL_CAR_WIDTH_M + 0.35 - clearance) * 0.35
-            score += min(1.0, clearance / (PHYSICAL_CAR_WIDTH_M + 0.35)) * 0.05
+            opponent_profile = self._track_physics_for_driver(opponent)
+            required_clearance_m = PHYSICAL_CAR_WIDTH_M + 0.35
+            for lookahead_m in (60.0, 120.0, 180.0):
+                lookahead_progress = (
+                    state.progress + lookahead_m / self.track_length_m
+                )
+                candidate_offset = track_profile.line_offset_at_progress(
+                    line_name,
+                    lookahead_progress,
+                )
+                opponent_offset = opponent_profile.line_offset_at_progress(
+                    DRIVING_LINE_RACING,
+                    lookahead_progress,
+                )
+                # Current lateral motion matters during the pull-out but is
+                # decayed before the apex; a driver cannot keep changing
+                # direction throughout the braking zone.
+                decay = max(0.0, 1.0 - lookahead_m / 180.0)
+                opponent_offset += opponent.lateral_speed_mps * 0.45 * decay
+                clearance = abs(candidate_offset - opponent_offset)
+                score -= (
+                    max(0.0, required_clearance_m - clearance)
+                    * 0.18
+                )
+                score += min(
+                    1.0,
+                    clearance / required_clearance_m,
+                ) * 0.012
         return score
 
     def _choose_attack_line(
@@ -5387,8 +5698,17 @@ class RaceEngine:
         defender_state: DriverRaceState,
     ) -> str:
         """Choose the quickest viable short-horizon trajectory around a defender."""
-        attacker = self._driver_meta[attacker_state.driver_id]
-        segment = segment_at_progress(self.circuit, attacker_state.progress)
+        cache_bucket = int(
+            self.race_elapsed / ATTACK_LINE_CHOICE_INTERVAL_SECONDS + 1e-9
+        )
+        if cache_bucket != self._attack_line_choice_cache_bucket:
+            self._attack_line_choice_cache_bucket = cache_bucket
+            self._attack_line_choice_cache.clear()
+        cache_key = (attacker_state.driver_id, defender_state.driver_id)
+        cached_line = self._attack_line_choice_cache.get(cache_key)
+        if cached_line is not None:
+            return cached_line
+
         scores = {
             ATTACK_LINE_INSIDE: self._candidate_line_horizon_score(
                 attacker_state,
@@ -5401,12 +5721,6 @@ class RaceEngine:
                 defender_state,
             ),
         }
-        if segment is not None and segment.type == TrackSegmentType.HEAVY_BRAKING:
-            scores[ATTACK_LINE_INSIDE] += 0.10 * attacker["overtaking"]
-        if attacker_state.drs_active:
-            scores[ATTACK_LINE_OUTSIDE] += 0.03
-        scores[ATTACK_LINE_INSIDE] += self.rng.uniform(-0.015, 0.015)
-        scores[ATTACK_LINE_OUTSIDE] += self.rng.uniform(-0.015, 0.015)
         clearance_lookahead_m = min(
             60.0,
             max(25.0, attacker_state.speed_kph / 3.6 * 0.35),
@@ -5442,14 +5756,17 @@ class RaceEngine:
             if clearance_m >= required_clearance_m
         ]
         if physically_separate:
-            return max(
+            selected_line = max(
                 physically_separate,
                 key=lambda line_name: (
                     scores[line_name],
                     clearances[line_name],
                 ),
             )
-        return max(scores, key=scores.get)
+        else:
+            selected_line = max(scores, key=scores.get)
+        self._attack_line_choice_cache[cache_key] = selected_line
+        return selected_line
 
     def _local_pull_out_decision(
         self,
@@ -5607,29 +5924,29 @@ class RaceEngine:
         )
 
     def _side_by_side_battle_for_driver(self, driver_id: int) -> SideBySideBattle | None:
-        candidates = [
-            battle
-            for battle in self._side_by_side_battles.values()
-            if driver_id in (battle.attacker_id, battle.defender_id)
-        ]
-        if not candidates:
-            return None
         phase_priority = {
             "overlap": 0,
             "clear": 1,
             "pull_out": 2,
             "approach": 3,
             "merge": 4,
-            "abort": 5,
+            "yield": 5,
+            "abort": 6,
         }
-        return min(
-            candidates,
-            key=lambda battle: (
+        selected: SideBySideBattle | None = None
+        selected_key: tuple[int, float, tuple[int, int]] | None = None
+        for battle in self._side_by_side_battles.values():
+            if driver_id not in (battle.attacker_id, battle.defender_id):
+                continue
+            candidate_key = (
                 phase_priority.get(battle.phase, 9),
                 abs(self._maneuver_longitudinal_advantage_m(battle)),
                 self._battle_pair_key(battle.attacker_id, battle.defender_id),
-            ),
-        )
+            )
+            if selected_key is None or candidate_key < selected_key:
+                selected = battle
+                selected_key = candidate_key
+        return selected
 
     def _is_side_by_side_active(self, driver_id: int) -> bool:
         return self._side_by_side_battle_for_driver(driver_id) is not None
@@ -5652,7 +5969,7 @@ class RaceEngine:
         key = self._battle_pair_key(attacker_id, defender_id)
         if not self._can_add_maneuver_edge(attacker_id, defender_id):
             return
-        self._side_by_side_battles[key] = SideBySideBattle(
+        battle = SideBySideBattle(
             attacker_id=attacker_id,
             defender_id=defender_id,
             remaining_seconds=MANEUVER_MAX_DURATION_SECONDS,
@@ -5677,13 +5994,54 @@ class RaceEngine:
             ),
             trajectory_authorized=trajectory_decision is not None,
         )
+        self._side_by_side_battles[key] = battle
+        if phase in {"yield", "abort"}:
+            self._capture_maneuver_transition_offsets(battle, phase)
+
+    def _capture_maneuver_transition_offsets(
+        self,
+        battle: SideBySideBattle,
+        phase: str,
+    ) -> None:
+        attacker_offset_m = self.driver_states[
+            battle.attacker_id
+        ].lateral_offset_m
+        defender_offset_m = self.driver_states[
+            battle.defender_id
+        ].lateral_offset_m
+        if phase == "yield":
+            battle.yield_attacker_lateral_offset_m = attacker_offset_m
+            battle.yield_defender_lateral_offset_m = defender_offset_m
+        elif phase == "abort":
+            battle.abort_attacker_lateral_offset_m = attacker_offset_m
+            battle.abort_defender_lateral_offset_m = defender_offset_m
+
+        for driver_id in (battle.attacker_id, battle.defender_id):
+            self._local_trajectory_plans.pop(driver_id, None)
+            self._local_trajectory_plan_ages[driver_id] = (
+                LOCAL_TRAJECTORY_PLAN_INTERVAL_SECONDS
+            )
+            self._local_trajectory_selected_ages[driver_id] = 0.0
 
     def _set_maneuver_phase(self, battle: SideBySideBattle, phase: str) -> None:
         battle.phase = phase
         battle.phase_elapsed_seconds = 0.0
-        if phase in {"clear", "merge", "abort"}:
+        if phase in {"yield", "abort"}:
+            self._capture_maneuver_transition_offsets(battle, phase)
+        if phase == "abort":
+            battle.abort_rejoin_started = False
+            battle.abort_rejoin_elapsed_seconds = 0.0
+        if phase in {"clear", "merge", "yield", "abort"}:
             battle.corner_active = False
             battle.corner_exit_hold_seconds = 0.0
+
+    def _begin_maneuver_yield(
+        self,
+        battle: SideBySideBattle,
+        yielding_driver_id: int | None = None,
+    ) -> None:
+        battle.yielding_driver_id = yielding_driver_id or battle.attacker_id
+        self._set_maneuver_phase(battle, "yield")
 
     def _required_pass_clearance_m(self, battle: SideBySideBattle) -> float:
         attacker = self.driver_states[battle.attacker_id]
@@ -6246,11 +6604,6 @@ class RaceEngine:
         battle.corner_active = True
         battle.corner_exit_hold_seconds = 0.0
         battle.corner_count += 1
-        battle.defender_line = (
-            ATTACK_LINE_OUTSIDE
-            if battle.attacker_line == ATTACK_LINE_INSIDE
-            else ATTACK_LINE_INSIDE
-        )
         for driver_id in (battle.attacker_id, battle.defender_id):
             self._local_trajectory_plans.pop(driver_id, None)
             self._local_trajectory_plan_ages[driver_id] = (
@@ -6306,6 +6659,84 @@ class RaceEngine:
             if abs(sample.turn_signal) >= CORNER_ENTRY_TURN_SIGNAL:
                 return float(distance_m)
         return None
+
+    def _next_corner_turn_direction(
+        self,
+        state: DriverRaceState,
+        maximum_distance_m: float,
+    ) -> int:
+        """Return the first material turn direction inside a braking preview."""
+        for distance_m in range(0, int(max(0.0, maximum_distance_m)) + 5, 5):
+            sample = self._track_physics.at_progress(
+                state.progress + distance_m / self.track_length_m
+            )
+            if abs(sample.turn_signal) < CORNER_ENTRY_TURN_SIGNAL:
+                continue
+            return 1 if sample.turn_signal > 0.0 else -1
+        return 0
+
+    def _commit_maneuver_lines_before_braking(
+        self,
+        battle: SideBySideBattle,
+    ) -> None:
+        """Freeze each driver's chosen corridor before corner deceleration.
+
+        FIA's single defensive move and moving-under-braking restrictions are
+        represented as one continuous lateral choice.  The stored values are
+        biases from each vehicle-specific racing line, so the cars still
+        follow the track curvature rather than holding an absolute canvas
+        coordinate.
+        """
+        if (
+            battle.line_committed
+            or battle.phase not in {"pull_out", "overlap"}
+            or battle.corner_active
+        ):
+            return
+        attacker = self.driver_states[battle.attacker_id]
+        defender = self.driver_states[battle.defender_id]
+        if (
+            self._maneuver_lateral_separation_m(battle)
+            < PHYSICAL_CAR_WIDTH_M + MANEUVER_CLEARANCE_MARGIN_M
+        ):
+            return
+        preview_m = max(
+            MANEUVER_LINE_COMMIT_MIN_PREVIEW_M,
+            max(attacker.speed_kph, defender.speed_kph)
+            / 3.6
+            * MANEUVER_LINE_COMMIT_PREVIEW_SECONDS,
+        )
+        corner_distance_m = self._distance_to_next_corner_entry_m(
+            attacker,
+            preview_m,
+        )
+        if corner_distance_m is None:
+            return
+
+        battle.line_committed = True
+        battle.line_commit_progress = attacker.total_progress
+        battle.line_commit_distance_m = corner_distance_m
+        attacker_racing_m = self._track_physics_for_driver(
+            attacker
+        ).line_offset_at_progress(DRIVING_LINE_RACING, attacker.progress)
+        defender_racing_m = self._track_physics_for_driver(
+            defender
+        ).line_offset_at_progress(DRIVING_LINE_RACING, defender.progress)
+        battle.attacker_committed_lateral_bias_m = (
+            attacker.lateral_offset_m - attacker_racing_m
+        )
+        battle.defender_committed_lateral_bias_m = (
+            defender.lateral_offset_m - defender_racing_m
+        )
+        turn_direction = self._next_corner_turn_direction(attacker, preview_m)
+        if turn_direction:
+            self._set_corner_turn_direction(battle, turn_direction)
+        for driver_id in (battle.attacker_id, battle.defender_id):
+            self._local_trajectory_plans.pop(driver_id, None)
+            self._local_trajectory_plan_ages[driver_id] = (
+                LOCAL_TRAJECTORY_PLAN_INTERVAL_SECONDS
+            )
+            self._local_trajectory_selected_ages[driver_id] = 0.0
 
     def _side_by_side_gap_seconds(self, battle: SideBySideBattle) -> float:
         attacker = self.driver_states[battle.attacker_id]
@@ -6410,7 +6841,7 @@ class RaceEngine:
         phase_at_start = battle.phase
         battle.elapsed_seconds += delta
         battle.phase_elapsed_seconds += delta
-        if phase_at_start not in {"approach", "clear", "merge", "abort"}:
+        if phase_at_start not in {"approach", "clear", "merge", "yield", "abort"}:
             battle.committed_seconds += delta
         battle.remaining_seconds = max(
             0.0,
@@ -6421,6 +6852,7 @@ class RaceEngine:
 
         attacker = self.driver_states[battle.attacker_id]
         active_segment = segment_at_progress(self.circuit, attacker.progress)
+        self._commit_maneuver_lines_before_braking(battle)
         if (
             battle.phase in {"pull_out", "overlap"}
             and active_segment is not None
@@ -6430,7 +6862,7 @@ class RaceEngine:
             events.append(self._maneuver_abort_event(battle))
             return events, False
 
-        if battle.phase not in {"clear", "merge", "abort"}:
+        if battle.phase not in {"clear", "merge", "yield", "abort"}:
             if (
                 battle.phase == "approach"
                 and battle.elapsed_seconds >= MANEUVER_APPROACH_MAX_SECONDS
@@ -6508,7 +6940,7 @@ class RaceEngine:
             )
             if entering_corner and battle.corner_entry_candidate and not battle.corner_active:
                 if not self._try_commit_corner(battle):
-                    self._set_maneuver_phase(battle, "abort")
+                    self._begin_maneuver_yield(battle)
                     events.append(self._maneuver_abort_event(battle))
                     return events, False
 
@@ -6573,6 +7005,34 @@ class RaceEngine:
             if battle.phase_elapsed_seconds >= MANEUVER_CLEAR_HOLD_SECONDS:
                 self._set_maneuver_phase(battle, "merge")
 
+        elif battle.phase == "yield":
+            yielding_id = battle.yielding_driver_id or battle.attacker_id
+            other_id = (
+                battle.defender_id
+                if yielding_id == battle.attacker_id
+                else battle.attacker_id
+            )
+            yielding = self.driver_states[yielding_id]
+            other = self.driver_states[other_id]
+            rear_clearance_m = (
+                other.total_progress - yielding.total_progress
+            ) * self.track_length_m
+            half_lengths_m = 0.5 * (
+                yielding.car_length_m + other.car_length_m
+            )
+            desired_clearance_m = half_lengths_m + MANEUVER_PREP_BUMPER_GAP_M
+            minimum_clearance_m = half_lengths_m + MANEUVER_CONTACT_BUFFER_M
+            normally_clear = (
+                battle.phase_elapsed_seconds >= MANEUVER_YIELD_MIN_SECONDS
+                and rear_clearance_m >= desired_clearance_m
+            )
+            timed_safe_clear = (
+                battle.phase_elapsed_seconds >= MANEUVER_YIELD_MAX_SECONDS
+                and rear_clearance_m >= minimum_clearance_m
+            )
+            if normally_clear or timed_safe_clear:
+                self._set_maneuver_phase(battle, "abort")
+
         elif battle.phase == "merge":
             attacker = self.driver_states[battle.attacker_id]
             defender = self.driver_states[battle.defender_id]
@@ -6584,9 +7044,43 @@ class RaceEngine:
                 return events, True
 
         elif battle.phase == "abort":
+            yielding_id = battle.yielding_driver_id or battle.attacker_id
+            other_id = (
+                battle.defender_id
+                if yielding_id == battle.attacker_id
+                else battle.attacker_id
+            )
+            yielding = self.driver_states[yielding_id]
+            other = self.driver_states[other_id]
+            required_rear_clearance_m = (
+                0.5 * (yielding.car_length_m + other.car_length_m)
+                + MANEUVER_PREP_BUMPER_GAP_M
+            )
+            rear_clearance_m = (
+                other.total_progress - yielding.total_progress
+            ) * self.track_length_m
+            if (
+                not battle.abort_rejoin_started
+                and rear_clearance_m >= required_rear_clearance_m
+            ):
+                battle.abort_rejoin_started = True
+            if battle.abort_rejoin_started:
+                battle.abort_rejoin_elapsed_seconds += delta
+
             attacker = self.driver_states[battle.attacker_id]
-            rejoined = self._maneuver_racing_line_error_m(attacker) <= MANEUVER_REJOIN_TOLERANCE_M
-            if rejoined and battle.phase_elapsed_seconds >= MANEUVER_ABORT_HOLD_SECONDS:
+            defender = self.driver_states[battle.defender_id]
+            rejoined = (
+                self._maneuver_racing_line_error_m(attacker)
+                <= MANEUVER_REJOIN_TOLERANCE_M
+                and self._maneuver_racing_line_error_m(defender)
+                <= MANEUVER_REJOIN_TOLERANCE_M
+            )
+            if (
+                rejoined
+                and battle.phase_elapsed_seconds >= MANEUVER_ABORT_HOLD_SECONDS
+                and battle.abort_rejoin_elapsed_seconds
+                >= MANEUVER_ABORT_REJOIN_SECONDS
+            ):
                 return events, True
 
         return events, False
@@ -6604,7 +7098,7 @@ class RaceEngine:
             defender = self.driver_states[battle.defender_id]
             if (
                 not battle.pass_confirmed
-                and battle.phase != "abort"
+                and battle.phase not in {"yield", "abort"}
                 and not self._overtaking_candidate_allowed(attacker, defender)
             ):
                 self._set_maneuver_phase(battle, "abort")
@@ -7413,6 +7907,32 @@ class RaceEngine:
             return VSC_LAP_TIME_FACTOR
         return 1.0
 
+    def _phase_vehicle_speed_factor(
+        self,
+        state: DriverRaceState | None = None,
+    ) -> float:
+        """Convert race-control pace into a physically safe speed ceiling.
+
+        A car catching the Safety Car queue may exceed its normal target only
+        on a segment explicitly classified as straight.  Race control must
+        never multiply the calibrated heavy-braking or corner speed above the
+        green-flag envelope. Slower VSC, queued-SC and near-queue factors still
+        apply fully.
+        """
+        requested = 1.0 / max(1e-6, self._phase_lap_time_factor(state))
+        if self.race_phase == "sc" and requested > 1.0:
+            segment = (
+                segment_at_progress(self.circuit, state.progress)
+                if state is not None
+                else None
+            )
+            return (
+                requested
+                if segment is not None and segment.type == TrackSegmentType.STRAIGHT
+                else 1.0
+            )
+        return requested
+
     def _race_phase_remaining_seconds(self) -> float:
         if self.race_phase != "vsc":
             return 0.0
@@ -7499,6 +8019,24 @@ class RaceEngine:
         self._finish_race_phase(ended, events)
         return events
 
+    def retire_driver_for_testing(self, driver_id: int) -> list[RaceEvent]:
+        """Create a repeatable stopped-car retirement for browser integration tests."""
+        state = self.driver_states.get(int(driver_id))
+        if state is None:
+            raise ValueError(f"Unknown driver: {driver_id}")
+        if state.retired or state.finished:
+            raise ValueError(f"Driver is not running: {driver_id}")
+        events: list[RaceEvent] = []
+        self._apply_incident(
+            Incident(
+                cause=IncidentCause.MECHANICAL,
+                severity=IncidentSeverity.CAR_STOPPED,
+                primary_driver_id=state.driver_id,
+            ),
+            events,
+        )
+        return events
+
     def _on_track_leader(self) -> DriverRaceState | None:
         running = [
             state
@@ -7510,6 +8048,7 @@ class RaceEngine:
         return min(running, key=lambda state: state.position)
 
     def _initialize_safety_car_progress(self) -> None:
+        self._initialize_sc_running_order()
         leader = self._on_track_leader()
         if leader is None:
             self._safety_car_total_progress = None
@@ -7552,24 +8091,217 @@ class RaceEngine:
     def _sc_target_gap_progress(self) -> float:
         return (SC_CAR_LENGTH_M * SC_QUEUE_TARGET_CAR_LENGTHS) / self.track_length_m
 
+    def _safety_car_line_2_progress(self) -> float | None:
+        """Return the circuit progress where a pit-out order becomes final."""
+        pit_lane = self.circuit.pit_lane
+        if pit_lane is None:
+            return None
+        if pit_lane.safety_car_line_2_progress is not None:
+            return pit_lane.safety_car_line_2_progress % 1.0
+        return self._pit_exit_progress()
+
+    def _initialize_sc_running_order(self) -> None:
+        self._sc_running_order = [
+            state.driver_id
+            for state in sorted(
+                (
+                    state
+                    for state in self.driver_states.values()
+                    if not state.retired and not state.finished and not state.in_pit
+                ),
+                key=lambda state: state.position,
+            )
+        ]
+        self._sc_pit_exit_order_targets.clear()
+
+    def _remove_from_sc_running_order(self, driver_id: int) -> None:
+        self._sc_running_order = [
+            item for item in self._sc_running_order if item != driver_id
+        ]
+        self._sc_pit_exit_order_targets.pop(driver_id, None)
+        self._sc_caught_driver_ids.discard(driver_id)
+
+    @staticmethod
+    def _insert_by_live_race_distance(
+        ordered: list[DriverRaceState],
+        state: DriverRaceState,
+    ) -> None:
+        insert_at = len(ordered)
+        for index, other in enumerate(ordered):
+            ahead_by_distance = state.total_progress > (
+                other.total_progress + PROGRESS_EPSILON
+            )
+            tied_ahead_by_order = (
+                abs(state.total_progress - other.total_progress)
+                <= PROGRESS_EPSILON
+                and state.position < other.position
+            )
+            if ahead_by_distance or tied_ahead_by_order:
+                insert_at = index
+                break
+        ordered.insert(insert_at, state)
+
+    def _refresh_sc_running_order(self) -> None:
+        """Drop ineligible entries and recover any untracked on-track cars."""
+        eligible = {
+            state.driver_id: state
+            for state in self.driver_states.values()
+            if not state.retired
+            and not state.finished
+            and not state.in_pit
+            and state.driver_id not in self._sc_pit_exit_order_targets
+        }
+        refreshed = [
+            driver_id
+            for driver_id in self._sc_running_order
+            if driver_id in eligible
+        ]
+        known = set(refreshed)
+        missing = sorted(
+            (
+                state
+                for driver_id, state in eligible.items()
+                if driver_id not in known
+            ),
+            key=lambda state: state.position,
+        )
+        for state in missing:
+            ordered_states = [eligible[driver_id] for driver_id in refreshed]
+            self._insert_by_live_race_distance(ordered_states, state)
+            refreshed = [item.driver_id for item in ordered_states]
+        self._sc_running_order = refreshed
+
+    def _sc_ordered_on_track_states(
+        self,
+        *,
+        include_pending: bool = True,
+    ) -> list[DriverRaceState]:
+        self._refresh_sc_running_order()
+        ordered = [
+            self.driver_states[driver_id]
+            for driver_id in self._sc_running_order
+            if driver_id in self.driver_states
+        ]
+        if include_pending:
+            pending = sorted(
+                (
+                    self.driver_states[driver_id]
+                    for driver_id in self._sc_pit_exit_order_targets
+                    if driver_id in self.driver_states
+                    and not self.driver_states[driver_id].retired
+                    and not self.driver_states[driver_id].finished
+                    and not self.driver_states[driver_id].in_pit
+                ),
+                key=lambda state: (-state.total_progress, state.position),
+            )
+            for state in pending:
+                self._insert_by_live_race_distance(ordered, state)
+        return ordered
+
+    def _begin_sc_pit_exit_ordering(self, state: DriverRaceState) -> None:
+        """Keep a pit-out result provisional until the car reaches SC2."""
+        if self.race_phase != "sc":
+            return
+        self._remove_from_sc_running_order(state.driver_id)
+        line_progress = self._safety_car_line_2_progress()
+        if line_progress is None:
+            target = state.total_progress
+        else:
+            target = int(state.total_progress // 1.0) + line_progress
+        self._sc_pit_exit_order_targets[state.driver_id] = target
+
+    def _commit_ready_sc_pit_exit_orders(self) -> None:
+        """Freeze each pit-out car into its physical order at the SC2 line."""
+        if self.race_phase != "sc":
+            return
+        self._refresh_sc_running_order()
+        ready = sorted(
+            (
+                self.driver_states[driver_id]
+                for driver_id, target in self._sc_pit_exit_order_targets.items()
+                if driver_id in self.driver_states
+                and (
+                    self.driver_states[driver_id].retired
+                    or self.driver_states[driver_id].finished
+                    or self.driver_states[driver_id].total_progress
+                    >= target - PROGRESS_EPSILON
+                )
+            ),
+            key=lambda state: (-state.total_progress, state.position),
+        )
+        for state in ready:
+            self._sc_pit_exit_order_targets.pop(state.driver_id, None)
+            if state.retired or state.finished or state.in_pit:
+                continue
+            ordered = [
+                self.driver_states[driver_id]
+                for driver_id in self._sc_running_order
+                if driver_id in self.driver_states
+            ]
+            self._insert_by_live_race_distance(ordered, state)
+            self._sc_running_order = [item.driver_id for item in ordered]
+            self._sc_caught_driver_ids.discard(state.driver_id)
+
     def _sc_queue_predecessor(self, state: DriverRaceState) -> DriverRaceState | None:
         """Return the next eligible car ahead in the frozen SC running order."""
-        running = sorted(
-            (
-                candidate
-                for candidate in self.driver_states.values()
-                if not candidate.retired
-                and not candidate.finished
-                and not candidate.in_pit
-                and candidate.driver_id not in self._sc_unlap_driver_ids
-            ),
-            key=lambda candidate: candidate.position,
-        )
+        running = [
+            candidate
+            for candidate in self._sc_ordered_on_track_states()
+            if candidate.driver_id not in self._sc_unlap_driver_ids
+        ]
         for index, candidate in enumerate(running):
             if candidate.driver_id != state.driver_id:
                 continue
             return running[index - 1] if index > 0 else None
         return None
+
+    def _sc_queue_control_reaches(
+        self,
+        state: DriverRaceState,
+        visited: set[int] | None = None,
+    ) -> bool:
+        """Return whether the car is within the queue-tail control horizon."""
+        return self._sc_queue_control_distance_m(state, visited) is not None
+
+    def _sc_queue_control_distance_m(
+        self,
+        state: DriverRaceState,
+        visited: set[int] | None = None,
+    ) -> float | None:
+        """Return cumulative distance back from the caught SC queue.
+
+        The horizon is cumulative rather than 800 m per predecessor.  The
+        latter chained across the whole field and slowed distant rear cars
+        before they had caught the queue, preventing timely formation.
+        """
+        if (
+            self.race_phase != "sc"
+            or self.safety_car_stage in {"deploying", "restart"}
+            or self._safety_car_total_progress is None
+        ):
+            return None
+        if state.driver_id in self._sc_caught_driver_ids:
+            return 0.0
+        seen = set() if visited is None else visited
+        if state.driver_id in seen:
+            return None
+        seen.add(state.driver_id)
+        predecessor = self._sc_queue_predecessor(state)
+        if predecessor is None:
+            ahead_total = self._safety_car_total_progress
+            distance_ahead_m = 0.0
+        else:
+            ahead_total = predecessor.total_progress
+            distance_ahead_m = self._sc_queue_control_distance_m(predecessor, seen)
+            if distance_ahead_m is None:
+                return None
+        gap_m = (ahead_total - state.total_progress) * self.track_length_m
+        if gap_m < 0.0:
+            return None
+        cumulative_distance_m = distance_ahead_m + gap_m
+        if cumulative_distance_m > SC_QUEUE_PROPAGATION_HORIZON_M:
+            return None
+        return cumulative_distance_m
 
     def _sc_lap_time_factor_for_gap(self, state: DriverRaceState) -> float:
         """Choose a smooth catch-up pace from the gap to the queued car ahead."""
@@ -7657,10 +8389,15 @@ class RaceEngine:
             DRIVING_LINE_RACING,
             self._safety_car_total_progress,
         )
+        safety_car_lap_time_factor = (
+            SC_COLLECTION_LAP_TIME_FACTOR
+            if self.safety_car_stage == "collecting"
+            else SC_LAP_TIME_FACTOR
+        )
         target_safety_car_speed_mps = self._vehicle_physics.target_speed_mps(
             safety_car_distance_m,
             VehiclePhysicsModifiers(
-                speed_limit_factor=1.0 / SC_LAP_TIME_FACTOR,
+                speed_limit_factor=1.0 / safety_car_lap_time_factor,
                 maximum_speed_mps=SC_CAUGHT_MAX_SPEED_KPH / 3.6,
             ),
         )
@@ -7738,6 +8475,8 @@ class RaceEngine:
         self._sc_caught_driver_ids.clear()
         self._sc_unlap_driver_ids.clear()
         self._sc_unlap_targets.clear()
+        self._sc_running_order.clear()
+        self._sc_pit_exit_order_targets.clear()
         self._sc_withdraw_target = None
         self._sc_restart_target = None
         self._sc_restart_accel_progress = None
@@ -7775,14 +8514,7 @@ class RaceEngine:
         if self._safety_car_total_progress is None:
             return
 
-        running = sorted(
-            (
-                state
-                for state in self.driver_states.values()
-                if not state.retired and not state.finished and not state.in_pit
-            ),
-            key=lambda state: state.position,
-        )
+        running = self._sc_ordered_on_track_states()
         active_ids = {state.driver_id for state in running}
         self._sc_caught_driver_ids.intersection_update(active_ids)
 
@@ -7791,6 +8523,7 @@ class RaceEngine:
         queue_locked = self.safety_car_stage == "queued"
         ahead_total = self._safety_car_total_progress
         ahead_is_queued = True
+        ahead_speed_mps = max(0.0, self._safety_car_speed_mps)
 
         for state in running:
             if state.driver_id in self._sc_unlap_driver_ids:
@@ -7810,6 +8543,11 @@ class RaceEngine:
                 ahead_is_queued
                 and gap >= -PROGRESS_EPSILON
                 and gap <= max_gap + PROGRESS_EPSILON
+                and (
+                    (caught and queue_locked)
+                    or max(0.0, state.speed_kph / 3.6 - ahead_speed_mps)
+                    <= SC_QUEUE_JOIN_MAX_RELATIVE_SPEED_KPH / 3.6
+                )
             ):
                 self._sc_caught_driver_ids.add(state.driver_id)
                 caught = True
@@ -7818,6 +8556,7 @@ class RaceEngine:
 
             ahead_total = state.total_progress
             ahead_is_queued = caught
+            ahead_speed_mps = max(0.0, state.speed_kph / 3.6)
 
         queue_ids = {
             state.driver_id
@@ -8213,7 +8952,7 @@ class RaceEngine:
             self.start_sequence_phase = "racing"
 
     def set_speed(self, multiplier: int) -> bool:
-        if multiplier not in (1, 2, 3):
+        if multiplier not in (1, 2):
             return False
         self.speed_multiplier = multiplier
         return True
@@ -8293,6 +9032,8 @@ class RaceEngine:
         # maneuver graph; stale edges would override live pit ordering.
         self._clear_side_by_side_for_driver(driver_id)
         self._pending_overtake_commands.pop(driver_id, None)
+        if self.race_phase == "sc":
+            self._remove_from_sc_running_order(driver_id)
         state.in_pit = True
         self._pit_phase[driver_id] = "in"
         self._pit_phase_duration[driver_id] = 0.0
@@ -8451,12 +9192,16 @@ class RaceEngine:
                 decision = self._local_pull_out_decision(state, car_ahead)
                 if decision is None:
                     track_profile = self._track_physics_for_driver(state)
+                    fallback_line = self._choose_attack_line(
+                        state,
+                        car_ahead,
+                    )
                     racing_offset = track_profile.line_offset_at_progress(
                         DRIVING_LINE_RACING,
                         state.progress,
                     )
                     target_offset = track_profile.line_offset_at_progress(
-                        ATTACK_LINE_INSIDE,
+                        fallback_line,
                         state.progress,
                     )
                     decision = LocalPullOutDecision(
@@ -8467,7 +9212,7 @@ class RaceEngine:
                             target_offset - car_ahead.lateral_offset_m
                         )
                         - 0.5 * (state.car_width_m + car_ahead.car_width_m),
-                        attacker_line=ATTACK_LINE_INSIDE,
+                        attacker_line=fallback_line,
                     )
                 if decision.minimum_clearance_m >= MANEUVER_PULL_OUT_MIN_CLEARANCE_M:
                     self._pending_overtake_commands[state.driver_id] = (
@@ -8503,13 +9248,20 @@ class RaceEngine:
                     ):
                         continue
                     if segment.type == TrackSegmentType.HEAVY_BRAKING:
-                        intent_attacker_line = ATTACK_LINE_INSIDE
+                        intent_attacker_line = self._choose_attack_line(
+                            state,
+                            car_ahead,
+                        )
                     elif (
                         segment.type == TrackSegmentType.STRAIGHT
                         and segment.side_by_side_allowed
                     ):
-                        intent_attacker_line = ATTACK_LINE_INSIDE
                         decision = self._local_pull_out_decision(state, car_ahead)
+                        intent_attacker_line = (
+                            decision.attacker_line
+                            if decision is not None
+                            else self._choose_attack_line(state, car_ahead)
+                        )
                     else:
                         continue
                     if segment.type == TrackSegmentType.HEAVY_BRAKING:
@@ -8837,7 +9589,9 @@ class RaceEngine:
 
         progress = self._pit_route_progress.get(driver_id, 0.0)
         speed_mps = self._pit_route_speed_mps.get(driver_id, state.speed_kph / 3.6)
-        limit_mps = PIT_LANE_SPEED_LIMIT_KPH / 3.6
+        pit_speed_limit_kph = pit_lane.speed_limit_kph
+        limit_mps = pit_speed_limit_kph / 3.6
+        assigned_box_progress = self._pit_box_progress_for_driver(driver_id)
         acceleration_mps2 = 0.0
         landmark_progress: float
         landmark_speed_mps: float
@@ -8851,16 +9605,16 @@ class RaceEngine:
                 landmark_speed_mps**2 - speed_mps**2
             ) / (2.0 * distance_m)
             # Use the kinematic acceleration required to arrive at the line at
-            # exactly 60 km/h.  The old bang-bang controller always applied
+            # exactly the event speed limit. The old bang-bang controller always applied
             # at least 7 m/s² of braking, reached the limit too early, then
-            # oscillated between roughly 57.8 and 60.3 km/h before the line.
+            # oscillated around the configured limit before the line.
             acceleration_mps2 = max(
                 -PIT_ENTRY_BRAKING_MPS2,
                 min(PIT_LANE_ACCELERATION_MPS2, required_acceleration_mps2),
             )
         elif phase == "in":
             self._pit_merge_state[driver_id] = "limited"
-            landmark_progress = pit_lane.box_progress
+            landmark_progress = assigned_box_progress
             landmark_speed_mps = 0.0
             distance_m = max(0.0, (landmark_progress - progress) * route_length_m)
             braking_envelope = sqrt(2.0 * PIT_BOX_BRAKING_MPS2 * distance_m)
@@ -8964,7 +9718,7 @@ class RaceEngine:
             next_speed_mps = landmark_speed_mps
             if phase == "in" and landmark_progress == pit_lane.speed_limit_start:
                 next_speed_mps = limit_mps
-            elif phase == "in" and landmark_progress == pit_lane.box_progress:
+            elif phase == "in" and landmark_progress == assigned_box_progress:
                 next_speed_mps = 0.0
                 self._pit_phase[driver_id] = "stop"
                 duration = self._pit_tire_change_time[driver_id]
@@ -8978,7 +9732,7 @@ class RaceEngine:
         state.speed_kph = next_speed_mps * 3.6
         state.acceleration_mps2 = acceleration_mps2
         state.target_speed_kph = (
-            PIT_LANE_SPEED_LIMIT_KPH
+            pit_speed_limit_kph
             if next_progress <= pit_lane.speed_limit_end
             else state.speed_kph
         )
@@ -9214,6 +9968,7 @@ class RaceEngine:
         state.target_lateral_offset_m = state.lateral_offset_m
         state.slip_angle_rad = (pit_heading - line_heading + pi) % (2.0 * pi) - pi
         state.total_distance_m = state.total_progress * self.track_length_m
+        self._begin_sc_pit_exit_ordering(state)
         self._refresh_lap_variation(driver_id)
         merge_state = self._pit_merge_state.get(driver_id, "merge")
         self._clear_pit_state(driver_id)
@@ -9300,6 +10055,28 @@ class RaceEngine:
                 ],
             )
         )
+        self._prune_timing_crossings(driver_id, completed_lap=lap)
+
+    def _prune_timing_crossings(
+        self,
+        driver_id: int,
+        *,
+        completed_lap: int,
+    ) -> None:
+        """Keep raw timing anchors bounded after their lap summary is stored."""
+        crossings = self._timing_crossings.get(driver_id)
+        if not crossings:
+            return
+        minimum_lap_index = completed_lap - TIMING_CROSSING_LAPS_TO_RETAIN
+        if minimum_lap_index <= 0:
+            return
+        stale_keys = [
+            key
+            for key in crossings
+            if key[0] < minimum_lap_index
+        ]
+        for key in stale_keys:
+            del crossings[key]
 
     def _complete_lap(
         self,
@@ -9435,6 +10212,19 @@ class RaceEngine:
                 )
                 active_indices[battle.attacker_id] = defender_index
                 active_indices[battle.defender_id] = attacker_index
+        elif self.race_phase == "sc":
+            # The on-track queue remains frozen, except for a car emerging
+            # from the pits. Its place is provisional up to SC2 and is then
+            # committed exactly once from physical race distance.
+            self._commit_ready_sc_pit_exit_orders()
+            on_track = self._sc_ordered_on_track_states()
+            in_pit = sorted(
+                (s for s in active if s.in_pit),
+                key=lambda s: (-s.total_progress, s.position),
+            )
+            active = on_track
+            for pit_car in in_pit:
+                self._insert_by_live_race_distance(active, pit_car)
         else:
             # Cars on track cannot overtake under SC/VSC, but a pit-lane car can
             # gain or lose places according to its live race distance.
@@ -9445,20 +10235,7 @@ class RaceEngine:
             )
             active = on_track
             for pit_car in in_pit:
-                insert_at = len(active)
-                for index, other in enumerate(active):
-                    ahead_by_distance = pit_car.total_progress > (
-                        other.total_progress + PROGRESS_EPSILON
-                    )
-                    tied_ahead_by_order = (
-                        abs(pit_car.total_progress - other.total_progress)
-                        <= PROGRESS_EPSILON
-                        and pit_car.position < other.position
-                    )
-                    if ahead_by_distance or tied_ahead_by_order:
-                        insert_at = index
-                        break
-                active.insert(insert_at, pit_car)
+                self._insert_by_live_race_distance(active, pit_car)
         finished.sort(
             key=lambda s: (
                 self._finish_order.index(s.driver_id)
@@ -9591,10 +10368,28 @@ class RaceEngine:
                 previous_key = self._previous_timing_key(lap_index, loop.index)
                 previous_time = crossings.get(previous_key)
                 if previous_time is not None:
-                    self._last_mini_sector_time[state.driver_id] = max(
+                    mini_sector_time = max(
                         0.0,
                         crossing_time - previous_time,
                     )
+                    self._last_mini_sector_time[state.driver_id] = mini_sector_time
+                    completed_index = previous_key[1]
+                    self._last_completed_mini_sector_index[
+                        state.driver_id
+                    ] = completed_index
+                    personal_bests = self._personal_best_mini_sector_times[
+                        state.driver_id
+                    ]
+                    personal_best = personal_bests[completed_index]
+                    if personal_best is None or mini_sector_time < personal_best:
+                        personal_bests[completed_index] = mini_sector_time
+                    session_best = self._session_best_mini_sector_times[
+                        completed_index
+                    ]
+                    if session_best is None or mini_sector_time < session_best:
+                        self._session_best_mini_sector_times[
+                            completed_index
+                        ] = mini_sector_time
                 previous_sector_key = self._previous_sector_start_key(
                     lap_index,
                     loop,
@@ -9620,11 +10415,121 @@ class RaceEngine:
         common = ahead_crossings.keys() & follower_crossings.keys()
         if not common:
             return None
-        latest = max(
+        latest_key = max(
             common,
             key=lambda key: key[0] + self._timing_loops[key[1]].progress,
         )
-        return max(0.0, follower_crossings[latest] - ahead_crossings[latest])
+        gap_seconds = follower_crossings[latest_key] - ahead_crossings[latest_key]
+        if gap_seconds > 0.0005:
+            return gap_seconds
+        # A non-positive historical split can occur after an on-track position
+        # change.  Clamping it to zero made whole timing columns show 0.000;
+        # fall back to the live spatial estimate until the new order crosses a
+        # common timing line in that order.
+        return None
+
+    def _spatial_live_gap_seconds_between(
+        self,
+        ahead: DriverRaceState,
+        follower: DriverRaceState,
+    ) -> float | None:
+        """Estimate a continuously changing time gap from current track state."""
+        progress_gap = abs(ahead.total_progress - follower.total_progress)
+        if progress_gap <= PROGRESS_EPSILON:
+            return None
+        distance_m = progress_gap * self.track_length_m
+        lap_estimate_seconds = self._progress_gap_to_seconds(
+            progress_gap,
+            follower,
+        )
+        average_speed_mps = 0.5 * (
+            max(0.0, ahead.speed_kph / 3.6)
+            + max(0.0, follower.speed_kph / 3.6)
+        )
+        if average_speed_mps < 8.0:
+            return lap_estimate_seconds
+        speed_estimate_seconds = distance_m / average_speed_mps
+        if distance_m <= 250.0:
+            speed_weight = 0.72
+        elif distance_m <= 750.0:
+            speed_weight = 0.55
+        else:
+            speed_weight = 0.30
+        blended = (
+            speed_estimate_seconds * speed_weight
+            + lap_estimate_seconds * (1.0 - speed_weight)
+        )
+        return min(
+            lap_estimate_seconds * 2.5,
+            max(lap_estimate_seconds * 0.35, blended),
+        )
+
+    def _live_timing_gap_seconds_between(
+        self,
+        ahead: DriverRaceState,
+        follower: DriverRaceState,
+    ) -> tuple[float | None, bool]:
+        """Blend an official loop anchor with live between-loop movement."""
+        measured = self._timing_gap_seconds_between(ahead, follower)
+        spatial = self._spatial_live_gap_seconds_between(ahead, follower)
+        if measured is None:
+            return spatial, False
+        if spatial is None:
+            return measured, True
+        distance_m = max(
+            0.0,
+            (ahead.total_progress - follower.total_progress) * self.track_length_m,
+        )
+        live_weight = 0.55 if distance_m <= 750.0 else 0.35
+        return (
+            measured * (1.0 - live_weight) + spatial * live_weight,
+            True,
+        )
+
+    def _current_mini_sector_splits(
+        self,
+        driver_id: int,
+        lap_index: int,
+    ) -> list[float | None]:
+        """Return completed timing-loop segments for the driver's live lap."""
+        crossings = self._timing_crossings.get(driver_id, {})
+        splits: list[float | None] = []
+        for loop in self._timing_loops:
+            start_key = (lap_index, loop.index)
+            if loop.index + 1 < len(self._timing_loops):
+                end_key = (lap_index, loop.index + 1)
+            else:
+                end_key = (lap_index + 1, 0)
+            start_time = crossings.get(start_key)
+            end_time = crossings.get(end_key)
+            splits.append(
+                None
+                if start_time is None or end_time is None
+                else max(0.0, end_time - start_time)
+            )
+        return splits
+
+    def _mini_sector_statuses(
+        self,
+        driver_id: int,
+        splits: list[float | None],
+    ) -> list[str]:
+        """Map live mini sectors to the official timing colour convention."""
+        personal_bests = self._personal_best_mini_sector_times[driver_id]
+        statuses: list[str] = []
+        for index, split in enumerate(splits):
+            if split is None:
+                statuses.append("pending")
+                continue
+            session_best = self._session_best_mini_sector_times[index]
+            personal_best = personal_bests[index]
+            if session_best is not None and split <= session_best + 0.0005:
+                statuses.append("overall_best")
+            elif personal_best is not None and split <= personal_best + 0.0005:
+                statuses.append("personal_best")
+            else:
+                statuses.append("slower")
+        return statuses
 
     def _lap_split_times(
         self,
@@ -9673,19 +10578,30 @@ class RaceEngine:
                 state.gap_to_leader = 0.0
                 self._timing_gap_valid[state.driver_id] = True
             else:
-                measured_gap = self._timing_gap_seconds_between(leader, state)
-                self._timing_gap_valid[state.driver_id] = measured_gap is not None
-                if measured_gap is not None:
-                    state.gap_to_leader = measured_gap
-                else:
-                    progress_gap = max(
-                        0.0,
-                        leader.total_progress - state.total_progress,
-                    )
-                    state.gap_to_leader = self._progress_gap_to_seconds(
-                        progress_gap,
-                        state,
-                    )
+                live_gap, anchored = self._live_timing_gap_seconds_between(
+                    leader,
+                    state,
+                )
+                self._timing_gap_valid[state.driver_id] = anchored
+                state.gap_to_leader = max(0.0, live_gap or 0.0)
+
+        running_by_position = {state.position: state for state in running}
+        for state in running:
+            if state.position <= 1:
+                self._live_interval_seconds[state.driver_id] = None
+                self._interval_timing_gap_valid[state.driver_id] = True
+                continue
+            ahead = running_by_position.get(state.position - 1)
+            if ahead is None:
+                self._live_interval_seconds[state.driver_id] = None
+                self._interval_timing_gap_valid[state.driver_id] = False
+                continue
+            interval_seconds, anchored = self._live_timing_gap_seconds_between(
+                ahead,
+                state,
+            )
+            self._live_interval_seconds[state.driver_id] = interval_seconds
+            self._interval_timing_gap_valid[state.driver_id] = anchored
 
     def _check_race_finished(self) -> bool:
         active = [
@@ -9697,8 +10613,8 @@ class RaceEngine:
     def _format_gap(self, seconds: float) -> str:
         return f"+{max(0.0, seconds):.3f}"
 
-    def _format_interval(self, seconds: float) -> str:
-        if seconds <= 0.001:
+    def _format_interval(self, seconds: float | None) -> str:
+        if seconds is None or seconds <= 0.001:
             return "—"
         return f"+{seconds:.3f}"
 
@@ -9735,20 +10651,13 @@ class RaceEngine:
             tire_factors = self._current_tire_physics(state)
 
             interval = "—"
-            interval_seconds: float | None = None
+            interval_seconds = self._live_interval_seconds.get(state.driver_id)
+            interval_timing_gap_valid = self._interval_timing_gap_valid.get(
+                state.driver_id,
+                False,
+            )
             if not state.retired and state.position > 1:
-                ahead = running_by_pos.get(state.position - 1)
-                if ahead is not None:
-                    interval_seconds = self._timing_gap_seconds_between(ahead, state)
-                    if interval_seconds is None:
-                        progress_gap = max(
-                            0.0,
-                            ahead.total_progress - state.total_progress,
-                        )
-                        interval_seconds = self._progress_gap_to_seconds(
-                            progress_gap,
-                            state,
-                        )
+                if running_by_pos.get(state.position - 1) is not None:
                     interval = self._format_interval(interval_seconds)
 
             if state.retired:
@@ -9767,6 +10676,32 @@ class RaceEngine:
                 current_mini_sector,
                 current_timing_loop,
             ) = self._timing_location(state.progress)
+            timing_lap_index = max(
+                0,
+                state.current_lap - (1 if state.finished else 0),
+            )
+            mini_sector_splits = self._current_mini_sector_splits(
+                state.driver_id,
+                timing_lap_index,
+            )
+            mini_sector_statuses = self._mini_sector_statuses(
+                state.driver_id,
+                mini_sector_splits,
+            )
+            last_completed_mini_index = self._last_completed_mini_sector_index.get(
+                state.driver_id
+            )
+            last_mini_delta_to_best: float | None = None
+            if last_completed_mini_index is not None:
+                session_best = self._session_best_mini_sector_times[
+                    last_completed_mini_index
+                ]
+                if session_best is not None:
+                    last_mini_delta_to_best = max(
+                        0.0,
+                        self._last_mini_sector_time.get(state.driver_id, 0.0)
+                        - session_best,
+                    )
 
             maneuver = self._side_by_side_battle_for_driver(state.driver_id)
             maneuver_group = self._maneuver_group_for_driver(state.driver_id)
@@ -9859,6 +10794,15 @@ class RaceEngine:
                         state.driver_id,
                         False,
                     ),
+                    interval_timing_gap_valid=interval_timing_gap_valid,
+                    timing_gap_source=(
+                        "live"
+                        if self._timing_gap_valid.get(state.driver_id, False)
+                        else "estimated"
+                    ),
+                    interval_timing_gap_source=(
+                        "live" if interval_timing_gap_valid else "estimated"
+                    ),
                     current_sector=current_sector,
                     current_mini_sector=current_mini_sector,
                     current_timing_loop=current_timing_loop,
@@ -9870,6 +10814,16 @@ class RaceEngine:
                         self._last_mini_sector_time.get(state.driver_id, 0.0),
                         3,
                     ),
+                    last_mini_sector_delta_to_best=(
+                        round(last_mini_delta_to_best, 3)
+                        if last_mini_delta_to_best is not None
+                        else None
+                    ),
+                    mini_sector_splits=[
+                        round(split, 3) if split is not None else None
+                        for split in mini_sector_splits
+                    ],
+                    mini_sector_statuses=mini_sector_statuses,
                     tire_compound=state.tire_compound.value,
                     tire_age=state.tire_age,
                     tire_wear=round(tire_factors.wear, 3),
@@ -9932,6 +10886,10 @@ class RaceEngine:
                         0.0 if self.paused else self._pit_lane_progress_rate(state.driver_id),
                         8,
                     ),
+                    pit_box_progress=round(
+                        self._pit_box_progress_for_driver(state.driver_id),
+                        7,
+                    ),
                     pit_elapsed=round(self._pit_elapsed.get(state.driver_id, 0.0), 1),
                     pit_stop_elapsed=round(self._pit_stop_elapsed.get(state.driver_id, 0.0), 1),
                     lap_history=self._lap_history.get(state.driver_id, []),
@@ -9982,6 +10940,9 @@ class RaceEngine:
                     ),
                     maneuver_corner_authorized=(
                         maneuver.corner_authorized if maneuver else False
+                    ),
+                    maneuver_line_committed=(
+                        maneuver.line_committed if maneuver else False
                     ),
                     maneuver_corridor=(
                         self._corner_corridor_for_driver(maneuver, state.driver_id)
@@ -10119,6 +11080,374 @@ class RaceEngine:
             ),
             positions=positions,
             events=events or [],
+        )
+
+    def build_dashboard_payload(
+        self,
+        runtime_metrics: dict[str, float | int] | None = None,
+    ) -> dict:
+        """Build the live UI payload without allocating full telemetry models."""
+        runtime_metrics = runtime_metrics or {}
+        sorted_states = sorted(
+            self.driver_states.values(),
+            key=lambda state: state.position,
+        )
+        running_by_pos = {
+            state.position: state
+            for state in sorted_states
+            if not state.retired
+        }
+        positions: list[dict] = []
+        for state in sorted_states:
+            meta = self._driver_meta[state.driver_id]
+            interval_seconds = self._live_interval_seconds.get(state.driver_id)
+            interval_timing_gap_valid = self._interval_timing_gap_valid.get(
+                state.driver_id,
+                False,
+            )
+            interval = "—"
+            if (
+                not state.retired
+                and state.position > 1
+                and running_by_pos.get(state.position - 1) is not None
+            ):
+                interval = self._format_interval(interval_seconds)
+
+            if state.retired:
+                gap = "—"
+                interval = "—"
+            elif state.finished:
+                gap = "FIN"
+                interval = "—"
+            elif state.position == 1:
+                gap = "LEADER"
+            else:
+                gap = self._format_gap(state.gap_to_leader)
+
+            (
+                current_sector,
+                current_mini_sector,
+                current_timing_loop,
+            ) = self._timing_location(state.progress)
+            transition_elapsed = self._pace_mode_transition_elapsed.get(
+                state.driver_id,
+                PACE_MODE_TRANSITION_SECONDS,
+            )
+            maneuver = self._side_by_side_battle_for_driver(state.driver_id)
+            maneuver_group = self._maneuver_group_for_driver(state.driver_id)
+            side_by_side_active = bool(
+                (maneuver is not None and maneuver.phase in {"overlap", "clear"})
+                or (maneuver_group is not None and maneuver_group.size >= 3)
+            )
+            position = {
+                    "driver_id": state.driver_id,
+                    "name": meta["abbreviation"],
+                    "full_name": meta["full_name"],
+                    "team": meta["team_name"],
+                    "team_color": meta["team_color"],
+                    "position": state.position,
+                    "speed_kph": round(
+                        0.0
+                        if state.retired or state.finished
+                        else state.speed_kph,
+                        1,
+                    ),
+                    "gap": gap,
+                    "interval": interval,
+                    "timing_gap_valid": self._timing_gap_valid.get(
+                        state.driver_id,
+                        False,
+                    ),
+                    "interval_timing_gap_valid": interval_timing_gap_valid,
+                    "timing_gap_source": (
+                        "live"
+                        if self._timing_gap_valid.get(state.driver_id, False)
+                        else "estimated"
+                    ),
+                    "interval_timing_gap_source": (
+                        "live" if interval_timing_gap_valid else "estimated"
+                    ),
+                    "current_sector": current_sector,
+                    "current_mini_sector": current_mini_sector,
+                    "current_timing_loop": current_timing_loop,
+                    "tire_compound": state.tire_compound.value,
+                    "tire_age": state.tire_age,
+                    "tire_wear": round(
+                        self._current_tire_physics(state).wear,
+                        3,
+                    ),
+                    "pace_mode": state.pace_mode.value,
+                    "pace_mode_from": self._pace_mode_transition_from.get(
+                        state.driver_id,
+                        state.pace_mode,
+                    ).value,
+                    "pace_mode_transition_progress": round(
+                        min(
+                            1.0,
+                            max(
+                                0.0,
+                                transition_elapsed / PACE_MODE_TRANSITION_SECONDS,
+                            ),
+                        ),
+                        4,
+                    ),
+                    "last_lap_time": round(state.last_lap_time, 3),
+                    "best_lap_time": round(state.best_lap_time, 3),
+                    "in_pit": state.in_pit,
+                    "pit_count": state.pit_count,
+                    "pit_phase": self._pit_phase.get(state.driver_id),
+                    "pit_merge_state": self._pit_merge_state.get(state.driver_id),
+                    "pit_box_progress": round(
+                        self._pit_box_progress_for_driver(state.driver_id),
+                        7,
+                    ),
+                    "pit_elapsed": round(
+                        self._pit_elapsed.get(state.driver_id, 0.0),
+                        1,
+                    ),
+                    "pit_stop_elapsed": round(
+                        self._pit_stop_elapsed.get(state.driver_id, 0.0),
+                        1,
+                    ),
+                    "retired": state.retired,
+                    "finished": state.finished,
+                    "drs_active": state.drs_active,
+                    "dirty_air_active": state.dirty_air_active,
+                    "side_by_side_active": side_by_side_active,
+                    "maneuver_group_size": (
+                        maneuver_group.size if maneuver_group else 0
+                    ),
+                    "hazard_active": state.hazard_active,
+                    "local_yellow_active": self._local_yellow_active_for(state),
+                }
+            position_defaults = {
+                "speed_kph": 0.0,
+                "timing_gap_valid": False,
+                "interval_timing_gap_valid": False,
+                "timing_gap_source": "estimated",
+                "interval_timing_gap_source": "estimated",
+                "current_sector": 1,
+                "current_mini_sector": 1,
+                "current_timing_loop": 1,
+                "pace_mode": PaceMode.STANDARD.value,
+                "pace_mode_from": PaceMode.STANDARD.value,
+                "pace_mode_transition_progress": 1.0,
+                "pit_phase": None,
+                "pit_merge_state": None,
+                "pit_box_progress": 0.5,
+                "pit_elapsed": 0.0,
+                "pit_stop_elapsed": 0.0,
+                "finished": False,
+                "drs_active": False,
+                "dirty_air_active": False,
+                "side_by_side_active": False,
+                "maneuver_group_size": 0,
+                "hazard_active": False,
+                "local_yellow_active": False,
+            }
+            for field, default in position_defaults.items():
+                if position.get(field) == default:
+                    position.pop(field, None)
+            positions.append(position)
+
+        payload = {
+            "type": "race_state",
+            "lap": self.current_lap,
+            "total_laps": self.total_laps,
+            "race_phase": self.race_phase,
+            "race_phase_remaining_seconds": round(
+                self._race_phase_remaining_seconds(),
+                1,
+            ),
+            "race_phase_remaining_laps": self._race_phase_remaining_laps(),
+            "safety_car_stage": self.safety_car_stage,
+            "safety_car_visible": self._safety_car_visible,
+            "safety_car_route": self._safety_car_route,
+            "safety_car_progress": round(
+                (self._safety_car_total_progress or 0.0) % 1.0,
+                7,
+            ),
+            "safety_car_progress_rate": round(
+                self._safety_car_progress_rate,
+                8,
+            ),
+            "safety_car_pit_lane_progress": round(
+                self._safety_car_pit_lane_progress,
+                7,
+            ),
+            "pit_window_open": self.pit_window_open,
+            "start_sequence_phase": self.start_sequence_phase,
+            "start_light_count": self.start_light_count,
+            "speed_multiplier": self.speed_multiplier,
+            "paused": self.paused,
+            "physics_hz": round(1.0 / PHYSICS_STEP_SECONDS),
+            "broadcast_hz": int(runtime_metrics.get("broadcast_hz", 30)),
+            "effective_speed_multiplier": round(
+                float(runtime_metrics.get("effective_speed_multiplier", 0.0)),
+                3,
+            ),
+            "simulation_backlog_seconds": round(
+                float(runtime_metrics.get("simulation_backlog_seconds", 0.0)),
+                4,
+            ),
+            "broadcast_jitter_ms": round(
+                float(runtime_metrics.get("broadcast_jitter_ms", 0.0)),
+                2,
+            ),
+            "positions": positions,
+        }
+        state_defaults = {
+            "race_phase": "green",
+            "race_phase_remaining_seconds": 0.0,
+            "race_phase_remaining_laps": 0,
+            "safety_car_stage": "inactive",
+            "safety_car_visible": False,
+            "safety_car_route": "track",
+            "safety_car_progress": 0.0,
+            "safety_car_progress_rate": 0.0,
+            "safety_car_pit_lane_progress": 0.0,
+            "pit_window_open": False,
+            "start_sequence_phase": "racing",
+            "start_light_count": 0,
+            "speed_multiplier": 1,
+            "paused": False,
+            "physics_hz": 50,
+            "broadcast_hz": 30,
+            "effective_speed_multiplier": 0.0,
+            "simulation_backlog_seconds": 0.0,
+            "broadcast_jitter_ms": 0.0,
+        }
+        for field, default in state_defaults.items():
+            if payload.get(field) == default:
+                payload.pop(field, None)
+        return payload
+
+    def build_timing_payload(self) -> dict:
+        """Build the one-Hz mini-sector channel without a full tick model."""
+        positions: list[dict] = []
+        for state in self.driver_states.values():
+            timing_lap_index = max(
+                0,
+                state.current_lap - (1 if state.finished else 0),
+            )
+            splits = self._current_mini_sector_splits(
+                state.driver_id,
+                timing_lap_index,
+            )
+            last_completed_index = self._last_completed_mini_sector_index.get(
+                state.driver_id,
+            )
+            last_delta_to_best: float | None = None
+            if last_completed_index is not None:
+                session_best = self._session_best_mini_sector_times[
+                    last_completed_index
+                ]
+                if session_best is not None:
+                    last_delta_to_best = max(
+                        0.0,
+                        self._last_mini_sector_time.get(state.driver_id, 0.0)
+                        - session_best,
+                    )
+            positions.append(
+                {
+                    "driver_id": state.driver_id,
+                    "last_mini_sector_time": round(
+                        self._last_mini_sector_time.get(state.driver_id, 0.0),
+                        3,
+                    ),
+                    "last_mini_sector_delta_to_best": (
+                        round(last_delta_to_best, 3)
+                        if last_delta_to_best is not None
+                        else None
+                    ),
+                    "mini_sector_splits": [
+                        round(split, 3) if split is not None else None
+                        for split in splits
+                    ],
+                    "mini_sector_statuses": self._mini_sector_statuses(
+                        state.driver_id,
+                        splits,
+                    ),
+                }
+            )
+        return {"type": "race_timing", "positions": positions}
+
+    def build_pose_state(
+        self,
+        trajectory_samples_by_driver: (
+            dict[int, list[VehicleTrajectorySample]] | None
+        ) = None,
+    ) -> RacePoseState:
+        """Build the compact high-frequency stream consumed by the canvas.
+
+        Dashboard, timing, strategy and diagnostic fields deliberately stay in
+        ``build_tick_state``. Sending them with every pose made Chrome parse
+        several megabytes of short-lived JSON per second.
+        """
+        trajectory_samples_by_driver = trajectory_samples_by_driver or {}
+        positions: list[DriverPoseInfo] = []
+        for state in self.driver_states.values():
+            trajectory_samples = trajectory_samples_by_driver.get(
+                state.driver_id,
+                [],
+            )
+            # A trajectory already contains the latest authoritative pose. Keep
+            # the top-level pose only as the no-step/initial-snapshot fallback;
+            # compact serialization can then omit five duplicate numbers.
+            has_trajectory = bool(trajectory_samples)
+            positions.append(
+                DriverPoseInfo(
+                    driver_id=state.driver_id,
+                    simulation_time_s=(
+                        0.0 if has_trajectory else state.simulation_time_s
+                    ),
+                    physics_frame=0 if has_trajectory else state.physics_frame,
+                    world_x_m=0.0 if has_trajectory else state.world_x_m,
+                    world_y_m=0.0 if has_trajectory else state.world_y_m,
+                    heading_rad=0.0 if has_trajectory else state.heading_rad,
+                    retired=state.retired,
+                    hazard_active=state.hazard_active,
+                    trajectory_samples=trajectory_samples,
+                )
+            )
+        return RacePoseState(
+            physics_frame=self._physics_frame,
+            speed_multiplier=self.speed_multiplier,
+            paused=self.paused,
+            positions=positions,
+        )
+
+    def build_history_state(
+        self,
+        since_by_driver: dict[int, int] | None = None,
+    ) -> RaceHistoryState:
+        """Build a full reconnect snapshot or an incremental lap update."""
+        full_snapshot = since_by_driver is None
+        histories: list[DriverRaceHistoryInfo] = []
+        previous_lengths = since_by_driver or {}
+        for state in self.driver_states.values():
+            lap_history = self._lap_history.get(state.driver_id, [])
+            if full_snapshot:
+                start_index = 0
+            else:
+                previous_length = previous_lengths.get(state.driver_id, 0)
+                start_index = (
+                    previous_length
+                    if 0 <= previous_length <= len(lap_history)
+                    else 0
+                )
+                if start_index == len(lap_history):
+                    continue
+            histories.append(
+                DriverRaceHistoryInfo(
+                    driver_id=state.driver_id,
+                    start_index=start_index,
+                    lap_history=lap_history[start_index:],
+                )
+            )
+        return RaceHistoryState(
+            full_snapshot=full_snapshot,
+            histories=histories,
         )
 
     def build_results(self) -> list[dict]:

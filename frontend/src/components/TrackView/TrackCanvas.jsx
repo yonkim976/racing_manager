@@ -4,6 +4,10 @@ import {
   normalizeCoordinatePath,
   sampleCatmullRomClosed,
 } from '../../utils/circuitGeometry';
+import {
+  appendPoseTickToBuffers,
+  bufferedWorldPoseAtTime,
+} from './posePlayback';
 import './TrackCanvas.css';
 
 const PADDING = 48;
@@ -20,7 +24,6 @@ const MARKER_WORLD_INTERPOLATION_MAX_MS = 140;
 const MARKER_WORLD_PREDICTION_MAX_MS = 120;
 const MARKER_WORLD_PREDICTION_MAX_DISTANCE_M = 45;
 const POSE_PLAYBACK_DELAY_MS = 120;
-const POSE_BUFFER_RETENTION_SIM_SECONDS = 2.5;
 const MARKER_ROUTE_TRANSITION_MS = 240;
 const MARKER_PREDICTION_MAX_MS = 30;
 const MARKER_PREDICTION_MAX_DISTANCE_M = 1.0;
@@ -402,122 +405,6 @@ function worldPoseAtTime(animation, now) {
       * predictionSeconds * distanceScale;
   }
   return { xM, yM, headingRad };
-}
-
-function bufferedWorldPoseAtTime(samples, targetSimulationTimeS) {
-  if (!samples?.length) return null;
-  if (samples.length === 1 || targetSimulationTimeS <= samples[0].simulationTimeS) {
-    return samples[0];
-  }
-  const last = samples[samples.length - 1];
-  if (targetSimulationTimeS >= last.simulationTimeS) return last;
-
-  let low = 0;
-  let high = samples.length - 1;
-  while (low + 1 < high) {
-    const middle = Math.floor((low + high) / 2);
-    if (samples[middle].simulationTimeS <= targetSimulationTimeS) low = middle;
-    else high = middle;
-  }
-  const from = samples[low];
-  const to = samples[high];
-  const duration = Math.max(1e-9, to.simulationTimeS - from.simulationTimeS);
-  const segmentT = Math.min(
-    1,
-    Math.max(0, (targetSimulationTimeS - from.simulationTimeS) / duration),
-  );
-  const deltaX = to.xM - from.xM;
-  const deltaY = to.yM - from.yM;
-  const chordLength = Math.hypot(deltaX, deltaY);
-  let xM = from.xM + deltaX * segmentT;
-  let yM = from.yM + deltaY * segmentT;
-  if (chordLength > 1e-6) {
-    const chordHeading = Math.atan2(deltaY, deltaX);
-    const fromAlignment = Math.max(
-      0,
-      Math.cos(shortestAngleDelta(from.headingRad, chordHeading)),
-    );
-    const toAlignment = Math.max(
-      0,
-      Math.cos(shortestAngleDelta(to.headingRad, chordHeading)),
-    );
-    const tangentLength = chordLength * (
-      0.55 + 0.45 * Math.min(fromAlignment, toAlignment)
-    );
-    const t2 = segmentT * segmentT;
-    const t3 = t2 * segmentT;
-    const h00 = 2 * t3 - 3 * t2 + 1;
-    const h10 = t3 - 2 * t2 + segmentT;
-    const h01 = -2 * t3 + 3 * t2;
-    const h11 = t3 - t2;
-    xM = h00 * from.xM
-      + h10 * Math.cos(from.headingRad) * tangentLength
-      + h01 * to.xM
-      + h11 * Math.cos(to.headingRad) * tangentLength;
-    yM = h00 * from.yM
-      + h10 * Math.sin(from.headingRad) * tangentLength
-      + h01 * to.yM
-      + h11 * Math.sin(to.headingRad) * tangentLength;
-  }
-  return {
-    xM,
-    yM,
-    headingRad: from.headingRad + shortestAngleDelta(
-      from.headingRad,
-      to.headingRad,
-    ) * segmentT,
-  };
-}
-
-function appendPoseTickToBuffers(tick, buffers) {
-  let latestSimulationTimeS = 0;
-  (tick?.positions || []).forEach((driver) => {
-    const driverId = Number(driver.driver_id);
-    let buffer = buffers.get(driverId);
-    if (!buffer) {
-      buffer = { samples: [], lastPhysicsFrame: -1 };
-      buffers.set(driverId, buffer);
-    }
-    const sourceSamples = [...(driver.trajectory_samples || [])];
-    if (!sourceSamples.length) {
-      sourceSamples.push({
-        simulation_time_s: driver.simulation_time_s,
-        physics_frame: driver.physics_frame,
-        world_x_m: driver.world_x_m,
-        world_y_m: driver.world_y_m,
-        heading_rad: driver.heading_rad,
-      });
-    }
-    sourceSamples.forEach((sample) => {
-      const physicsFrame = Number(sample.physics_frame);
-      const simulationTimeS = Number(sample.simulation_time_s);
-      const xM = Number(sample.world_x_m);
-      const yM = Number(sample.world_y_m);
-      const headingRad = Number(sample.heading_rad);
-      if (
-        !Number.isFinite(physicsFrame)
-        || !Number.isFinite(simulationTimeS)
-        || !Number.isFinite(xM)
-        || !Number.isFinite(yM)
-        || !Number.isFinite(headingRad)
-      ) return;
-      if (physicsFrame <= buffer.lastPhysicsFrame) return;
-      buffer.samples.push({
-        physicsFrame,
-        simulationTimeS,
-        xM,
-        yM,
-        headingRad,
-      });
-      buffer.lastPhysicsFrame = physicsFrame;
-      latestSimulationTimeS = Math.max(latestSimulationTimeS, simulationTimeS);
-    });
-    const cutoff = latestSimulationTimeS - POSE_BUFFER_RETENTION_SIM_SECONDS;
-    while (buffer.samples.length > 2 && buffer.samples[1].simulationTimeS < cutoff) {
-      buffer.samples.shift();
-    }
-  });
-  return latestSimulationTimeS;
 }
 
 function worldPoseToRenderPoint(worldPose, coordinateFrame, displayRotation, displayCenter) {
@@ -2109,6 +1996,7 @@ export default function TrackCanvas({
     }
     const padding = Math.max(bounds.width, bounds.height) * 0.045;
     const driverPoints = (positions || []).flatMap((driver) => {
+      if (driver.retired && !driver.hazard_active) return [];
       const xM = Number(driver.world_x_m);
       const yM = Number(driver.world_y_m);
       if (!worldCoordinateFrame || !Number.isFinite(xM) || !Number.isFinite(yM)) return [];
@@ -2540,7 +2428,7 @@ export default function TrackCanvas({
             } else {
               // Position and heading are sampled from the same buffered pose.
               // A second fixed rotation filter made the body lag behind its
-              // trajectory, especially at 2x/3x, and looked like rear slip.
+              // trajectory, especially at 2x, and looked like rear slip.
               marker.dot.rotation = handlingAngle;
             }
           }

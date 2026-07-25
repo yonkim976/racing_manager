@@ -18,7 +18,11 @@ from models.schemas import (
     TrackWidthSample,
 )
 from simulation.incidents import Incident, IncidentCause, IncidentSeverity
-from simulation.race_engine import PIT_LANE_SPEED_LIMIT_KPH, RaceEngine
+from simulation.race_engine import (
+    MAX_PHYSICS_DIAGNOSTIC_SAMPLES,
+    PIT_LANE_SPEED_LIMIT_KPH,
+    RaceEngine,
+)
 from simulation.state_contract import PhysicsStepResult, TickPhase
 from simulation.track_data_validation import (
     track_data_warnings,
@@ -418,6 +422,25 @@ class SimulationFoundationBaselineTests(unittest.TestCase):
             second_state = second.driver_states[driver_id]
             self.assertAlmostEqual(first_state.total_progress, second_state.total_progress, places=8)
             self.assertAlmostEqual(first_state.speed_kph, second_state.speed_kph, places=6)
+
+    def test_high_frequency_diagnostics_are_bounded(self) -> None:
+        engine = self._make_engine()
+
+        for _ in range(MAX_PHYSICS_DIAGNOSTIC_SAMPLES + 64):
+            engine.tick(PHYSICS_STEP_SECONDS)
+
+        self.assertEqual(
+            len(engine._physics_step_deltas),
+            MAX_PHYSICS_DIAGNOSTIC_SAMPLES,
+        )
+        self.assertEqual(
+            len(engine._consumed_physics_frame_ids),
+            MAX_PHYSICS_DIAGNOSTIC_SAMPLES,
+        )
+        self.assertEqual(
+            engine._consumed_physics_frame_ids[-1],
+            engine._physics_frame,
+        )
 
     def test_total_time_chunking_preserves_full_deterministic_state(self) -> None:
         def snapshot(engine: RaceEngine) -> tuple:

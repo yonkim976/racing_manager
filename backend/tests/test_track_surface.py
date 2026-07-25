@@ -74,6 +74,40 @@ class TrackSurfaceProfileTests(unittest.TestCase):
         self.assertTrue(fully_out.track_limits_active)
         self.assertEqual(len(fully_out.contacts), 4)
 
+    def test_two_wheels_may_use_full_low_kerb_without_track_limits(self) -> None:
+        zone = self.surface.zones[0]
+        progress = (zone.start + ((zone.end - zone.start) % 1.0) / 2.0) % 1.0
+        minimum_m, maximum_m = self.surface.trajectory_body_lateral_bounds(
+            progress,
+            body_width_m=1.9,
+            edge_margin_m=0.35,
+        )
+        center_m = maximum_m if zone.side == TrackSide.LEFT else minimum_m
+        state = self.surface.vehicle_state(
+            progress=progress,
+            lateral_offset_m=center_m,
+            track_length_m=self.circuit.track_length_m,
+        )
+
+        self.assertFalse(state.track_limits_active)
+        self.assertEqual(state.wheel_surfaces.count(WheelSurface.TRACK.value), 2)
+        self.assertEqual(state.wheel_surfaces.count(WheelSurface.KERB_LOW.value), 2)
+
+        optimized_left_m, optimized_right_m = (
+            self.surface.trajectory_optimization_widths(progress)
+        )
+        body_left_m, body_right_m = self.surface.trajectory_body_widths(progress)
+        if zone.side == TrackSide.LEFT:
+            self.assertAlmostEqual(
+                body_left_m - optimized_left_m,
+                zone.kerb_width_m - TRAJECTORY_LOW_KERB_ALLOWANCE_M,
+            )
+        else:
+            self.assertAlmostEqual(
+                body_right_m - optimized_right_m,
+                zone.kerb_width_m - TRAJECTORY_LOW_KERB_ALLOWANCE_M,
+            )
+
     def test_explicit_gravel_zone_overrides_generated_profile(self) -> None:
         zone = TrackSurfaceZone(
             start=0.0,
