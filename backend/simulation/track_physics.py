@@ -60,6 +60,7 @@ VEHICLE_TRACK_PHYSICS_CACHE_SIZE = 128
 LIVE_TRAJECTORY_OPTIMIZATION_STEPS_M = (0.6, 0.3)
 LIVE_TRAJECTORY_CENTER_STRIDE = 12
 LIVE_TRAJECTORY_SPEED_PASS_COUNT = 1
+LIVE_TRAJECTORY_CORNER_CURVATURE_THRESHOLD_1PM = 0.004
 
 
 @dataclass(frozen=True)
@@ -389,6 +390,14 @@ def clear_track_physics_caches() -> None:
 def clear_vehicle_track_physics_cache() -> None:
     """Release the large vehicle-specific profiles owned by finished sessions."""
     _VEHICLE_TRACK_PHYSICS_CACHE.clear()
+
+
+def track_physics_cache_counts() -> dict[str, int]:
+    """Expose cache sizes without serializing any track profile data."""
+    return {
+        "common_track_physics_cache_entries": len(_TRACK_PHYSICS_CACHE),
+        "vehicle_track_physics_cache_entries": len(_VEHICLE_TRACK_PHYSICS_CACHE),
+    }
 
 
 def _local_metric_coordinate_frame(
@@ -761,10 +770,15 @@ class _LegacyGlobalTrajectoryCostModel:
         widths: list[tuple[float, float]],
         track_length_m: float,
         reference_offset_weight: float,
+        max_lateral_slope: float = RACING_LINE_MAX_LATERAL_SLOPE,
     ) -> None:
         self.points = points
         self.widths = widths
         self.reference_offset_weight = reference_offset_weight
+        self.max_lateral_slope = max(
+            0.01,
+            min(RACING_LINE_MAX_LATERAL_SLOPE, float(max_lateral_slope)),
+        )
         source_length = sum(
             hypot(
                 points[(index + 1) % len(points)][0] - point[0],
@@ -793,6 +807,7 @@ class _LegacyGlobalTrajectoryCostModel:
                 list(offsets_m),
                 self.widths,
                 self.center_segment_lengths_m,
+                max_lateral_slope=self.max_lateral_slope,
             )
         )
 
@@ -814,6 +829,7 @@ class _LegacyGlobalTrajectoryCostModel:
         if not _line_transitions_within_limit(
             offsets,
             self.center_segment_lengths_m,
+            max_lateral_slope=self.max_lateral_slope,
         ):
             return None
         path_points = _offset_path_points(
@@ -856,6 +872,7 @@ class PhysicalGlobalTrajectoryCostModel(_LegacyGlobalTrajectoryCostModel):
         vehicle: VehicleTrajectorySpec,
         tire: TireTrajectorySpec,
         *,
+        max_lateral_slope: float = RACING_LINE_MAX_LATERAL_SLOPE,
         braking_utilization: float = 1.0,
         speed_pass_count: int = 4,
         surface_profile: TrackSurfaceProfile | None = None,
@@ -866,6 +883,7 @@ class PhysicalGlobalTrajectoryCostModel(_LegacyGlobalTrajectoryCostModel):
             widths,
             track_length_m,
             reference_offset_weight,
+            max_lateral_slope,
         )
         self.vehicle = vehicle
         self.tire = tire
@@ -883,6 +901,7 @@ class PhysicalGlobalTrajectoryCostModel(_LegacyGlobalTrajectoryCostModel):
         if not _line_transitions_within_limit(
             offsets,
             self.center_segment_lengths_m,
+            max_lateral_slope=self.max_lateral_slope,
         ):
             return None
         path_points = _offset_path_points(
@@ -948,6 +967,7 @@ def _optimize_global_trajectory(
     track_length_m: float,
     *,
     reference_offset_weight: float = RACING_LINE_REFERENCE_OFFSET_WEIGHT,
+    max_lateral_slope: float = RACING_LINE_MAX_LATERAL_SLOPE,
 ) -> GlobalTrajectoryOptimizationResult:
     request = GlobalTrajectoryOptimizationRequest(
         initial_offsets_m=tuple(initial_offsets),
@@ -958,6 +978,7 @@ def _optimize_global_trajectory(
         widths,
         track_length_m,
         reference_offset_weight,
+        max_lateral_slope,
     )
     optimizer = GlobalTrajectoryOptimizer(
         GlobalTrajectoryOptimizerConfig(
@@ -995,6 +1016,11 @@ def optimize_vehicle_trajectory(
         if calibration
         else RACING_LINE_REFERENCE_OFFSET_WEIGHT
     )
+    max_lateral_slope = (
+        calibration.racing_line_max_lateral_slope
+        if calibration
+        else RACING_LINE_MAX_LATERAL_SLOPE
+    )
     cost_model = PhysicalGlobalTrajectoryCostModel(
         points,
         optimization_widths,
@@ -1002,6 +1028,7 @@ def optimize_vehicle_trajectory(
         reference_offset_weight,
         vehicle,
         tire,
+        max_lateral_slope=max_lateral_slope,
         braking_utilization=braking_utilization,
         speed_pass_count=search_speed_pass_count,
         surface_profile=surface_profile,
@@ -1028,6 +1055,7 @@ def optimize_vehicle_trajectory(
         reference_offset_weight,
         vehicle,
         tire,
+        max_lateral_slope=max_lateral_slope,
         braking_utilization=braking_utilization,
         speed_pass_count=TRAJECTORY_SPEED_PASS_COUNT,
         surface_profile=surface_profile,
@@ -1050,6 +1078,52 @@ def optimize_vehicle_trajectory(
     )
 
 
+def _adaptive_live_trajectory_center_indices(
+    base_profile: TrackPhysicsProfile,
+) -> tuple[int, ...]:
+    """Return sparse straight samples plus entry/apex/exit samples per corner.
+
+    The previous fixed stride could skip a corner apex entirely.  This keeps
+    the cold-build budget bounded while guaranteeing that each meaningful
+    curvature region can independently adjust its approach, apex and exit.
+    """
+    curvatures = [
+        abs(sample.curvature_1pm)
+        for sample in base_profile.racing_line_samples
+    ]
+    count = len(curvatures)
+    if count == 0:
+        return ()
+
+    selected = set(range(0, count, LIVE_TRAJECTORY_CENTER_STRIDE))
+    active = [
+        index
+        for index, curvature in enumerate(curvatures)
+        if curvature >= LIVE_TRAJECTORY_CORNER_CURVATURE_THRESHOLD_1PM
+    ]
+    if not active:
+        return tuple(sorted(selected))
+
+    runs: list[list[int]] = []
+    current = [active[0]]
+    for index in active[1:]:
+        if index == current[-1] + 1:
+            current.append(index)
+        else:
+            runs.append(current)
+            current = [index]
+    runs.append(current)
+    if len(runs) > 1 and runs[0][0] == 0 and runs[-1][-1] == count - 1:
+        runs[0] = runs[-1] + runs[0]
+        runs.pop()
+
+    for run in runs:
+        apex = max(run, key=lambda index: curvatures[index])
+        selected.update((run[0], apex, run[-1]))
+
+    return tuple(sorted(selected))
+
+
 def build_vehicle_track_physics_profile(
     circuit: Circuit,
     vehicle: VehicleTrajectorySpec,
@@ -1068,6 +1142,10 @@ def build_vehicle_track_physics_profile(
         if circuit.physics_calibration is not None
         else ""
     )
+    base_profile = build_track_physics_profile(circuit)
+    adaptive_center_indices = _adaptive_live_trajectory_center_indices(
+        base_profile,
+    )
     cache_key: tuple[object, ...] = (
         round(max(1.0, float(circuit.track_length_m)), 6),
         tuple(points),
@@ -1078,6 +1156,7 @@ def build_vehicle_track_physics_profile(
         LIVE_TRAJECTORY_OPTIMIZATION_STEPS_M,
         LIVE_TRAJECTORY_CENTER_STRIDE,
         LIVE_TRAJECTORY_SPEED_PASS_COUNT,
+        adaptive_center_indices,
     )
     cached = _VEHICLE_TRACK_PHYSICS_CACHE.get(cache_key)
     if cached is not None:
@@ -1085,7 +1164,6 @@ def build_vehicle_track_physics_profile(
         _VEHICLE_TRACK_PHYSICS_CACHE[cache_key] = cached
         return cached
 
-    base_profile = build_track_physics_profile(circuit)
     optimization_result = optimize_vehicle_trajectory(
         circuit,
         vehicle,
@@ -1094,6 +1172,7 @@ def build_vehicle_track_physics_profile(
             optimization_steps_m=LIVE_TRAJECTORY_OPTIMIZATION_STEPS_M,
             transition_radius_m=RACING_LINE_TRANSITION_RADIUS_M,
             center_stride=LIVE_TRAJECTORY_CENTER_STRIDE,
+            center_indices=adaptive_center_indices,
         ),
         search_speed_pass_count=LIVE_TRAJECTORY_SPEED_PASS_COUNT,
     )
@@ -1205,6 +1284,7 @@ def _optimize_racing_line_offsets(
     track_length_m: float,
     *,
     reference_offset_weight: float = RACING_LINE_REFERENCE_OFFSET_WEIGHT,
+    max_lateral_slope: float = RACING_LINE_MAX_LATERAL_SLOPE,
 ) -> tuple[list[float], list[tuple[float, float]], list[float], list[float], float]:
     """Compatibility wrapper around the explicit global optimizer interface."""
     evaluation = _optimize_global_trajectory(
@@ -1213,6 +1293,7 @@ def _optimize_racing_line_offsets(
         initial_offsets,
         track_length_m,
         reference_offset_weight=reference_offset_weight,
+        max_lateral_slope=max_lateral_slope,
     ).evaluation
     return (
         list(evaluation.offsets_m),
@@ -1395,6 +1476,11 @@ def build_track_physics_profile(circuit: Circuit) -> TrackPhysicsProfile:
         if calibration
         else RACING_LINE_INITIAL_SMOOTHING_PASSES
     )
+    max_lateral_slope = (
+        calibration.racing_line_max_lateral_slope
+        if calibration
+        else RACING_LINE_MAX_LATERAL_SLOPE
+    )
     for _ in range(smoothing_passes):
         smoothed = [
             0.25 * smoothed[(index - 1) % count]
@@ -1413,6 +1499,7 @@ def build_track_physics_profile(circuit: Circuit) -> TrackPhysicsProfile:
             if calibration
             else RACING_LINE_REFERENCE_OFFSET_WEIGHT
         ),
+        max_lateral_slope=max_lateral_slope,
     )
     optimized_trajectory = optimization_result.evaluation
     optimized_offsets = list(optimized_trajectory.offsets_m)

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import TimingBoard from './components/Dashboard/TimingBoard';
 import StrategyPanel from './components/Dashboard/StrategyPanel';
 import SpeedControl from './components/Controls/SpeedControl';
@@ -113,6 +113,11 @@ export default function App() {
   const [phase, setPhase] = useState('setup');
   const [setupResult, setSetupResult] = useState(null);
   const [pendingPaused, setPendingPaused] = useState(null);
+  const [performanceStats, setPerformanceStats] = useState(null);
+  const [performanceResetToken, setPerformanceResetToken] = useState(0);
+  const [isDisposing, setIsDisposing] = useState(false);
+  const [disposalError, setDisposalError] = useState(null);
+  const raceIndexRef = useRef(0);
 
   const {
     raceInfo,
@@ -129,21 +134,54 @@ export default function App() {
 
   const handleRaceStart = (result) => {
     resetState();
+    setDisposalError(null);
     setPendingPaused(null);
+    setPerformanceStats(null);
+    setPerformanceResetToken(0);
     setSetupResult(result);
     setPhase('race');
+    raceIndexRef.current += 1;
+    window.desktopDiagnostics?.recordCheckpoint('race_started', {
+      session_id: result?.session_id || null,
+      race_index: raceIndexRef.current,
+      circuit: result?.circuit?.name || null,
+      total_laps: result?.circuit?.total_laps || null,
+    }).catch?.(() => {});
   };
 
   const handleBackToSetup = async () => {
+    if (isDisposing) return;
+    setIsDisposing(true);
+    setDisposalError(null);
+    window.desktopDiagnostics?.recordCheckpoint('race_disposal_started', {
+      action: raceEnd ? 'new_race' : 'exit',
+    }).catch?.(() => {});
     try {
-      await fetch('/api/race/session', { method: 'DELETE' });
-    } finally {
+      const response = await fetch('/api/race/session', { method: 'DELETE' });
+      if (!response.ok) throw new Error(`Race session cleanup failed (${response.status})`);
       setPhase('setup');
       setSetupResult(null);
       setPendingPaused(null);
+      setPerformanceStats(null);
+      setPerformanceResetToken(0);
       resetState();
+      window.desktopDiagnostics?.recordCheckpoint('race_disposed', {
+        active_session: false,
+        action: raceEnd ? 'new_race' : 'exit',
+      }).catch?.(() => {});
+    } catch (error) {
+      setDisposalError(error.message);
+      window.desktopDiagnostics?.recordCheckpoint('race_disposal_error', {
+        message: error.message,
+      }).catch?.(() => {});
+    } finally {
+      setIsDisposing(false);
     }
   };
+
+  const handleRendererDisposed = useCallback((details) => {
+    window.desktopDiagnostics?.recordCheckpoint('renderer_disposed', details).catch?.(() => {});
+  }, []);
 
   useEffect(() => {
     if (
@@ -157,6 +195,13 @@ export default function App() {
   useEffect(() => {
     if (!connected) setPendingPaused(null);
   }, [connected]);
+
+  useEffect(() => {
+    if (!raceEnd) return;
+    window.desktopDiagnostics?.recordCheckpoint('race_finished', {
+      result_count: Array.isArray(raceEnd.results) ? raceEnd.results.length : 0,
+    }).catch?.(() => {});
+  }, [raceEnd]);
 
   if (phase === 'setup') {
     return <RaceSetup onStart={handleRaceStart} />;
@@ -173,6 +218,12 @@ export default function App() {
   const finalResults = [...(raceEnd?.results || [])].sort((a, b) => a.position - b.position);
   const winnerTime = finalResults.find((r) => !r.retired)?.total_time || 0;
   const circuitName = raceInfo?.circuit_name || setupResult?.circuit?.name;
+  const environmentConditions = raceState?.track_conditions
+    || raceInfo?.environment_conditions
+    || setupResult?.track_conditions;
+  const thermalPreset = raceState?.thermal_preset
+    || raceInfo?.thermal_preset
+    || setupResult?.thermal_preset;
   const trackCoords = raceInfo?.track_coords || setupResult?.circuit?.track_coords;
   const trackLengthM = raceInfo?.track_length_m || setupResult?.circuit?.track_length_m || 5000;
   const worldCoordinateFrame = raceInfo ? {
@@ -189,6 +240,7 @@ export default function App() {
   const surfaceZones = raceInfo?.surface_zones || EMPTY_TRACK_DATA;
   const racingLineCoords = raceInfo?.racing_line_coords || EMPTY_TRACK_DATA;
   const pitLaneCoords = raceInfo?.pit_lane_coords || setupResult?.circuit?.pit_lane_coords;
+  const pitExitLaneCoords = raceInfo?.pit_exit_lane_coords || EMPTY_TRACK_DATA;
   const pitBoxOffset = raceInfo?.pit_box_offset ?? setupResult?.circuit?.pit_lane?.box_offset ?? 11;
   const pitLaneWidthM = raceInfo?.pit_lane_width_m
     ?? setupResult?.circuit?.pit_lane?.lane_width_m
@@ -263,12 +315,17 @@ export default function App() {
           )}
         </div>
         <div className="race-header__right">
+          {environmentConditions && (
+            <span className="race-header__environment" title="Session-resolved thermal environment">
+              {thermalPreset || 'OVERRIDE'} · {environmentConditions.ambient_temperature_c}°/{environmentConditions.track_temperature_c}°C
+            </span>
+          )}
           <span className="race-header__renderer-label">THREE.JS</span>
           <span className={`race-header__status race-header__status--${statusClass}`}>
             {statusText}
           </span>
-          <button type="button" className="race-header__back" onClick={handleBackToSetup}>
-            Exit
+          <button type="button" className="race-header__back" onClick={handleBackToSetup} disabled={isDisposing}>
+            {isDisposing ? 'DISPOSING…' : 'Exit'}
           </button>
         </div>
       </header>
@@ -300,8 +357,16 @@ export default function App() {
               ))}
             </ol>
             </div>
-            <button type="button" onClick={handleBackToSetup}>New Race</button>
+            <button type="button" onClick={handleBackToSetup} disabled={isDisposing}>
+              {isDisposing ? 'DISPOSING…' : 'New Race'}
+            </button>
           </div>
+        </div>
+      )}
+
+      {disposalError && (
+        <div className="race-disposal-error" role="alert">
+          {disposalError}. Retry the same cleanup action.
         </div>
       )}
 
@@ -338,6 +403,7 @@ export default function App() {
             surfaceZones={surfaceZones}
             racingLineCoords={racingLineCoords}
             pitLaneCoords={pitLaneCoords}
+            pitExitLaneCoords={pitExitLaneCoords}
             pitBoxOffset={pitBoxOffset}
             pitLaneWidthM={pitLaneWidthM}
             pitSideEntryProgress={pitSideEntryProgress}
@@ -364,9 +430,20 @@ export default function App() {
             safetyCarProgress={raceState?.safety_car_progress}
             safetyCarProgressRate={raceState?.safety_car_progress_rate || 0}
             safetyCarPitLaneProgress={raceState?.safety_car_pit_lane_progress || 0}
+            websocketState={connected ? 'open' : 'closed'}
+            onPerformanceStats={setPerformanceStats}
+            onRendererDisposed={handleRendererDisposed}
+            performanceResetToken={performanceResetToken}
             />
           </Suspense>
-          <EventFeed events={events} playerDriverCodes={playerDriverCodes} />
+          <EventFeed
+            events={events}
+            playerDriverCodes={playerDriverCodes}
+            performanceStats={performanceStats}
+            onResetPerformanceWindow={() => {
+              setPerformanceResetToken((token) => token + 1);
+            }}
+          />
         </section>
 
         <aside className="race-layout__controls">
@@ -404,6 +481,7 @@ export default function App() {
           )}
           <StrategyPanel
             drivers={playerPositions}
+            tireNomination={raceInfo?.tire_compound_nomination || null}
             pitWindowOpen={raceState?.pit_window_open || false}
             onPitCall={(driverId, tire) =>
               sendCommand({ type: 'pit_call', driver_id: driverId, tire_choice: tire })

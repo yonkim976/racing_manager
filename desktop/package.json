@@ -1,0 +1,19 @@
+{
+  "name": "f1-race-manager-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron diagnostic shell for the F1 race manager",
+  "main": "src/main.js",
+  "scripts": {
+    "test": "node --test",
+    "start": "electron .",
+    "build:frontend": "npm --prefix ../frontend run build",
+    "prepare:package": "npm run build:frontend && node scripts/preparePackage.js",
+    "prepare:electron": "node scripts/prepareElectronZip.js",
+    "package": "npm run prepare:package && npm run prepare:electron && electron-packager . \"F1 Race Manager\" --platform=darwin --arch=arm64 --electron-version=37.2.6 --electron-zip-dir=.electron-cache --extra-resource=resources/frontend-dist --extra-resource=resources/backend --extra-resource=resources/python --out=out --overwrite --ignore='^/(test|scripts|out|node_modules|resources|\\.electron-cache)'"
+  },
+  "devDependencies": {
+    "@electron/packager": "^19.0.0",
+    "electron": "^37.2.6"
+  }
+}

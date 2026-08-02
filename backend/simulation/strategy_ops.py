@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from models.schemas import DriverRaceState, PaceMode, TrackSegmentType
 from simulation.ai_strategy import choose_pit_tire, should_pit
+from simulation.brake_model import advance_brake_thermal_state
 from simulation.local_trajectory_planner import (
     LOCAL_TRAJECTORY_PLAN_INTERVAL_SECONDS,
     LocalTrajectoryPlannerWeights,
@@ -23,13 +24,16 @@ from simulation.racecraft_ops import (
     AI_DEFEND_GAP_SECONDS,
 )
 from simulation.tire_model import (
-    COMPOUND_SPECS,
+    compound_spec_for,
     TirePhysicsFactors,
     advance_tire_thermal_state,
     compute_managed_tire_age,
     compute_tire_performance,
     compute_tire_physics_factors,
     compute_wear,
+    circuit_tire_usage_per_lap,
+    physical_compound_for_state,
+    tire_thermal_wear_multiplier,
 )
 from simulation.track_geometry import segment_at_progress
 
@@ -286,11 +290,24 @@ class StrategyOpsMixin:
         return compute_managed_tire_age(raw_age, tire_management)
 
     def _current_tire_wear(self, state: DriverRaceState) -> float:
-        return compute_wear(state.tire_compound, self._effective_tire_age(state))
+        return compute_wear(physical_compound_for_state(state), self._effective_tire_age(state))
+
+    def _circuit_tire_usage_per_lap(self) -> float:
+        """Return circuit distance/abrasion as Bahrain-equivalent lap usage."""
+        return circuit_tire_usage_per_lap(
+            self.circuit.track_length_m,
+            self.circuit.tire_wear_profile.abrasion_multiplier,
+        )
+
+    def _tire_thermal_usage_multiplier(self, state: DriverRaceState) -> float:
+        return tire_thermal_wear_multiplier(
+            physical_compound_for_state(state),
+            state.tire_surface_temperature_c,
+        )
 
     def _current_tire_physics(self, state: DriverRaceState) -> TirePhysicsFactors:
         return compute_tire_physics_factors(
-            state.tire_compound,
+            physical_compound_for_state(state),
             self._effective_tire_age(state),
             self._tire_random.get(state.driver_id, 0.0),
             state.tire_surface_temperature_c,
@@ -333,30 +350,158 @@ class StrategyOpsMixin:
         state: DriverRaceState,
         result,
         delta_seconds: float,
+        *,
+        front_brake_bias: float,
     ) -> None:
-        thermal = advance_tire_thermal_state(
-            state.tire_compound,
-            surface_temperature_c=state.tire_surface_temperature_c,
-            core_temperature_c=state.tire_core_temperature_c,
+        # Kept in the helper contract because callers already provide the
+        # physical brake bias. Axle brake work below is already bias-split.
+        _ = front_brake_bias
+        normal_load = max(
+            1.0,
+            result.front_normal_load_n + result.rear_normal_load_n,
+        )
+        front_load_share = max(
+            0.35,
+            min(0.65, result.front_normal_load_n / normal_load),
+        )
+        rear_load_share = 1.0 - front_load_share
+        front_thermal = advance_tire_thermal_state(
+            physical_compound_for_state(state),
+            surface_temperature_c=state.front_tire_surface_temperature_c,
+            core_temperature_c=state.front_tire_core_temperature_c,
             delta_seconds=delta_seconds,
             speed_mps=result.speed_mps,
             lateral_acceleration_mps2=result.lateral_acceleration_mps2,
             throttle=result.throttle,
             brake=result.brake,
-            slide_energy_j=result.tire_slide_energy_j,
+            slide_energy_j=result.front_tire_slide_energy_j,
+            ambient_temperature_c=self.track_conditions.ambient_temperature_c,
+            track_temperature_c=self.track_conditions.track_temperature_c,
+            baseline_heat_share=0.5,
+            lateral_heat_share=front_load_share,
+            # The physical result already contains the front axle's applied
+            # brake work. Do not apply the bias a second time in the thermal
+            # conversion.
+            brake_heat_share=1.0,
+            traction_heat_share=0.0,
+            slide_heat_share=1.0,
+            thermal_mass_share=0.5,
+            applied_drive_energy_j=0.0,
+            applied_brake_work_energy_j=result.front_applied_brake_energy_j,
         )
-        state.tire_surface_temperature_c = round(
-            thermal.surface_temperature_c,
+        rear_thermal = advance_tire_thermal_state(
+            physical_compound_for_state(state),
+            surface_temperature_c=state.rear_tire_surface_temperature_c,
+            core_temperature_c=state.rear_tire_core_temperature_c,
+            delta_seconds=delta_seconds,
+            speed_mps=result.speed_mps,
+            lateral_acceleration_mps2=result.lateral_acceleration_mps2,
+            throttle=result.throttle,
+            brake=result.brake,
+            slide_energy_j=result.rear_tire_slide_energy_j,
+            ambient_temperature_c=self.track_conditions.ambient_temperature_c,
+            track_temperature_c=self.track_conditions.track_temperature_c,
+            baseline_heat_share=0.5,
+            lateral_heat_share=rear_load_share,
+            # The physical result already contains the rear axle's applied
+            # brake work. Do not apply the bias a second time in the thermal
+            # conversion.
+            brake_heat_share=1.0,
+            traction_heat_share=1.0,
+            slide_heat_share=1.0,
+            thermal_mass_share=0.5,
+            applied_drive_energy_j=result.rear_applied_drive_energy_j,
+            applied_brake_work_energy_j=result.rear_applied_brake_energy_j,
+        )
+        self._last_tire_thermal_states[state.driver_id] = (
+            front_thermal,
+            rear_thermal,
+        )
+        self._accumulate_tire_thermal_diagnostics(
+            state,
+            front_thermal,
+            rear_thermal,
+            delta_seconds,
+        )
+        state.front_tire_surface_temperature_c = round(
+            front_thermal.surface_temperature_c,
             4,
         )
-        state.tire_core_temperature_c = round(thermal.core_temperature_c, 4)
-        state.tire_thermal_grip = round(thermal.thermal_grip, 5)
+        state.front_tire_core_temperature_c = round(
+            front_thermal.core_temperature_c,
+            4,
+        )
+        state.front_tire_thermal_grip = round(
+            front_thermal.thermal_grip,
+            5,
+        )
+        state.rear_tire_surface_temperature_c = round(
+            rear_thermal.surface_temperature_c,
+            4,
+        )
+        state.rear_tire_core_temperature_c = round(
+            rear_thermal.core_temperature_c,
+            4,
+        )
+        state.rear_tire_thermal_grip = round(
+            rear_thermal.thermal_grip,
+            5,
+        )
+        # Keep the original aggregate fields as a compatibility surface for
+        # physics consumers and older clients.
+        state.tire_surface_temperature_c = round(
+            (
+                front_thermal.surface_temperature_c
+                + rear_thermal.surface_temperature_c
+            )
+            * 0.5,
+            4,
+        )
+        state.tire_core_temperature_c = round(
+            (
+                front_thermal.core_temperature_c
+                + rear_thermal.core_temperature_c
+            )
+            * 0.5,
+            4,
+        )
+        state.tire_thermal_grip = round(
+            (front_thermal.thermal_grip + rear_thermal.thermal_grip) * 0.5,
+            5,
+        )
+
+    def _update_brake_thermal_state(
+        self,
+        state: DriverRaceState,
+        result,
+        delta_seconds: float,
+        *,
+        front_brake_bias: float,
+    ) -> None:
+        thermal = advance_brake_thermal_state(
+            front_temperature_c=state.front_brake_temperature_c,
+            rear_temperature_c=state.rear_brake_temperature_c,
+            delta_seconds=delta_seconds,
+            speed_mps=result.speed_mps,
+            applied_brake_force_n=result.applied_brake_force_n,
+            front_brake_bias=front_brake_bias,
+            ambient_temperature_c=self.track_conditions.ambient_temperature_c,
+        )
+        state.front_brake_temperature_c = round(
+            thermal.front_temperature_c,
+            4,
+        )
+        state.rear_brake_temperature_c = round(
+            thermal.rear_temperature_c,
+            4,
+        )
+        state.brake_fade_factor = round(thermal.fade_factor, 5)
 
     def _base_lap_time_for_state(self, state: DriverRaceState) -> float:
         """Estimate lap time before traffic effects."""
         meta = self._driver_meta[state.driver_id]
         tire_perf = compute_tire_performance(
-            state.tire_compound,
+            physical_compound_for_state(state),
             self._effective_tire_age(state),
             self._tire_random[state.driver_id],
         )
@@ -442,7 +587,7 @@ class StrategyOpsMixin:
         fresh_after_stop = state.pit_count > 0 and state.tire_usage <= AI_FRESH_TIRE_USAGE
         pit_in_push = state.pit_request is not None and tire_life > AI_LOW_TIRE_LIFE
         fuel_margin_laps = state.fuel_laps_remaining - remaining_laps
-        compound_spec = COMPOUND_SPECS[state.tire_compound]
+        compound_spec = compound_spec_for(physical_compound_for_state(state))
         hot_tire_threshold_c = (
             compound_spec.optimal_temperature_c
             + compound_spec.operating_window_c
@@ -536,7 +681,13 @@ class StrategyOpsMixin:
                 continue
             remaining = self.total_laps - state.current_lap
             tire_management = self._driver_meta[driver_id]["tire_management"]
-            if should_pit(state, remaining, is_player=False, tire_management=tire_management):
+            if should_pit(
+                state,
+                remaining,
+                is_player=False,
+                tire_management=tire_management,
+                next_lap_usage=self._circuit_tire_usage_per_lap(),
+            ):
                 state.pit_request = choose_pit_tire(state, remaining)
 
     def _run_ai_pace_modes(self, running_by_position: dict[int, DriverRaceState]) -> None:

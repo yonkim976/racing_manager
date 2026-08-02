@@ -71,6 +71,8 @@ export function useRaceWebSocket(shouldConnect = false) {
     ws.binaryType = 'arraybuffer';
 
     wsRef.current = ws;
+    const historyBuffer = historyByDriverRef.current;
+    const timingBuffer = timingByDriverRef.current;
 
     const ensureEventId = (evt) => {
       if (Number(evt?.event_id) > 0) return evt;
@@ -137,21 +139,21 @@ export function useRaceWebSocket(shouldConnect = false) {
       return changedDriverIds;
     };
 
-    ws.addEventListener('open', () => {
+    const handleOpen = () => {
       setConnected(true);
       setConnectionState('connected');
-    });
+    };
 
-    ws.addEventListener('close', () => {
+    const handleClose = () => {
       setConnected(false);
       setConnectionState('disconnected');
-    });
+    };
 
-    ws.addEventListener('error', () => {
+    const handleError = () => {
       setConnected(false);
-    });
+    };
 
-    ws.addEventListener('message', (event) => {
+    const handleMessage = (event) => {
       try {
         const receivedAtMs = performance.now();
         const transportWindow = transportWindowRef.current;
@@ -160,7 +162,7 @@ export function useRaceWebSocket(shouldConnect = false) {
         }
         transportWindow.bytes += typeof event.data === 'string'
           ? event.data.length
-          : Number(event.data?.size || 0);
+          : Number(event.data?.byteLength || event.data?.size || 0);
         transportWindow.messages += 1;
         const transportElapsedMs = receivedAtMs - transportWindow.startedAtMs;
         if (transportElapsedMs >= 1000) {
@@ -327,11 +329,35 @@ export function useRaceWebSocket(shouldConnect = false) {
       } catch (err) {
         console.error('Failed to parse WebSocket message:', err);
       }
-    });
+    };
+
+    ws.addEventListener('open', handleOpen);
+    ws.addEventListener('close', handleClose);
+    ws.addEventListener('error', handleError);
+    ws.addEventListener('message', handleMessage);
 
     return () => {
+      ws.removeEventListener('open', handleOpen);
+      ws.removeEventListener('close', handleClose);
+      ws.removeEventListener('error', handleError);
+      ws.removeEventListener('message', handleMessage);
+      window.desktopDiagnostics?.recordCheckpoint('websocket_cleanup', {
+        state: ws.readyState,
+      }).catch?.(() => {});
       ws.close(1000, 'Race screen closed');
       wsRef.current = null;
+      eventsRef.current = [];
+      poseTickRef.current = null;
+      dashboardTickRef.current = null;
+      dashboardUpdatedAtRef.current = 0;
+      clientEventSequenceRef.current = 0;
+      historyBuffer.clear();
+      timingBuffer.clear();
+      transportWindowRef.current = {
+        startedAtMs: 0,
+        bytes: 0,
+        messages: 0,
+      };
       setConnected(false);
       setConnectionState('disconnected');
     };

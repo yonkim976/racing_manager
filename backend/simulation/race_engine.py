@@ -6,9 +6,11 @@ from collections import deque
 from dataclasses import dataclass
 from math import atan2, cos, floor, hypot, pi, sin, sqrt
 import random
+from typing import Any
 
 from models.schemas import (
     Circuit,
+    DryTireRole,
     Driver,
     DriverPoseInfo,
     DriverPositionInfo,
@@ -16,16 +18,20 @@ from models.schemas import (
     DriverRaceState,
     LapTimeInfo,
     PaceMode,
+    PhysicalTireCompound,
     RaceEvent,
     RaceHistoryState,
     RacePoseState,
     RaceTickState,
     Team,
+    ThermalPresetName,
     TireCompound,
+    TrackConditions,
     TrackSegmentType,
     VehicleTrajectorySample,
 )
 from simulation.car_performance import CarPerformanceFactors, car_performance_factors
+from simulation.brake_model import brake_temperature_force_factor
 from simulation.collision import (
     BodyPose,
     oriented_body_separation_m,
@@ -60,13 +66,13 @@ from simulation.track_physics import (
     TrackPhysicsProfile,
     build_track_physics_profile,
     build_vehicle_track_physics_profile,
+    track_physics_cache_counts,
 )
 from simulation.track_surface import TrackSurfaceProfile, VehicleSurfaceState
 from simulation.vehicle_physics import (
     LOCKUP_SLIP_RATIO_THRESHOLD,
     PHYSICS_MAX_LATERAL_SPEED_MPS,
     PHYSICS_STEP_SECONDS,
-    TRACTION_LOSS_SLIP_RATIO_THRESHOLD,
     LongitudinalVehiclePhysics,
     VehicleFollowingConstraint,
     VehiclePhysicsModifiers,
@@ -82,7 +88,13 @@ from simulation.track_geometry import (
     segment_at_progress,
 )
 from simulation.tire_model import (
+    TireThermalBudget,
+    TireThermalState,
+    compound_spec_for,
     compute_tire_physics_factors,
+    physical_compound_for,
+    physical_compound_for_state,
+    tire_grip_indices_c3,
 )
 from simulation.trajectory_physics import (
     TireTrajectorySpec,
@@ -95,6 +107,7 @@ from simulation.state_contract import (
     ProgressCrossingFact,
     TickPhase,
 )
+
 from simulation.wake_model import (
     WAKE_MAX_GAP_M,
     WAKE_MIN_GAP_M,
@@ -128,8 +141,13 @@ from simulation.safety_car import (
     SC_QUEUE_APPROACH_REACTION_SECONDS,
     SC_QUEUE_JOIN_MAX_RELATIVE_SPEED_KPH,
     SC_QUEUE_PROPAGATION_HORIZON_M,
+    SC_QUEUE_RELATIVE_SPEED_FILTER_SECONDS,
+    SC_QUEUE_STABLE_RELATIVE_SPEED_EXIT_KPH,
+    SC_QUEUE_STABLE_RELATIVE_SPEED_GRACE_SECONDS,
+    SC_QUEUE_STABLE_RELATIVE_SPEED_KPH,
     SC_QUEUE_TARGET_CAR_LENGTHS,
     SC_RELEASE_GAP_CAR_LENGTHS,
+    SC_RESTART_CONFIRMATION_TOLERANCE_PROGRESS,
     SC_UNLAP_LAP_TIME_FACTOR,
     SC_UNLAP_MAX_SPEED_KPH,
     SC_WITHDRAW_PIT_SECONDS,
@@ -137,6 +155,7 @@ from simulation.safety_car import (
     VSC_DURATION_SECONDS,
     VSC_LAP_TIME_FACTOR,
 )
+
 from simulation.pit_ops import (
     PIT_LANE_SPEED_LIMIT_KPH,
     PitMergeDecision,
@@ -241,6 +260,10 @@ from simulation.start_ops import (
 )
 
 MAX_PHYSICS_DIAGNOSTIC_SAMPLES = 256
+TIRE_OVERHEAT_SURFACE_THRESHOLD_C = 130.0
+TRACTION_LOSS_EVENT_SUSTAINED_SLIP_RATIO = 0.06
+TRACTION_LOSS_EVENT_PEAK_SLIP_RATIO = 0.10
+TRACTION_LOSS_EVENT_CONFIRM_SECONDS = 0.12
 
 RACING_ACCELERATION_MPS2 = 12.0
 RACING_BRAKING_MPS2 = 34.0
@@ -251,9 +274,187 @@ LOCAL_TRAJECTORY_OPPONENT_RADIUS_M = 150.0
 LOCAL_TRAJECTORY_DENSE_TRAFFIC_RADIUS_M = 30.0
 LOCAL_TRAJECTORY_MAX_OPPONENTS = 4
 LOCAL_TRAJECTORY_MIN_SELECTED_CLEARANCE_M = 0.35
+RED_BULL_RING_NOMINAL_LINE_EDGE_BUFFER_M = 0.55
 PROGRESS_EPSILON = 1e-9
 DRS_DRAG_MULTIPLIER = 0.82
 DRS_DOWNFORCE_MULTIPLIER = 0.92
+
+
+def empty_tire_temperature_diagnostic_snapshot(
+    track_conditions: TrackConditions | None = None,
+    thermal_preset: ThermalPresetName | None = None,
+    track_conditions_source: str = "explicit_override",
+) -> dict[str, Any]:
+    """Return the bounded tire-temperature diagnostic shape.
+
+    This deliberately stores aggregate ranges and threshold evidence instead
+    of a per-tick/per-driver telemetry history.  The desktop sampler can then
+    identify sustained overheating without turning the diagnostic log into a
+    second dashboard stream.
+    """
+    conditions = track_conditions or TrackConditions()
+    source_names = ("baseline", "lateral", "braking", "traction", "slide")
+
+    def cumulative_axle() -> dict[str, float]:
+        return {
+            **{f"{name}_heat_j": 0.0 for name in source_names},
+            "surface_air_track_cooling_j": 0.0,
+            "surface_to_core_transfer_j": 0.0,
+            "core_ambient_cooling_j": 0.0,
+            "surface_net_energy_j": 0.0,
+            "core_net_energy_j": 0.0,
+        }
+
+    def current_axle() -> dict[str, Any]:
+        return {
+            "heat_input_w": 0.0,
+            "cooling_w": 0.0,
+            "net_w": 0.0,
+            "source_heat_w": {
+                f"{name}_heat_w": 0.0 for name in source_names
+            },
+        }
+
+    def compound_entry(code: PhysicalTireCompound) -> dict[str, Any]:
+        spec = compound_spec_for(code)
+        return {
+            "active_count": 0,
+            "surface_min_c": None,
+            "surface_max_c": None,
+            "core_min_c": None,
+            "core_max_c": None,
+            "peak_surface_max_c": None,
+            "peak_core_max_c": None,
+            "operating_lower_c": round(
+                spec.optimal_surface_temperature_c - spec.surface_operating_window_c,
+                3,
+            ),
+            "operating_upper_c": round(
+                spec.optimal_surface_temperature_c + spec.surface_operating_window_c,
+                3,
+            ),
+            "hot_threshold_c": spec.hot_diagnostic_threshold_c,
+            "current_overheat_count": 0,
+            "current_overheat_driver_ids": [],
+            "current_max_continuous_overheat_seconds": 0.0,
+            "current_max_continuous_overheat_driver_id": None,
+            "peak_overheat_count": 0,
+            "peak_overheat_driver_ids": [],
+            "max_continuous_overheat_seconds": 0.0,
+            "max_continuous_overheat_driver_id": None,
+        }
+
+    return {
+        "schema_version": 2,
+        "track_conditions": {
+            "ambient_temperature_c": conditions.ambient_temperature_c,
+            "track_temperature_c": conditions.track_temperature_c,
+        },
+        "thermal_preset": (
+            thermal_preset.value if isinstance(thermal_preset, ThermalPresetName)
+            else thermal_preset
+        ),
+        "track_conditions_source": track_conditions_source,
+        "sample_count": 0,
+        "thresholds": {
+            "rear_surface_overheat_c": TIRE_OVERHEAT_SURFACE_THRESHOLD_C,
+            "legacy_130_c": TIRE_OVERHEAT_SURFACE_THRESHOLD_C,
+        },
+        "per_compound": {
+            code.value: compound_entry(code)
+            for code in PhysicalTireCompound
+            if code.value.startswith("C")
+        },
+        "compound_distribution": {
+            code.value: 0
+            for code in PhysicalTireCompound
+            if code.value.startswith("C")
+        },
+        "current": {
+            "active_driver_count": 0,
+            "front_surface_min_c": None,
+            "front_surface_max_c": None,
+            "rear_surface_min_c": None,
+            "rear_surface_max_c": None,
+            "front_core_min_c": None,
+            "front_core_max_c": None,
+            "rear_core_min_c": None,
+            "rear_core_max_c": None,
+            "rear_overheat_driver_count": 0,
+            "rear_overheat_driver_ids": [],
+            "compound_overheat_driver_count": 0,
+            "compound_overheat_driver_ids": [],
+            "max_compound_overheat_seconds": 0.0,
+            "max_compound_overheat_driver_id": None,
+            "max_current_overheat_seconds": 0.0,
+            "max_current_overheat_driver_id": None,
+            "front": current_axle(),
+            "rear": current_axle(),
+            "front_heat_input_w": 0.0,
+            "rear_heat_input_w": 0.0,
+            "front_cooling_w": 0.0,
+            "rear_cooling_w": 0.0,
+            "front_net_w": 0.0,
+            "rear_net_w": 0.0,
+            "front_source_heat_w": current_axle()["source_heat_w"].copy(),
+            "rear_source_heat_w": current_axle()["source_heat_w"].copy(),
+        },
+        "peak": {
+            "front_surface_max_c": None,
+            "rear_surface_max_c": None,
+            "front_core_max_c": None,
+            "rear_core_max_c": None,
+            "max_rear_overheat_driver_count": 0,
+            "max_rear_overheat_driver_ids": [],
+            "max_compound_overheat_driver_count": 0,
+            "max_compound_overheat_driver_ids": [],
+            "max_compound_overheat_seconds": 0.0,
+            "max_compound_overheat_driver_id": None,
+            "max_continuous_overheat_seconds": 0.0,
+            "max_continuous_overheat_driver_id": None,
+            "front": current_axle(),
+            "rear": current_axle(),
+            "front_heat_input_w": 0.0,
+            "rear_heat_input_w": 0.0,
+            "front_cooling_w": 0.0,
+            "rear_cooling_w": 0.0,
+            "front_net_w": 0.0,
+            "rear_net_w": 0.0,
+            "front_source_heat_w": current_axle()["source_heat_w"].copy(),
+            "rear_source_heat_w": current_axle()["source_heat_w"].copy(),
+        },
+        "cumulative": {
+            "front": cumulative_axle(),
+            "rear": cumulative_axle(),
+        },
+        "clamp": {
+            "current": {
+                "surface_driver_ids": [],
+                "core_driver_ids": [],
+                "surface_active_seconds": 0.0,
+                "core_active_seconds": 0.0,
+                "max_continuous_seconds": 0.0,
+                "max_continuous_driver_id": None,
+            },
+            "cumulative": {
+                "surface_hit_count": 0,
+                "core_hit_count": 0,
+                "surface_active_seconds": 0.0,
+                "core_active_seconds": 0.0,
+            },
+            "first": {
+                "surface": None,
+                "core": None,
+            },
+            "peak": {
+                "surface_unclamped_temperature_c": None,
+                "core_unclamped_temperature_c": None,
+                "surface_overshoot_c": 0.0,
+                "core_overshoot_c": 0.0,
+                "max_continuous_seconds": 0.0,
+            },
+        },
+    }
 
 # Supported public facade. Domain modules own definitions; race_engine only
 # re-exports names listed in ``__all__`` for tests/tools. This is not a full
@@ -338,6 +539,8 @@ __all__ = [
     "MAX_FUEL_FLOW_KG_PER_SECOND",
     "MAX_INITIAL_FUEL_MASS_KG",
     "MAX_PHYSICS_DIAGNOSTIC_SAMPLES",
+    "TIRE_OVERHEAT_SURFACE_THRESHOLD_C",
+    "empty_tire_temperature_diagnostic_snapshot",
     "ManeuverGroup",
     "PACE_MODE_ATTACK_FACTORS",
     "PACE_MODE_DRS_FACTORS",
@@ -379,6 +582,10 @@ __all__ = [
     "SC_QUEUE_APPROACH_REACTION_SECONDS",
     "SC_QUEUE_JOIN_MAX_RELATIVE_SPEED_KPH",
     "SC_QUEUE_PROPAGATION_HORIZON_M",
+    "SC_QUEUE_RELATIVE_SPEED_FILTER_SECONDS",
+    "SC_QUEUE_STABLE_RELATIVE_SPEED_EXIT_KPH",
+    "SC_QUEUE_STABLE_RELATIVE_SPEED_GRACE_SECONDS",
+    "SC_QUEUE_STABLE_RELATIVE_SPEED_KPH",
     "SC_QUEUE_TARGET_CAR_LENGTHS",
     "SC_RELEASE_GAP_CAR_LENGTHS",
     "SC_UNLAP_LAP_TIME_FACTOR",
@@ -412,9 +619,15 @@ class RaceEngine(
         player_team_id: int,
         player_driver_ids: list[int],
         starting_tires: dict[int, TireCompound] | None = None,
+        starting_physical_tires: dict[int, PhysicalTireCompound] | None = None,
         grid_order: list[int] | None = None,
         seed: int | None = None,
         start_sequence_enabled: bool = True,
+        track_conditions: TrackConditions | None = None,
+        thermal_preset: ThermalPresetName | None = None,
+        track_conditions_source: str = "explicit_override",
+        clean_line_lateral_speed_feedforward: float = 1.0,
+        clean_line_lateral_speed_limit_mps: float = 1.25,
     ):
         self.circuit = circuit
         self.drivers = {d.id: d for d in drivers}
@@ -422,8 +635,26 @@ class RaceEngine(
         self.player_team_id = player_team_id
         self.player_driver_ids = set(player_driver_ids)
         self.starting_tires = starting_tires or {}
+        self.starting_physical_tires = starting_physical_tires or {}
         self.grid_order = grid_order or []
         self.rng = random.Random(seed)
+        self.track_conditions = track_conditions or TrackConditions()
+        self.thermal_preset = thermal_preset
+        self.track_conditions_source = track_conditions_source
+        # ``DriverRaceState.lateral_*`` is expressed from the compiled
+        # centerline while the bicycle model integrates error from the active
+        # path.  A clean car therefore needs the path offset derivative on
+        # both sides of that frame conversion.  The scalar remains injectable
+        # only for controlled calibration.  Production remains at zero until
+        # the single-car line gates and the multi-car SC regressions both pass.
+        self.clean_line_lateral_speed_feedforward = max(
+            0.0,
+            min(1.0, float(clean_line_lateral_speed_feedforward)),
+        )
+        self.clean_line_lateral_speed_limit_mps = max(
+            0.5,
+            min(PHYSICS_MAX_LATERAL_SPEED_MPS, float(clean_line_lateral_speed_limit_mps)),
+        )
 
         self.total_laps = circuit.total_laps
         self.current_lap = 1
@@ -444,6 +675,34 @@ class RaceEngine(
         self._last_consumed_physics_frame_id = 0
         self.weather = "dry"
         self._init_safety_car_state()
+        self._tire_temperature_diagnostics = (
+            empty_tire_temperature_diagnostic_snapshot(
+                self.track_conditions,
+                self.thermal_preset,
+                self.track_conditions_source,
+            )
+        )
+        self._rear_overheat_current_seconds: dict[int, float] = {}
+        self._compound_overheat_current_seconds: dict[
+            tuple[int, PhysicalTireCompound],
+            float,
+        ] = {}
+        self._last_tire_thermal_states: dict[
+            int,
+            tuple[TireThermalState, TireThermalState],
+        ] = {}
+        self._tire_thermal_budget_by_driver: dict[
+            int,
+            tuple[TireThermalBudget, TireThermalBudget],
+        ] = {}
+        self._tire_clamp_state_by_driver: dict[
+            int,
+            tuple[bool, bool, bool, bool],
+        ] = {}
+        self._tire_clamp_current_seconds: dict[
+            tuple[int, str],
+            float,
+        ] = {}
         self.pit_window_open = False
         self.finished = False
         self.speed_multiplier = 1
@@ -485,6 +744,7 @@ class RaceEngine(
         self._pending_forced_wide_events: list[RaceEvent] = []
         self._pending_physical_handling_events: list[RaceEvent] = []
         self._physical_handling_event_cooldown: dict[int, float] = {}
+        self._traction_loss_event_duration_s: dict[int, float] = {}
 
         self._init_start_ops_state(start_sequence_enabled)
         self._init_incident_ops_state()
@@ -537,17 +797,25 @@ class RaceEngine(
                 if calibration
                 else 0.1
             ),
+            "release_inward_recovery_speed_cap": (
+                calibration.release_inward_recovery_speed_cap
+                if calibration
+                else False
+            ),
         }
         telemetry_reference = (
             sorted(calibration.telemetry_reference, key=lambda item: item.progress)
             if calibration
             else []
         )
+        telemetry_progress_offset = (
+            calibration.telemetry_progress_offset if calibration else 0.0
+        )
 
         def telemetry_speed_mps(progress: float) -> float | None:
             if not telemetry_reference:
                 return None
-            normalized = progress % 1.0
+            normalized = (progress + telemetry_progress_offset) % 1.0
             following_index = next(
                 (
                     index
@@ -575,7 +843,7 @@ class RaceEngine(
         def telemetry_braking_fraction(progress: float) -> float:
             if not telemetry_reference:
                 return 0.0
-            normalized = progress % 1.0
+            normalized = (progress + telemetry_progress_offset) % 1.0
             following_index = next(
                 (
                     index
@@ -705,8 +973,8 @@ class RaceEngine(
                 meta["car_factors"]
             )
             tire = TireTrajectorySpec.from_tire_physics(
-                state.tire_compound,
-                compute_tire_physics_factors(state.tire_compound, 0.0),
+                physical_compound_for_state(state),
+                compute_tire_physics_factors(physical_compound_for_state(state), 0.0),
             )
             track_profile = build_vehicle_track_physics_profile(
                 self.circuit,
@@ -748,7 +1016,7 @@ class RaceEngine(
                     state.progress,
                     meta["car_factors"],
                     meta["pace"],
-                    state.tire_compound,
+                    physical_compound_for_state(state),
                     track_profile=track_profile,
                     physics_by_line=physics_by_line,
                 )
@@ -758,7 +1026,7 @@ class RaceEngine(
         progress: float,
         car_factors: CarPerformanceFactors,
         driver_pace: float,
-        tire_compound: TireCompound,
+        tire_compound: PhysicalTireCompound | TireCompound,
         *,
         track_profile: TrackPhysicsProfile | None = None,
         physics_by_line: dict[str, LongitudinalVehiclePhysics] | None = None,
@@ -792,6 +1060,37 @@ class RaceEngine(
             modifiers,
         )
         return round(speed_mps * 3.6, 3)
+
+    def physical_compound_for_role(
+        self,
+        role: DryTireRole | TireCompound | str,
+    ) -> PhysicalTireCompound:
+        """Resolve a weekend role through the session's circuit nomination."""
+        from data_loader import resolve_tire_compound
+
+        nomination = self.circuit.tire_compound_nomination
+        if nomination is not None:
+            return resolve_tire_compound(self.circuit, role)[0]
+        return physical_compound_for(role)
+
+    def set_driver_tire_compound(
+        self,
+        state: DriverRaceState,
+        role: DryTireRole | TireCompound | str,
+    ) -> PhysicalTireCompound:
+        """Atomically update the legacy role, weekend role, and physical code."""
+        from data_loader import resolve_tire_role
+
+        resolved_role = resolve_tire_role(role)
+        physical = self.physical_compound_for_role(resolved_role)
+        state.tire_compound = TireCompound(resolved_role.value)
+        state.tire_role = resolved_role
+        state.physical_tire_compound = physical
+        self._rear_overheat_current_seconds[state.driver_id] = 0.0
+        for key in tuple(self._compound_overheat_current_seconds):
+            if key[0] == state.driver_id:
+                self._compound_overheat_current_seconds[key] = 0.0
+        return physical
 
     def _physics_v2_modifiers(
         self,
@@ -869,7 +1168,13 @@ class RaceEngine(
             straight_drag_area_m2=car_factors.straight_drag_area_m2,
             corner_downforce_area_m2=car_factors.corner_downforce_area_m2,
             straight_downforce_area_m2=car_factors.straight_downforce_area_m2,
-            brake_force_n=car_factors.brake_force_n,
+            brake_force_n=(
+                car_factors.brake_force_n
+                * brake_temperature_force_factor(
+                    state.front_brake_temperature_c,
+                    state.rear_brake_temperature_c,
+                )
+            ),
             mechanical_grip=car_factors.mechanical_grip,
             front_aero_share=car_factors.front_aero_share,
             traction_factor=car_factors.traction_factor,
@@ -901,6 +1206,9 @@ class RaceEngine(
             ),
             emergency_braking=state.emergency_braking,
             wheelbase_m=state.wheelbase_m,
+            center_of_gravity_height_m=0.30,
+            wheel_radius_m=0.36,
+            front_brake_bias=0.58,
             yaw_inertia_kgm2=(
                 1700.0
                 * (car_factors.mass_kg + state.fuel_mass_kg)
@@ -1034,6 +1342,33 @@ class RaceEngine(
             )
         )
 
+    def _traction_loss_event_ready(
+        self,
+        driver_id: int,
+        traction_slip_ratio: float,
+        previous_traction_slip_ratio: float,
+        delta: float,
+    ) -> bool:
+        previous_duration = self._traction_loss_event_duration_s.get(
+            driver_id,
+            0.0,
+        )
+        if traction_slip_ratio >= TRACTION_LOSS_EVENT_SUSTAINED_SLIP_RATIO:
+            duration = previous_duration + max(0.0, delta)
+        else:
+            duration = 0.0
+        self._traction_loss_event_duration_s[driver_id] = duration
+        peak_crossed = (
+            traction_slip_ratio >= TRACTION_LOSS_EVENT_PEAK_SLIP_RATIO
+            and previous_traction_slip_ratio
+            < TRACTION_LOSS_EVENT_PEAK_SLIP_RATIO
+        )
+        sustained_confirmed = (
+            duration >= TRACTION_LOSS_EVENT_CONFIRM_SECONDS
+            and previous_duration < TRACTION_LOSS_EVENT_CONFIRM_SECONDS
+        )
+        return peak_crossed or sustained_confirmed
+
     def _physics_v2_progress_delta(
         self,
         state: DriverRaceState,
@@ -1127,12 +1462,20 @@ class RaceEngine(
         maximum_lateral_speed_mps = (
             PHYSICS_MAX_LATERAL_SPEED_MPS
             if tactical_lateral_motion or self.race_phase != "green"
-            else 1.25
+            else self.clean_line_lateral_speed_limit_mps
         )
         minimum_lateral, maximum_lateral = self._track_surface.safety_lateral_bounds(
             state.progress
         )
         nominal_lateral_bounds = self._physics_v2_nominal_lateral_bounds(state)
+        if nominal_lateral_bounds is not None and self.circuit.id == 4:
+            state.target_lateral_offset_m = max(
+                nominal_lateral_bounds[0],
+                min(
+                    nominal_lateral_bounds[1],
+                    state.target_lateral_offset_m,
+                ),
+            )
         following = self._physics_v2_following_constraint(
             state,
             car_ahead,
@@ -1142,11 +1485,22 @@ class RaceEngine(
         )
         previous_wheel_lock_ratio = state.wheel_lock_ratio
         previous_traction_slip_ratio = state.traction_slip_ratio
+        physics_modifiers = self._physics_v2_modifiers(state, surface)
+        (
+            target_lateral_speed_mps,
+            reference_lateral_speed_mps,
+        ) = self._physics_v2_lateral_speed_inputs(
+            state,
+            active_line,
+            track_profile,
+            target_lateral_speed_mps,
+            tactical_lateral_motion=tactical_lateral_motion,
+        )
         result = line_physics.advance(
             distance_m=start_distance_m,
             speed_mps=max(0.0, state.speed_kph / 3.6),
             delta_seconds=delta,
-            modifiers=self._physics_v2_modifiers(state, surface),
+            modifiers=physics_modifiers,
             following=following,
             lateral_offset_m=state.lateral_offset_m,
             lateral_speed_mps=state.lateral_speed_mps,
@@ -1156,12 +1510,10 @@ class RaceEngine(
                 active_line,
                 state.progress,
             ),
-            # The reference offset only changes the origin of the track-relative
-            # coordinate.  It is not another lateral velocity command.  Passing
-            # the target speed here as well made a line-speed change appear as
-            # an instantaneous +/-8 m/s body slip before the controller moved
-            # the car at all.
-            reference_lateral_speed_mps=0.0,
+            # The bicycle owns path curvature.  Matching target/reference
+            # speeds only transports the centerline-relative state origin; it
+            # does not add a second steering or lateral-force command.
+            reference_lateral_speed_mps=reference_lateral_speed_mps,
             maximum_lateral_speed_mps=maximum_lateral_speed_mps,
             minimum_lateral_offset_m=minimum_lateral,
             maximum_lateral_offset_m=maximum_lateral,
@@ -1183,7 +1535,18 @@ class RaceEngine(
             throttle=result.throttle,
             delta_seconds=delta,
         )
-        self._update_tire_thermal_state(state, result, delta)
+        self._update_tire_thermal_state(
+            state,
+            result,
+            delta,
+            front_brake_bias=physics_modifiers.front_brake_bias,
+        )
+        self._update_brake_thermal_state(
+            state,
+            result,
+            delta,
+            front_brake_bias=physics_modifiers.front_brake_bias,
+        )
         traveled_distance_m = max(0.0, result.distance_m - start_distance_m)
         state.total_distance_m += traveled_distance_m
         state.speed_kph = round(result.speed_mps * 3.6, 3)
@@ -1205,7 +1568,45 @@ class RaceEngine(
         state.steering_angle_rad = round(result.steering_angle_rad, 6)
         state.wheel_lock_ratio = round(result.wheel_lock_ratio, 5)
         state.traction_slip_ratio = round(result.traction_slip_ratio, 5)
+        state.front_tire_slide_energy_j = round(
+            result.front_tire_slide_energy_j,
+            2,
+        )
+        state.rear_tire_slide_energy_j = round(
+            result.rear_tire_slide_energy_j,
+            2,
+        )
         state.tire_slide_energy_j = round(result.tire_slide_energy_j, 2)
+        state.rear_applied_drive_energy_j = round(
+            result.rear_applied_drive_energy_j,
+            2,
+        )
+        state.front_applied_brake_energy_j = round(
+            result.front_applied_brake_energy_j,
+            2,
+        )
+        state.rear_applied_brake_energy_j = round(
+            result.rear_applied_brake_energy_j,
+            2,
+        )
+        state.vehicle_mass_kg = round(result.vehicle_mass_kg, 3)
+        state.front_normal_load_n = round(result.front_normal_load_n, 2)
+        state.rear_normal_load_n = round(result.rear_normal_load_n, 2)
+        state.longitudinal_load_transfer_n = round(
+            result.longitudinal_load_transfer_n,
+            2,
+        )
+        state.front_wheel_speed_rad_s = round(
+            result.front_wheel_speed_rad_s,
+            4,
+        )
+        state.rear_wheel_speed_rad_s = round(
+            result.rear_wheel_speed_rad_s,
+            4,
+        )
+        state.front_axle_slip_ratio = round(result.front_axle_slip_ratio, 5)
+        state.rear_axle_slip_ratio = round(result.rear_axle_slip_ratio, 5)
+        state.applied_brake_force_n = round(result.applied_brake_force_n, 2)
         handling_event_cooldown = self._physical_handling_event_cooldown.get(
             state.driver_id,
             0.0,
@@ -1220,6 +1621,12 @@ class RaceEngine(
             }
             if input_error is not None
             else {"trigger": "physical_limit"}
+        )
+        traction_loss_event_ready = self._traction_loss_event_ready(
+            state.driver_id,
+            result.traction_slip_ratio,
+            previous_traction_slip_ratio,
+            delta,
         )
         if (
             handling_event_cooldown <= 0.0
@@ -1243,8 +1650,7 @@ class RaceEngine(
             self._physical_handling_event_cooldown[state.driver_id] = 3.0
         elif (
             handling_event_cooldown <= 0.0
-            and result.traction_slip_ratio >= TRACTION_LOSS_SLIP_RATIO_THRESHOLD
-            and previous_traction_slip_ratio < TRACTION_LOSS_SLIP_RATIO_THRESHOLD
+            and traction_loss_event_ready
         ):
             self._pending_physical_handling_events.append(
                 RaceEvent(
@@ -1291,18 +1697,23 @@ class RaceEngine(
 
         half_length_m = state.car_length_m / 2.0
         half_length_progress = half_length_m / self.track_length_m
+        nominal_edge_buffer_m = (
+            RED_BULL_RING_NOMINAL_LINE_EDGE_BUFFER_M
+            if self.circuit.id == 4
+            else 0.0
+        )
         rear_minimum, rear_maximum = (
             self._track_surface.trajectory_body_lateral_bounds(
                 state.progress - half_length_progress,
                 body_width_m=state.car_width_m,
-                edge_margin_m=TRACK_EDGE_MARGIN_M,
+                edge_margin_m=TRACK_EDGE_MARGIN_M + nominal_edge_buffer_m,
             )
         )
         front_minimum, front_maximum = (
             self._track_surface.trajectory_body_lateral_bounds(
                 state.progress + half_length_progress,
                 body_width_m=state.car_width_m,
-                edge_margin_m=TRACK_EDGE_MARGIN_M,
+                edge_margin_m=TRACK_EDGE_MARGIN_M + nominal_edge_buffer_m,
             )
         )
         preview_progress = (
@@ -1314,7 +1725,11 @@ class RaceEngine(
             self._track_surface.trajectory_body_lateral_bounds(
                 preview_progress,
                 body_width_m=state.car_width_m,
-                edge_margin_m=TRACK_EDGE_MARGIN_M,
+                # The optimizer may legally use a low kerb, while the live
+                # four-wheel contact model also needs room for interpolation,
+                # yaw and a narrowing next sample. Keep a small runtime buffer
+                # so one wheel does not flicker onto runoff at T6.
+                edge_margin_m=TRACK_EDGE_MARGIN_M + nominal_edge_buffer_m,
             )
         )
         heading_shift_m = half_length_m * state.slip_angle_rad
@@ -1752,6 +2167,36 @@ class RaceEngine(
         )
         if hazard_target is not None:
             return hazard_target
+        correction = self._sc_order_correction
+        if (
+            self.race_phase == "sc"
+            and correction is not None
+            and correction.get("yielding_driver_id") == state.driver_id
+        ):
+            phase = correction.get("phase")
+            if phase in {"MOVE_ASIDE", "YIELDING"}:
+                target = correction.get("lateral_target_m")
+                predecessor_id = correction.get("predecessor_driver_id")
+                predecessor = (
+                    self.driver_states.get(predecessor_id)
+                    if isinstance(predecessor_id, int)
+                    else None
+                )
+                if predecessor is not None:
+                    refreshed_target = self._sc_order_correction_lateral_target(
+                        state,
+                        predecessor,
+                    )
+                    if refreshed_target is not None:
+                        target = refreshed_target
+                        correction["lateral_target_m"] = refreshed_target
+                if isinstance(target, (int, float)):
+                    return float(target)
+            if phase == "MERGE_BACK":
+                return track_profile.line_offset_at_progress(
+                    DRIVING_LINE_RACING,
+                    state.progress,
+                )
         if self.race_phase != "green" and state.driver_id not in self._sc_unlap_driver_ids:
             return track_profile.line_offset_at_progress(
                 DRIVING_LINE_RACING,
@@ -2050,6 +2495,21 @@ class RaceEngine(
         target_lateral_offset_m: float,
     ) -> float:
         """Feed the path's lateral motion forward instead of chasing it late."""
+        correction = self._sc_order_correction
+        if (
+            correction is not None
+            and correction.get("yielding_driver_id") == state.driver_id
+            and correction.get("phase") in {"MOVE_ASIDE", "YIELDING"}
+        ):
+            response_seconds = 0.70
+            return max(
+                -PHYSICS_MAX_LATERAL_SPEED_MPS,
+                min(
+                    PHYSICS_MAX_LATERAL_SPEED_MPS,
+                    (target_lateral_offset_m - state.lateral_offset_m)
+                    / response_seconds,
+                ),
+            )
         battle = self._side_by_side_battle_for_driver(state.driver_id)
         if (
             state.avoidance_active
@@ -2091,12 +2551,67 @@ class RaceEngine(
                 ),
             )
 
-        # The active line pose already curves through the future racing-line
-        # offsets.  Feeding the offset derivative in again commands a second
-        # lateral motion in the line-relative bicycle frame and used to drive
-        # clean cars into +/-4 m/s oscillations.  With no traffic manoeuvre the
-        # controller only needs to remove local offset error.
+        # Clean-line reference transport is paired with the reference speed in
+        # ``_physics_v2_lateral_speed_inputs``.  This method owns manoeuvre
+        # motion only.
         return 0.0
+
+    def _physics_v2_lateral_speed_inputs(
+        self,
+        state: DriverRaceState,
+        active_line: str,
+        track_profile: TrackPhysicsProfile,
+        target_lateral_speed_mps: float,
+        *,
+        tactical_lateral_motion: bool,
+    ) -> tuple[float, float]:
+        """Return centerline target speed and matching frame-reference speed.
+
+        The dynamic bicycle subtracts the reference values before integration
+        and adds them back afterwards.  Supplying only the reference derivative
+        would turn a zero relative-speed target into ``-reference_speed`` and
+        cancel the intended path transport.  A clean car therefore receives
+        the same derivative as both target and reference speed.
+        """
+        if (
+            active_line != DRIVING_LINE_RACING
+            or tactical_lateral_motion
+            or self.race_phase != "green"
+            or self.clean_line_lateral_speed_feedforward <= 0.0
+        ):
+            return target_lateral_speed_mps, 0.0
+
+        sample_distance_m = 1.0
+        progress_delta = sample_distance_m / max(1.0, self.track_length_m)
+        forward_total_progress = state.total_progress + progress_delta
+        backward_total_progress = state.total_progress - progress_delta
+        forward_distance_m = track_profile.line_distance_at_total_progress(
+            active_line,
+            forward_total_progress,
+        )
+        backward_distance_m = track_profile.line_distance_at_total_progress(
+            active_line,
+            backward_total_progress,
+        )
+        distance_span_m = forward_distance_m - backward_distance_m
+        if distance_span_m <= 1e-9:
+            return target_lateral_speed_mps, 0.0
+
+        forward_offset_m = track_profile.line_offset_at_progress(
+            active_line,
+            forward_total_progress,
+        )
+        backward_offset_m = track_profile.line_offset_at_progress(
+            active_line,
+            backward_total_progress,
+        )
+        reference_lateral_speed_mps = (
+            (forward_offset_m - backward_offset_m)
+            / distance_span_m
+            * max(0.0, state.speed_kph / 3.6)
+            * self.clean_line_lateral_speed_feedforward
+        )
+        return reference_lateral_speed_mps, reference_lateral_speed_mps
 
     def _center_gap_m(
         self,
@@ -2157,12 +2672,100 @@ class RaceEngine(
             )
             if not shares_projected_lane:
                 continue
+            correction = self._sc_order_correction
+            if (
+                correction is not None
+                and correction.get("yielding_driver_id") == candidate.driver_id
+                and correction.get("phase") in {"MOVE_ASIDE", "YIELDING"}
+            ):
+                lateral_target = correction.get("lateral_target_m")
+                if isinstance(lateral_target, (int, float)):
+                    pass_clearance = 0.5 * (
+                        state.car_width_m + candidate.car_width_m
+                    ) + 0.25
+                    if abs(float(lateral_target) - state.lateral_offset_m) >= pass_clearance:
+                        # The order controller has reserved a second legal
+                        # corridor for this yielding car.  A physical follower
+                        # may pass that car without treating the sporting
+                        # predecessor as its leader.
+                        continue
             if self._physics_v2_passing_authorized(state, candidate):
                 continue
             candidates.append((longitudinal_gap_m, candidate))
         if not candidates:
             return None
         return min(candidates, key=lambda item: item[0])[1]
+
+    def _nearest_physical_order_leader(
+        self,
+        state: DriverRaceState,
+        start_snapshot: dict[int, tuple[float, float]],
+    ) -> DriverRaceState | None:
+        """Return the nearest actual body ahead when SC has no active pass."""
+        follower_snapshot = start_snapshot.get(state.driver_id)
+        if follower_snapshot is None:
+            return None
+        follower_progress, _ = follower_snapshot
+        candidates: list[tuple[float, DriverRaceState]] = []
+        for candidate in self.driver_states.values():
+            if (
+                candidate.driver_id == state.driver_id
+                or candidate.in_pit
+                or candidate.retired
+                or candidate.finished
+            ):
+                continue
+            candidate_snapshot = start_snapshot.get(candidate.driver_id)
+            if candidate_snapshot is None:
+                continue
+            gap_m = (candidate_snapshot[0] - follower_progress) * self.track_length_m
+            if gap_m <= PROGRESS_EPSILON or gap_m > HAZARD_DETECTION_DISTANCE_M:
+                continue
+            candidates.append((gap_m, candidate))
+        return min(candidates, key=lambda item: item[0])[1] if candidates else None
+
+    def _sc_order_correction_allows_pass(
+        self,
+        follower: DriverRaceState,
+        leader: DriverRaceState,
+    ) -> bool:
+        correction = self._sc_order_correction
+        if correction is None:
+            return False
+        if (
+            correction.get("phase") not in {"MOVE_ASIDE", "YIELDING"}
+            or correction.get("yielding_driver_id") != leader.driver_id
+            or correction.get("predecessor_driver_id") != follower.driver_id
+        ):
+            return False
+        lateral_target = correction.get("lateral_target_m")
+        if not isinstance(lateral_target, (int, float)):
+            return False
+        required_clearance = 0.5 * (
+            follower.car_width_m + leader.car_width_m
+        ) + 0.25
+        actual_clearance = (
+            abs(float(lateral_target) - follower.lateral_offset_m) >= required_clearance
+            and abs(leader.lateral_offset_m - follower.lateral_offset_m)
+            >= required_clearance
+        )
+        if actual_clearance:
+            return True
+        # The reserved corridor may be reached a fraction before the cars are
+        # side-by-side.  Do not let a predecessor/leader feedback loop brake
+        # both cars to zero while that longitudinal clearance still exists;
+        # swept-body collision handling remains the final authority.
+        longitudinal_gap_m = (
+            leader.total_progress - follower.total_progress
+        ) * self.track_length_m
+        return (
+            longitudinal_gap_m
+            > max(
+                0.75 * max(follower.car_length_m, leader.car_length_m),
+                FOLLOWING_MIN_BUMPER_GAP_M + 0.25,
+            )
+            and abs(float(lateral_target) - follower.lateral_offset_m) >= 0.75
+        )
 
     def _physics_v2_following_constraint(
         self,
@@ -2203,12 +2806,11 @@ class RaceEngine(
             and not state.in_pit
             and state.driver_id not in self._sc_unlap_driver_ids
         ):
-            # Under Safety Car, lateral separation is not permission to pass.
-            # Always constrain a car to the predecessor in the frozen sporting
-            # order.  A physical inversion is handled by the smooth give-back
-            # speed cap until this predecessor is ahead again.
-            car_ahead = self._sc_queue_predecessor(state)
-        else:
+            # QueuePlan owns the sporting predecessor and gap target.  This
+            # constraint is only for collision safety, so it must always use
+            # the nearest physical body in the active corridor.  A sporting
+            # predecessor that is physically behind is never used as a
+            # collision leader.
             car_ahead = self._nearest_physical_following_leader(
                 state,
                 start_snapshot,
@@ -2221,6 +2823,32 @@ class RaceEngine(
             or car_ahead.finished
             or self._physics_v2_passing_authorized(state, car_ahead)
         ):
+            return None
+        hazard_recovery_active = getattr(self, "_hazard_recovery_active", None)
+        if (
+            self.race_phase == "sc"
+            and self.safety_car_stage == "collecting"
+            and callable(hazard_recovery_active)
+            and hazard_recovery_active(state)
+            and state.handling_state == "recovering"
+            and car_ahead.handling_state == "recovering"
+            and state.speed_kph < 5.0
+            and 0.75 * state.car_length_m
+            <= (car_ahead.total_progress - state.total_progress)
+            * self.track_length_m
+        ):
+            # A blocked incident can leave several cars compressed in the same
+            # temporary escape corridor.  Release this bounded recovery pair
+            # while a body-length of longitudinal room remains; swept-body
+            # collision resolution still owns the actual safety decision.
+            return None
+        if self.race_phase == "sc" and self._sc_order_correction_allows_pass(
+            state,
+            car_ahead,
+        ):
+            # The active sporting predecessor has a reserved, clear corridor.
+            # Let that one physical pass proceed; swept-body collision checks
+            # remain authoritative for the actual clearance.
             return None
         if (
             state.avoidance_active
@@ -2796,8 +3424,28 @@ class RaceEngine(
                 self._begin_sc_in_this_lap(events)
 
         if self.safety_car_stage == "restart" and self._sc_restart_target is not None:
+            if self._sc_restart_hold_ticks > 0 and self._physics_frame > 0:
+                self._sc_restart_hold_ticks -= 1
+                return
             leader = self._on_track_leader()
-            if leader is not None and leader.total_progress >= self._sc_restart_target:
+            restart_entered_this_tick = (
+                self._tick_phase is TickPhase.RULES
+                and abs(self.race_elapsed - self._sc_restart_entered_at) <= 1e-9
+            )
+            if (
+                leader is not None
+                and not restart_entered_this_tick
+                and (
+                    leader.total_progress >= self._sc_restart_target
+                    or (
+                        self.race_elapsed > self._sc_restart_entered_at
+                        and leader.total_progress >= (
+                            self._sc_restart_target
+                            - SC_RESTART_CONFIRMATION_TOLERANCE_PROGRESS
+                        )
+                    )
+                )
+            ):
                 self._finish_race_phase("sc", events)
 
     def set_speed(self, multiplier: int) -> bool:
@@ -3083,6 +3731,8 @@ class RaceEngine(
             tire_usage_multiplier = (
                 pace_effect["tire_usage_multiplier"]
                 * self._battle_effect_tire_usage_multiplier(state)
+                * self._circuit_tire_usage_per_lap()
+                * self._tire_thermal_usage_multiplier(state)
             )
             state.tire_usage += (
                 progress_delta * tire_usage_multiplier
@@ -3261,8 +3911,551 @@ class RaceEngine(
         self._finalize_event_positions(events)
         self._enter_tick_phase(TickPhase.TELEMETRY)
         self._refresh_vehicle_telemetry(delta)
+        self._record_tire_temperature_diagnostics(delta)
 
         return events
+
+    @staticmethod
+    def _add_tire_thermal_budgets(
+        first: TireThermalBudget,
+        second: TireThermalBudget,
+    ) -> TireThermalBudget:
+        fields = (
+            "baseline_heat_j",
+            "lateral_heat_j",
+            "braking_heat_j",
+            "traction_heat_j",
+            "slide_heat_j",
+            "surface_air_track_cooling_j",
+            "surface_to_core_transfer_j",
+            "core_ambient_cooling_j",
+            "surface_net_energy_j",
+            "core_net_energy_j",
+        )
+        return TireThermalBudget(
+            **{
+                field: getattr(first, field) + getattr(second, field)
+                for field in fields
+            }
+        )
+
+    @staticmethod
+    def _tire_budget_as_dict(budget: TireThermalBudget) -> dict[str, float]:
+        return {
+            field: round(float(getattr(budget, field)), 6)
+            for field in (
+                "baseline_heat_j",
+                "lateral_heat_j",
+                "braking_heat_j",
+                "traction_heat_j",
+                "slide_heat_j",
+                "surface_air_track_cooling_j",
+                "surface_to_core_transfer_j",
+                "core_ambient_cooling_j",
+                "surface_net_energy_j",
+                "core_net_energy_j",
+            )
+        }
+
+    def _accumulate_tire_thermal_diagnostics(
+        self,
+        state: DriverRaceState,
+        front_thermal: TireThermalState,
+        rear_thermal: TireThermalState,
+        delta_seconds: float,
+    ) -> None:
+        """Accumulate bounded per-step thermal facts before the next snapshot."""
+        driver_id = state.driver_id
+        previous = self._tire_thermal_budget_by_driver.get(
+            driver_id,
+            (TireThermalBudget.zero(), TireThermalBudget.zero()),
+        )
+        self._tire_thermal_budget_by_driver[driver_id] = (
+            self._add_tire_thermal_budgets(previous[0], front_thermal.budget),
+            self._add_tire_thermal_budgets(previous[1], rear_thermal.budget),
+        )
+        flags = (
+            front_thermal.surface_clamp_hit,
+            front_thermal.core_clamp_hit,
+            rear_thermal.surface_clamp_hit,
+            rear_thermal.core_clamp_hit,
+        )
+        self._tire_clamp_state_by_driver[driver_id] = flags
+        step = max(0.0, float(delta_seconds))
+        diagnostics = self._tire_temperature_diagnostics
+        clamp = diagnostics["clamp"]
+        cumulative = clamp["cumulative"]
+        for axle, thermal in (
+            ("front", front_thermal),
+            ("rear", rear_thermal),
+        ):
+            for node, hit, unclamped, overshoot in (
+                (
+                    "surface",
+                    thermal.surface_clamp_hit,
+                    thermal.surface_unclamped_temperature_c,
+                    thermal.surface_clamp_overshoot_c,
+                ),
+                (
+                    "core",
+                    thermal.core_clamp_hit,
+                    thermal.core_unclamped_temperature_c,
+                    thermal.core_clamp_overshoot_c,
+                ),
+            ):
+                key = (driver_id, f"{axle}_{node}")
+                if hit:
+                    current_seconds = (
+                        self._tire_clamp_current_seconds.get(key, 0.0)
+                        + step
+                    )
+                    self._tire_clamp_current_seconds[key] = current_seconds
+                    cumulative[f"{node}_hit_count"] += 1
+                    cumulative[f"{node}_active_seconds"] += step
+                    first = clamp["first"][node]
+                    if first is None:
+                        clamp["first"][node] = {
+                            "timestamp_seconds": round(self.race_elapsed, 3),
+                            "lap": state.current_lap,
+                            "driver_id": driver_id,
+                            "compound": state.tire_compound.value,
+                            "tire_role": state.tire_role.value,
+                            "physical_tire_compound": physical_compound_for_state(state).value,
+                            "axle": axle,
+                            "node": node,
+                            "unclamped_temperature_c": round(unclamped, 6),
+                            "overshoot_c": round(overshoot, 6),
+                            "track_conditions": {
+                                "ambient_temperature_c": self.track_conditions.ambient_temperature_c,
+                                "track_temperature_c": self.track_conditions.track_temperature_c,
+                            },
+                            "heat_budget": self._tire_budget_as_dict(
+                                thermal.budget
+                            ),
+                        }
+                    peak = clamp["peak"]
+                    temperature_key = f"{node}_unclamped_temperature_c"
+                    overshoot_key = f"{node}_overshoot_c"
+                    peak[temperature_key] = round(
+                        max(peak[temperature_key] or unclamped, unclamped),
+                        6,
+                    )
+                    peak[overshoot_key] = round(
+                        max(peak[overshoot_key], overshoot),
+                        6,
+                    )
+                    peak["max_continuous_seconds"] = round(
+                        max(peak["max_continuous_seconds"], current_seconds),
+                        6,
+                    )
+                else:
+                    self._tire_clamp_current_seconds[key] = 0.0
+
+    def _record_compound_temperature_diagnostics(self, active_states: list[DriverRaceState]) -> None:
+        """Update bounded current and historical C1-C5 aggregates."""
+        diagnostics = self._tire_temperature_diagnostics
+        per_compound = diagnostics["per_compound"]
+        distribution = diagnostics["compound_distribution"]
+        aggregate_overheat_ids: set[int] = set()
+        observed_states = [
+            state for state in self.driver_states.values() if not state.retired
+        ]
+        for code in PhysicalTireCompound:
+            if not code.value.startswith("C"):
+                continue
+            entry = per_compound[code.value]
+            states = [
+                state for state in active_states
+                if physical_compound_for_state(state) == code
+            ]
+            observed = [
+                state for state in observed_states
+                if physical_compound_for_state(state) == code
+            ]
+            entry["active_count"] = len(states)
+            distribution[code.value] = len(states)
+            if observed:
+                entry["peak_surface_max_c"] = round(
+                    max(
+                        entry["peak_surface_max_c"] or observed[0].rear_tire_surface_temperature_c,
+                        max(state.rear_tire_surface_temperature_c for state in observed),
+                    ),
+                    3,
+                )
+                entry["peak_core_max_c"] = round(
+                    max(
+                        entry["peak_core_max_c"] or observed[0].rear_tire_core_temperature_c,
+                        max(state.rear_tire_core_temperature_c for state in observed),
+                    ),
+                    3,
+                )
+            if not states:
+                entry["surface_min_c"] = None
+                entry["surface_max_c"] = None
+                entry["core_min_c"] = None
+                entry["core_max_c"] = None
+                entry["current_overheat_count"] = 0
+                entry["current_overheat_driver_ids"] = []
+                entry["current_max_continuous_overheat_seconds"] = 0.0
+                entry["current_max_continuous_overheat_driver_id"] = None
+                continue
+            surfaces = [state.rear_tire_surface_temperature_c for state in states]
+            cores = [state.rear_tire_core_temperature_c for state in states]
+            entry["surface_min_c"] = round(min(surfaces), 3)
+            entry["surface_max_c"] = round(max(surfaces), 3)
+            entry["core_min_c"] = round(min(cores), 3)
+            entry["core_max_c"] = round(max(cores), 3)
+            overheat_ids = sorted(
+                state.driver_id
+                for state in states
+                if state.rear_tire_surface_temperature_c >= entry["hot_threshold_c"]
+            )
+            entry["current_overheat_count"] = len(overheat_ids)
+            entry["current_overheat_driver_ids"] = overheat_ids
+            aggregate_overheat_ids.update(overheat_ids)
+            current_seconds = max(
+                (
+                    self._compound_overheat_current_seconds.get(
+                        (state.driver_id, code),
+                        0.0,
+                    ),
+                    state.driver_id,
+                )
+                for state in states
+            )
+            entry["current_max_continuous_overheat_seconds"] = round(
+                current_seconds[0],
+                3,
+            )
+            entry["current_max_continuous_overheat_driver_id"] = (
+                current_seconds[1] if current_seconds[0] > 0.0 else None
+            )
+            if current_seconds[0] > entry["max_continuous_overheat_seconds"]:
+                entry["max_continuous_overheat_seconds"] = round(
+                    current_seconds[0],
+                    3,
+                )
+                entry["max_continuous_overheat_driver_id"] = current_seconds[1]
+            if len(overheat_ids) > entry["peak_overheat_count"]:
+                entry["peak_overheat_count"] = len(overheat_ids)
+                entry["peak_overheat_driver_ids"] = overheat_ids.copy()
+        current = diagnostics["current"]
+        peak = diagnostics["peak"]
+        current["compound_overheat_driver_ids"] = sorted(aggregate_overheat_ids)
+        current["compound_overheat_driver_count"] = len(aggregate_overheat_ids)
+        current_compound_seconds = max(
+            (
+                entry["current_max_continuous_overheat_seconds"],
+                code,
+                entry["current_max_continuous_overheat_driver_id"],
+            )
+            for code, entry in per_compound.items()
+        )
+        current["max_compound_overheat_seconds"] = round(
+            current_compound_seconds[0],
+            3,
+        )
+        current["max_compound_overheat_driver_id"] = (
+            current_compound_seconds[2]
+            if current_compound_seconds[0] > 0.0
+            else None
+        )
+        if len(aggregate_overheat_ids) > peak["max_compound_overheat_driver_count"]:
+            peak["max_compound_overheat_driver_count"] = len(aggregate_overheat_ids)
+            peak["max_compound_overheat_driver_ids"] = sorted(aggregate_overheat_ids)
+        if current_compound_seconds[0] > peak["max_compound_overheat_seconds"]:
+            peak["max_compound_overheat_seconds"] = round(
+                current_compound_seconds[0],
+                3,
+            )
+            peak["max_compound_overheat_driver_id"] = current_compound_seconds[2]
+
+    def _record_tire_temperature_diagnostics(self, delta_seconds: float) -> None:
+        """Update bounded aggregate evidence for sustained rear overheating."""
+        diagnostics = self._tire_temperature_diagnostics
+        active_states = [
+            state
+            for state in self.driver_states.values()
+            if not state.retired and not state.finished and not state.in_pit
+        ]
+        active_driver_ids = {state.driver_id for state in active_states}
+        step = max(0.0, float(delta_seconds))
+
+        pending_budgets = self._tire_thermal_budget_by_driver
+        cumulative = diagnostics["cumulative"]
+        for front_budget, rear_budget in pending_budgets.values():
+            for axle, budget in (
+                ("front", front_budget),
+                ("rear", rear_budget),
+            ):
+                cumulative_axle = cumulative[axle]
+                for field in cumulative_axle:
+                    cumulative_axle[field] += getattr(budget, field)
+
+        def budget_snapshot(budget: TireThermalBudget) -> dict[str, Any]:
+            heat_fields = (
+                "baseline_heat_j",
+                "lateral_heat_j",
+                "braking_heat_j",
+                "traction_heat_j",
+                "slide_heat_j",
+            )
+            heat_input_j = sum(getattr(budget, field) for field in heat_fields)
+            cooling_j = (
+                budget.surface_air_track_cooling_j
+                + budget.core_ambient_cooling_j
+            )
+            return {
+                "heat_input_w": round(heat_input_j / step, 6) if step else 0.0,
+                "cooling_w": round(cooling_j / step, 6) if step else 0.0,
+                "net_w": round(
+                    (budget.surface_net_energy_j + budget.core_net_energy_j)
+                    / step,
+                    6,
+                )
+                if step
+                else 0.0,
+                "source_heat_w": {
+                    f"{name}_heat_w": round(
+                        getattr(budget, f"{name}_heat_j") / step,
+                        6,
+                    )
+                    if step
+                    else 0.0
+                    for name in (
+                        "baseline",
+                        "lateral",
+                        "braking",
+                        "traction",
+                        "slide",
+                    )
+                },
+            }
+
+        current_budgets = {
+            "front": TireThermalBudget.zero(),
+            "rear": TireThermalBudget.zero(),
+        }
+        for state in active_states:
+            pending = pending_budgets.get(
+                state.driver_id,
+                (TireThermalBudget.zero(), TireThermalBudget.zero()),
+            )
+            current_budgets["front"] = self._add_tire_thermal_budgets(
+                current_budgets["front"],
+                pending[0],
+            )
+            current_budgets["rear"] = self._add_tire_thermal_budgets(
+                current_budgets["rear"],
+                pending[1],
+            )
+        for axle in ("front", "rear"):
+            snapshot = budget_snapshot(current_budgets[axle])
+            diagnostics["current"][axle] = snapshot
+            diagnostics["current"][f"{axle}_heat_input_w"] = snapshot[
+                "heat_input_w"
+            ]
+            diagnostics["current"][f"{axle}_cooling_w"] = snapshot[
+                "cooling_w"
+            ]
+            diagnostics["current"][f"{axle}_net_w"] = snapshot["net_w"]
+            diagnostics["current"][f"{axle}_source_heat_w"] = snapshot[
+                "source_heat_w"
+            ]
+            previous_peak = diagnostics["peak"][axle]
+            previous_peak["heat_input_w"] = max(
+                previous_peak["heat_input_w"],
+                snapshot["heat_input_w"],
+            )
+            previous_peak["cooling_w"] = max(
+                previous_peak["cooling_w"],
+                snapshot["cooling_w"],
+            )
+            previous_peak["net_w"] = max(
+                previous_peak["net_w"],
+                snapshot["net_w"],
+            )
+            for source, value in snapshot["source_heat_w"].items():
+                previous_peak["source_heat_w"][source] = max(
+                    previous_peak["source_heat_w"][source],
+                    value,
+                )
+            diagnostics["peak"][f"{axle}_heat_input_w"] = previous_peak[
+                "heat_input_w"
+            ]
+            diagnostics["peak"][f"{axle}_cooling_w"] = previous_peak[
+                "cooling_w"
+            ]
+            diagnostics["peak"][f"{axle}_net_w"] = previous_peak["net_w"]
+            diagnostics["peak"][f"{axle}_source_heat_w"] = previous_peak[
+                "source_heat_w"
+            ]
+        self._tire_thermal_budget_by_driver = {}
+
+        for driver_id in self.driver_states:
+            if driver_id not in active_driver_ids:
+                self._rear_overheat_current_seconds[driver_id] = 0.0
+                for code in PhysicalTireCompound:
+                    if code.value.startswith("C"):
+                        self._compound_overheat_current_seconds[
+                            (driver_id, code)
+                        ] = 0.0
+                continue
+            state = self.driver_states[driver_id]
+            if state.rear_tire_surface_temperature_c >= TIRE_OVERHEAT_SURFACE_THRESHOLD_C:
+                self._rear_overheat_current_seconds[driver_id] = (
+                    self._rear_overheat_current_seconds.get(driver_id, 0.0)
+                    + step
+                )
+            else:
+                self._rear_overheat_current_seconds[driver_id] = 0.0
+            physical_code = physical_compound_for_state(state)
+            for code in PhysicalTireCompound:
+                if not code.value.startswith("C"):
+                    continue
+                key = (driver_id, code)
+                if (
+                    code == physical_code
+                    and state.rear_tire_surface_temperature_c
+                    >= compound_spec_for(code).hot_diagnostic_threshold_c
+                ):
+                    self._compound_overheat_current_seconds[key] = (
+                        self._compound_overheat_current_seconds.get(key, 0.0)
+                        + step
+                    )
+                else:
+                    self._compound_overheat_current_seconds[key] = 0.0
+
+        diagnostics["sample_count"] += 1
+        current = diagnostics["current"]
+        peak = diagnostics["peak"]
+        current["active_driver_count"] = len(active_states)
+        self._record_compound_temperature_diagnostics(active_states)
+
+        if not active_states:
+            current["rear_overheat_driver_count"] = 0
+            current["rear_overheat_driver_ids"] = []
+            current["max_current_overheat_seconds"] = 0.0
+            current["max_current_overheat_driver_id"] = None
+            diagnostics["clamp"]["current"] = {
+                "surface_driver_ids": [],
+                "core_driver_ids": [],
+                "surface_active_seconds": 0.0,
+                "core_active_seconds": 0.0,
+                "max_continuous_seconds": 0.0,
+                "max_continuous_driver_id": None,
+            }
+            return
+
+        fields = {
+            "front_surface": [
+                state.front_tire_surface_temperature_c for state in active_states
+            ],
+            "rear_surface": [
+                state.rear_tire_surface_temperature_c for state in active_states
+            ],
+            "front_core": [
+                state.front_tire_core_temperature_c for state in active_states
+            ],
+            "rear_core": [
+                state.rear_tire_core_temperature_c for state in active_states
+            ],
+        }
+        for name, values in fields.items():
+            current[f"{name}_min_c"] = round(min(values), 3)
+            current[f"{name}_max_c"] = round(max(values), 3)
+            peak[f"{name}_max_c"] = round(
+                max(peak[f"{name}_max_c"] or values[0], max(values)),
+                3,
+            )
+
+        overheat_ids = sorted(
+            state.driver_id
+            for state in active_states
+            if state.rear_tire_surface_temperature_c
+            >= TIRE_OVERHEAT_SURFACE_THRESHOLD_C
+        )
+        current["rear_overheat_driver_count"] = len(overheat_ids)
+        current["rear_overheat_driver_ids"] = overheat_ids
+        if len(overheat_ids) > peak["max_rear_overheat_driver_count"]:
+            peak["max_rear_overheat_driver_count"] = len(overheat_ids)
+            peak["max_rear_overheat_driver_ids"] = overheat_ids.copy()
+        max_current_seconds = max(
+            (
+                self._rear_overheat_current_seconds.get(state.driver_id, 0.0),
+                state.driver_id,
+            )
+            for state in active_states
+        )
+        current["max_current_overheat_seconds"] = round(max_current_seconds[0], 3)
+        current["max_current_overheat_driver_id"] = (
+            max_current_seconds[1] if max_current_seconds[0] > 0.0 else None
+        )
+        if max_current_seconds[0] > peak["max_continuous_overheat_seconds"]:
+            peak["max_continuous_overheat_seconds"] = round(
+                max_current_seconds[0],
+                3,
+            )
+            peak["max_continuous_overheat_driver_id"] = max_current_seconds[1]
+
+        clamp_current = diagnostics["clamp"]["current"]
+        surface_driver_ids = sorted(
+            state.driver_id
+            for state in active_states
+            if self._tire_clamp_state_by_driver.get(state.driver_id, (False,) * 4)[0]
+            or self._tire_clamp_state_by_driver.get(state.driver_id, (False,) * 4)[2]
+        )
+        core_driver_ids = sorted(
+            state.driver_id
+            for state in active_states
+            if self._tire_clamp_state_by_driver.get(state.driver_id, (False,) * 4)[1]
+            or self._tire_clamp_state_by_driver.get(state.driver_id, (False,) * 4)[3]
+        )
+        surface_seconds = max(
+            (
+                max(
+                    self._tire_clamp_current_seconds.get(
+                        (state.driver_id, "front_surface"),
+                        0.0,
+                    ),
+                    self._tire_clamp_current_seconds.get(
+                        (state.driver_id, "rear_surface"),
+                        0.0,
+                    ),
+                ),
+                state.driver_id,
+            )
+            for state in active_states
+        )
+        core_seconds = max(
+            (
+                max(
+                    self._tire_clamp_current_seconds.get(
+                        (state.driver_id, "front_core"),
+                        0.0,
+                    ),
+                    self._tire_clamp_current_seconds.get(
+                        (state.driver_id, "rear_core"),
+                        0.0,
+                    ),
+                ),
+                state.driver_id,
+            )
+            for state in active_states
+        )
+        max_clamp = max(surface_seconds, core_seconds)
+        clamp_current.update(
+            {
+                "surface_driver_ids": surface_driver_ids,
+                "core_driver_ids": core_driver_ids,
+                "surface_active_seconds": round(surface_seconds[0], 6),
+                "core_active_seconds": round(core_seconds[0], 6),
+                "max_continuous_seconds": round(max_clamp[0], 6),
+                "max_continuous_driver_id": (
+                    max_clamp[1] if max_clamp[0] > 0.0 else None
+                ),
+            }
+        )
 
     def _finalize_event_positions(self, events: list[RaceEvent]) -> None:
         """Attach final RULES-state poses to events that identify a vehicle."""
@@ -3382,6 +4575,11 @@ class RaceEngine(
             meta = self._driver_meta[state.driver_id]
             local_yellow_active = self._local_yellow_active_for(state)
             tire_factors = self._current_tire_physics(state)
+            (
+                tire_lateral_grip_index,
+                tire_traction_grip_index,
+                tire_braking_grip_index,
+            ) = tire_grip_indices_c3(tire_factors)
 
             interval = "—"
             interval_seconds = self._live_interval_seconds.get(state.driver_id)
@@ -3507,7 +4705,43 @@ class RaceEngine(
                     slip_angle_rad=state.slip_angle_rad,
                     wheel_lock_ratio=state.wheel_lock_ratio,
                     traction_slip_ratio=state.traction_slip_ratio,
+                    front_tire_slide_energy_j=round(
+                        state.front_tire_slide_energy_j,
+                        2,
+                    ),
+                    rear_tire_slide_energy_j=round(
+                        state.rear_tire_slide_energy_j,
+                        2,
+                    ),
                     tire_slide_energy_j=state.tire_slide_energy_j,
+                    rear_applied_drive_energy_j=round(
+                        state.rear_applied_drive_energy_j,
+                        2,
+                    ),
+                    front_applied_brake_energy_j=round(
+                        state.front_applied_brake_energy_j,
+                        2,
+                    ),
+                    rear_applied_brake_energy_j=round(
+                        state.rear_applied_brake_energy_j,
+                        2,
+                    ),
+                    vehicle_mass_kg=state.vehicle_mass_kg,
+                    front_normal_load_n=state.front_normal_load_n,
+                    rear_normal_load_n=state.rear_normal_load_n,
+                    longitudinal_load_transfer_n=(
+                        state.longitudinal_load_transfer_n
+                    ),
+                    front_wheel_speed_rad_s=state.front_wheel_speed_rad_s,
+                    rear_wheel_speed_rad_s=state.rear_wheel_speed_rad_s,
+                    front_axle_slip_ratio=state.front_axle_slip_ratio,
+                    rear_axle_slip_ratio=state.rear_axle_slip_ratio,
+                    applied_brake_force_n=state.applied_brake_force_n,
+                    front_brake_temperature_c=(
+                        state.front_brake_temperature_c
+                    ),
+                    rear_brake_temperature_c=state.rear_brake_temperature_c,
+                    brake_fade_factor=state.brake_fade_factor,
                     car_width_m=state.car_width_m,
                     car_length_m=state.car_length_m,
                     wheelbase_m=state.wheelbase_m,
@@ -3558,11 +4792,16 @@ class RaceEngine(
                     ],
                     mini_sector_statuses=mini_sector_statuses,
                     tire_compound=state.tire_compound.value,
+                    tire_role=state.tire_role.value,
+                    physical_tire_compound=physical_compound_for_state(state).value,
                     tire_age=state.tire_age,
                     tire_wear=round(tire_factors.wear, 3),
                     tire_lateral_grip=round(tire_factors.lateral_grip, 4),
                     tire_traction_grip=round(tire_factors.traction_grip, 4),
                     tire_braking_grip=round(tire_factors.braking_grip, 4),
+                    tire_lateral_grip_index=round(tire_lateral_grip_index, 4),
+                    tire_traction_grip_index=round(tire_traction_grip_index, 4),
+                    tire_braking_grip_index=round(tire_braking_grip_index, 4),
                     tire_surface_temperature_c=round(
                         state.tire_surface_temperature_c,
                         2,
@@ -3572,6 +4811,30 @@ class RaceEngine(
                         2,
                     ),
                     tire_thermal_grip=round(tire_factors.thermal_grip, 4),
+                    front_tire_surface_temperature_c=round(
+                        state.front_tire_surface_temperature_c,
+                        2,
+                    ),
+                    front_tire_core_temperature_c=round(
+                        state.front_tire_core_temperature_c,
+                        2,
+                    ),
+                    front_tire_thermal_grip=round(
+                        state.front_tire_thermal_grip,
+                        4,
+                    ),
+                    rear_tire_surface_temperature_c=round(
+                        state.rear_tire_surface_temperature_c,
+                        2,
+                    ),
+                    rear_tire_core_temperature_c=round(
+                        state.rear_tire_core_temperature_c,
+                        2,
+                    ),
+                    rear_tire_thermal_grip=round(
+                        state.rear_tire_thermal_grip,
+                        4,
+                    ),
                     fuel_mass_kg=round(state.fuel_mass_kg, 3),
                     fuel_burned_kg=round(state.fuel_burned_kg, 3),
                     fuel_laps_remaining=round(state.fuel_laps_remaining, 2),
@@ -3770,6 +5033,9 @@ class RaceEngine(
             lap=self.current_lap,
             total_laps=self.total_laps,
             weather=self.weather,
+            track_conditions=self.track_conditions,
+            thermal_preset=self.thermal_preset,
+            track_conditions_source=self.track_conditions_source,
             safety_car=self.safety_car,
             race_phase=self.race_phase,
             race_phase_remaining_seconds=round(self._race_phase_remaining_seconds(), 1),
@@ -3872,6 +5138,7 @@ class RaceEngine(
                 (maneuver is not None and maneuver.phase in {"overlap", "clear"})
                 or (maneuver_group is not None and maneuver_group.size >= 3)
             )
+            tire_factors = self._current_tire_physics(state)
             position = {
                     "driver_id": state.driver_id,
                     "name": meta["abbreviation"],
@@ -3904,10 +5171,145 @@ class RaceEngine(
                     "current_mini_sector": current_mini_sector,
                     "current_timing_loop": current_timing_loop,
                     "tire_compound": state.tire_compound.value,
+                    "tire_role": state.tire_role.value,
+                    "physical_tire_compound": physical_compound_for_state(state).value,
                     "tire_age": state.tire_age,
-                    "tire_wear": round(
-                        self._current_tire_physics(state).wear,
-                        3,
+                    "tire_wear": round(tire_factors.wear, 3),
+                    "tire_lateral_grip": round(
+                        tire_factors.lateral_grip,
+                        4,
+                    ),
+                    "tire_traction_grip": round(
+                        tire_factors.traction_grip,
+                        4,
+                    ),
+                    "tire_braking_grip": round(
+                        tire_factors.braking_grip,
+                        4,
+                    ),
+                    "tire_surface_temperature_c": round(
+                        state.tire_surface_temperature_c,
+                        2,
+                    ),
+                    "tire_core_temperature_c": round(
+                        state.tire_core_temperature_c,
+                        2,
+                    ),
+                    "tire_thermal_grip": round(
+                        tire_factors.thermal_grip,
+                        4,
+                    ),
+                    "front_tire_surface_temperature_c": round(
+                        state.front_tire_surface_temperature_c,
+                        2,
+                    ),
+                    "front_tire_core_temperature_c": round(
+                        state.front_tire_core_temperature_c,
+                        2,
+                    ),
+                    "front_tire_thermal_grip": round(
+                        state.front_tire_thermal_grip,
+                        4,
+                    ),
+                    "rear_tire_surface_temperature_c": round(
+                        state.rear_tire_surface_temperature_c,
+                        2,
+                    ),
+                    "rear_tire_core_temperature_c": round(
+                        state.rear_tire_core_temperature_c,
+                        2,
+                    ),
+                    "rear_tire_thermal_grip": round(
+                        state.rear_tire_thermal_grip,
+                        4,
+                    ),
+                    "fuel_mass_kg": round(state.fuel_mass_kg, 3),
+                    "fuel_burned_kg": round(state.fuel_burned_kg, 3),
+                    "fuel_laps_remaining": round(
+                        state.fuel_laps_remaining,
+                        2,
+                    ),
+                    "vehicle_mass_kg": round(state.vehicle_mass_kg, 3),
+                    "front_normal_load_n": round(
+                        state.front_normal_load_n,
+                        2,
+                    ),
+                    "rear_normal_load_n": round(
+                        state.rear_normal_load_n,
+                        2,
+                    ),
+                    "longitudinal_load_transfer_n": round(
+                        state.longitudinal_load_transfer_n,
+                        2,
+                    ),
+                    "front_wheel_speed_rad_s": round(
+                        state.front_wheel_speed_rad_s,
+                        4,
+                    ),
+                    "rear_wheel_speed_rad_s": round(
+                        state.rear_wheel_speed_rad_s,
+                        4,
+                    ),
+                    "front_axle_slip_ratio": round(
+                        state.front_axle_slip_ratio,
+                        5,
+                    ),
+                    "rear_axle_slip_ratio": round(
+                        state.rear_axle_slip_ratio,
+                        5,
+                    ),
+                    "applied_brake_force_n": round(
+                        state.applied_brake_force_n,
+                        2,
+                    ),
+                    "front_brake_temperature_c": round(
+                        state.front_brake_temperature_c,
+                        2,
+                    ),
+                    "rear_brake_temperature_c": round(
+                        state.rear_brake_temperature_c,
+                        2,
+                    ),
+                    "brake_fade_factor": round(
+                        state.brake_fade_factor,
+                        5,
+                    ),
+                    "grip_utilization": round(
+                        state.grip_utilization,
+                        4,
+                    ),
+                    "handling_state": state.handling_state,
+                    "wheel_lock_ratio": round(
+                        state.wheel_lock_ratio,
+                        5,
+                    ),
+                    "traction_slip_ratio": round(
+                        state.traction_slip_ratio,
+                        5,
+                    ),
+                    "front_tire_slide_energy_j": round(
+                        state.front_tire_slide_energy_j,
+                        2,
+                    ),
+                    "rear_tire_slide_energy_j": round(
+                        state.rear_tire_slide_energy_j,
+                        2,
+                    ),
+                    "tire_slide_energy_j": round(
+                        state.tire_slide_energy_j,
+                        2,
+                    ),
+                    "rear_applied_drive_energy_j": round(
+                        state.rear_applied_drive_energy_j,
+                        2,
+                    ),
+                    "front_applied_brake_energy_j": round(
+                        state.front_applied_brake_energy_j,
+                        2,
+                    ),
+                    "rear_applied_brake_energy_j": round(
+                        state.rear_applied_brake_energy_j,
+                        2,
                     ),
                     "pace_mode": state.pace_mode.value,
                     "pace_mode_from": self._pace_mode_transition_from.get(
@@ -3987,6 +5389,16 @@ class RaceEngine(
             "type": "race_state",
             "lap": self.current_lap,
             "total_laps": self.total_laps,
+            "track_conditions": {
+                "ambient_temperature_c": self.track_conditions.ambient_temperature_c,
+                "track_temperature_c": self.track_conditions.track_temperature_c,
+            },
+            "thermal_preset": (
+                self.thermal_preset.value
+                if isinstance(self.thermal_preset, ThermalPresetName)
+                else self.thermal_preset
+            ),
+            "track_conditions_source": self.track_conditions_source,
             "race_phase": self.race_phase,
             "race_phase_remaining_seconds": round(
                 self._race_phase_remaining_seconds(),
@@ -4117,3 +5529,86 @@ class RaceEngine(
                 }
             )
         return results
+
+    def diagnostic_counts(self) -> dict[str, Any]:
+        """Return bounded ownership counts, never live simulation payloads."""
+        physics_instances: dict[int, LongitudinalVehiclePhysics] = {}
+        for physics_by_line in self._vehicle_physics_by_driver_line.values():
+            for physics in physics_by_line.values():
+                physics_instances[id(physics)] = physics
+        for physics in self._vehicle_physics_by_line.values():
+            physics_instances[id(physics)] = physics
+
+        sc_set_names = (
+            "_sc_caught_driver_ids",
+            "_sc_unlap_driver_ids",
+            "_sc_order_yield_targets",
+            "_sc_pit_exit_order_targets",
+            "_sc_unlap_targets",
+        )
+        sc_set_count = 0
+        for name in sc_set_names:
+            value = getattr(self, name, None)
+            sc_set_count += len(value) if hasattr(value, "__len__") else 0
+
+        timing_crossing_count = sum(
+            len(crossings)
+            for crossings in getattr(self, "_timing_crossings", {}).values()
+        )
+        lap_history_count = sum(
+            len(history)
+            for history in getattr(self, "_lap_history", {}).values()
+        )
+        queue_plan = getattr(self, "_sc_queue_plan", None)
+        nomination = self.circuit.tire_compound_nomination
+        return {
+            **track_physics_cache_counts(),
+            "driver_count": len(self.driver_states),
+            "predictive_speed_cache_entries": sum(
+                len(getattr(physics, "_predictive_speed_cache", {}))
+                for physics in physics_instances.values()
+            ),
+            "predictive_track_sample_cache_entries": sum(
+                len(getattr(physics, "_predictive_track_sample_cache", {}))
+                for physics in physics_instances.values()
+            ),
+            "local_trajectory_planner_entries": len(
+                getattr(self, "_local_trajectory_planners", {})
+            ),
+            "local_trajectory_plan_entries": len(
+                getattr(self, "_local_trajectory_plans", {})
+            ),
+            "local_trajectory_last_safe_plan_entries": len(
+                getattr(self, "_local_trajectory_last_safe_plans", {})
+            ),
+            "attack_line_cache_entries": len(
+                getattr(self, "_attack_line_choice_cache", {})
+            ),
+            "timing_crossing_entries": timing_crossing_count,
+            "lap_history_entries": lap_history_count,
+            "physics_diagnostic_samples": len(
+                getattr(self, "_physics_step_deltas", ())
+            ) + len(getattr(self, "_consumed_physics_frame_ids", ())),
+            "safety_car_collection_entries": sc_set_count,
+            "safety_car_queue_plan_slots": len(queue_plan.slots) if queue_plan else 0,
+            "safety_car_queue_plan_revision": queue_plan.revision if queue_plan else 0,
+            "safety_car_driver_state_entries": len(
+                getattr(self, "_sc_driver_states", {})
+            ),
+            "safety_car_queue_stable_seconds": round(
+                float(getattr(self, "_sc_queue_stable_seconds", 0.0)),
+                3,
+            ),
+            "tire_temperature": self._tire_temperature_diagnostics,
+            "thermal_preset": (
+                self.thermal_preset.value
+                if isinstance(self.thermal_preset, ThermalPresetName)
+                else self.thermal_preset
+            ),
+            "track_conditions_source": self.track_conditions_source,
+            "tire_compound_ruleset": nomination.ruleset if nomination else None,
+            "tire_compound_nomination": (
+                nomination.model_dump(mode="json") if nomination else None
+            ),
+            "finished": bool(self.finished),
+        }

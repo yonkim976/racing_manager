@@ -7,10 +7,13 @@ import random
 from models.schemas import (
     Circuit,
     Driver,
+    DryTireRole,
+    PhysicalTireCompound,
     QualifyingResponse,
     QualifyingResult,
     Team,
-    TireCompound,
+    ThermalPresetName,
+    TrackConditions,
 )
 from simulation.car_performance import car_performance_factors
 from simulation.physics import compute_effective_lap_time, driver_pace_multiplier
@@ -76,12 +79,13 @@ def _qualifying_lap_time(
     driver: Driver,
     team: Team,
     rng: random.Random,
+    physical_tire_compound: PhysicalTireCompound,
     evolution: float = 1.0,
 ) -> float:
     car_performance = car_performance_factors(team).qualifying
     driver_pace = driver_pace_multiplier(driver.stats.pace)
     tire_performance = compute_tire_performance(
-        TireCompound.SOFT,
+        physical_tire_compound,
         0,
         rng.uniform(-0.0015, 0.0015),
     )
@@ -107,10 +111,20 @@ def run_qualifying(
     player_team: Team,
     attempt_laps: int = 3,
     seed: int | None = None,
+    track_conditions: TrackConditions | None = None,
+    thermal_preset: ThermalPresetName | None = None,
+    track_conditions_source: str = "circuit_preset",
+    tire_compound_nomination=None,
 ) -> QualifyingResponse:
     """Run a Q1/Q2/Q3 knockout qualifying simulation and return the starting grid."""
     rng = random.Random(seed)
     driver_by_id = {driver.id: driver for driver in drivers}
+    nomination = tire_compound_nomination or circuit.tire_compound_nomination
+    qualifying_physical_compound = (
+        nomination.physical_for_role(DryTireRole.SOFT)
+        if nomination is not None
+        else PhysicalTireCompound.C3
+    )
 
     session_best: dict[int, dict[str, float]] = {driver.id: {} for driver in drivers}
     session_laps: dict[int, dict[str, list[float]]] = {driver.id: {} for driver in drivers}
@@ -126,7 +140,17 @@ def run_qualifying(
         for driver in pool:
             team = teams[driver.team_id]
             laps = [
-                round(_qualifying_lap_time(circuit, driver, team, rng, evolution), 3)
+                round(
+                    _qualifying_lap_time(
+                        circuit,
+                        driver,
+                        team,
+                        rng,
+                        qualifying_physical_compound,
+                        evolution,
+                    ),
+                    3,
+                )
                 for _ in range(attempt_laps)
             ]
             best = min(laps)
@@ -178,6 +202,8 @@ def run_qualifying(
                 full_name=driver.name,
                 team=team.name,
                 team_color=team.color,
+                tire_role=DryTireRole.SOFT.value,
+                physical_tire_compound=qualifying_physical_compound.value,
                 best_lap_time=best_lap_time,
                 gap=_format_gap(best_lap_time, pole_time),
                 laps=session_laps[driver_id][reached],
@@ -193,4 +219,8 @@ def run_qualifying(
         player_team=player_team,
         results=results,
         grid_order=grid_order,
+        track_conditions=track_conditions or TrackConditions(),
+        thermal_preset=thermal_preset,
+        track_conditions_source=track_conditions_source,
+        tire_compound_nomination=nomination,
     )

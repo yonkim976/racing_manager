@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from fastapi import WebSocket
+from data_loader import resolve_circuit_thermal_conditions, resolve_tire_compound
 
 from models.schemas import (
     Circuit,
@@ -20,11 +21,16 @@ from models.schemas import (
     RaceEventsMessage,
     RaceInfoMessage,
     RaceSetupRequest,
+    TireCompound,
     Team,
 )
 from simulation.pit_stop import parse_tire_choice
-from simulation.race_engine import PIT_LANE_SPEED_LIMIT_KPH, RaceEngine
-from simulation.track_physics import clear_vehicle_track_physics_cache
+from simulation.race_engine import (
+    PIT_LANE_SPEED_LIMIT_KPH,
+    RaceEngine,
+    empty_tire_temperature_diagnostic_snapshot,
+)
+from simulation.track_physics import clear_vehicle_track_physics_cache, track_physics_cache_counts
 from simulation.vehicle_physics import PHYSICS_STEP_SECONDS
 from simulation.vehicle_dimensions import (
     PHYSICAL_CAR_LENGTH_M,
@@ -93,6 +99,9 @@ DASHBOARD_STATE_FIELDS = {
     "effective_speed_multiplier",
     "simulation_backlog_seconds",
     "broadcast_jitter_ms",
+    "track_conditions",
+    "thermal_preset",
+    "track_conditions_source",
 }
 DASHBOARD_POSITION_FIELDS = {
     "driver_id",
@@ -112,8 +121,47 @@ DASHBOARD_POSITION_FIELDS = {
     "current_mini_sector",
     "current_timing_loop",
     "tire_compound",
+    "tire_role",
+    "physical_tire_compound",
     "tire_age",
     "tire_wear",
+    "tire_lateral_grip",
+    "tire_traction_grip",
+    "tire_braking_grip",
+    "tire_surface_temperature_c",
+    "tire_core_temperature_c",
+    "tire_thermal_grip",
+    "front_tire_surface_temperature_c",
+    "front_tire_core_temperature_c",
+    "front_tire_thermal_grip",
+    "rear_tire_surface_temperature_c",
+    "rear_tire_core_temperature_c",
+    "rear_tire_thermal_grip",
+    "fuel_mass_kg",
+    "fuel_burned_kg",
+    "fuel_laps_remaining",
+    "vehicle_mass_kg",
+    "front_normal_load_n",
+    "rear_normal_load_n",
+    "longitudinal_load_transfer_n",
+    "front_wheel_speed_rad_s",
+    "rear_wheel_speed_rad_s",
+    "front_axle_slip_ratio",
+    "rear_axle_slip_ratio",
+    "applied_brake_force_n",
+    "front_brake_temperature_c",
+    "rear_brake_temperature_c",
+    "brake_fade_factor",
+    "grip_utilization",
+    "handling_state",
+    "wheel_lock_ratio",
+    "traction_slip_ratio",
+    "front_tire_slide_energy_j",
+    "rear_tire_slide_energy_j",
+    "tire_slide_energy_j",
+    "rear_applied_drive_energy_j",
+    "front_applied_brake_energy_j",
+    "rear_applied_brake_energy_j",
     "pace_mode",
     "pace_mode_from",
     "pace_mode_transition_progress",
@@ -226,6 +274,17 @@ class RaceSession:
         self.circuit = circuit
         self.player_team = player_team
         self.player_drivers = player_drivers
+        self.resolved_track_conditions = getattr(
+            engine,
+            "track_conditions",
+            None,
+        )
+        self.resolved_thermal_preset = getattr(engine, "thermal_preset", None)
+        self.track_conditions_source = getattr(
+            engine,
+            "track_conditions_source",
+            "explicit_override",
+        )
         self.clients: set[WebSocket] = set()
         self._loop_task: asyncio.Task | None = None
         self._trajectory_samples: dict[int, list[bytes]] = {}
@@ -235,6 +294,26 @@ class RaceSession:
         self._event_feed_last_sent_at: dict[tuple[str, str], float] = {}
         self._routine_battle_event_last_sent_at = float("-inf")
         self._last_history_lengths: dict[int, int] = {}
+
+    def diagnostic_counts(self) -> dict[str, Any]:
+        """Return bounded session/engine ownership counts for desktop logs."""
+        task = self._loop_task
+        return {
+            "session_id": self.session_id,
+            "engine_id": f"engine-{id(self.engine):x}",
+            "loop_task_exists": task is not None,
+            "loop_task_done": bool(task and task.done()),
+            "loop_task_cancelled": bool(task and task.cancelled()),
+            "client_count": len(self.clients),
+            "trajectory_driver_count": len(self._trajectory_samples),
+            "trajectory_sample_count": sum(
+                len(samples) for samples in self._trajectory_samples.values()
+            ),
+            "event_feed_auxiliary_entries": len(self._event_feed_last_sent_at),
+            "last_history_length_entries": len(self._last_history_lengths),
+            "safety_car": self.engine.safety_car_diagnostic_snapshot(),
+            **self.engine.diagnostic_counts(),
+        }
 
     @property
     def race_info(self) -> RaceInfoMessage:
@@ -275,6 +354,10 @@ class RaceSession:
             ],
             surface_zones=self.engine._track_surface.zones,
             track_conditions=self.circuit.track_conditions,
+            environment_conditions=self.engine.track_conditions,
+            thermal_preset=self.resolved_thermal_preset,
+            track_conditions_source=self.track_conditions_source,
+            tire_compound_nomination=self.circuit.tire_compound_nomination,
             racing_line_coords=self.engine._track_physics.racing_line_coords,
             racing_line_length_m=self.engine._track_physics.racing_line_length_m,
             predicted_racing_lap_time=self.engine._track_physics.predicted_racing_lap_time,
@@ -286,6 +369,7 @@ class RaceSession:
             # Graphics and marker interpolation must use the same entry/exit
             # anchors and arc-length frame as authoritative pit physics.
             pit_lane_coords=self.engine.get_pit_route_coords(),
+            pit_exit_lane_coords=self.engine.get_pit_exit_lane_coords(),
             pit_wall_coords=self.circuit.pit_wall_coords,
             pit_box_offset=self.circuit.pit_lane.box_offset if self.circuit.pit_lane else 11.0,
             pit_lane_width_m=(
@@ -912,6 +996,35 @@ class SessionManager:
     def session(self) -> RaceSession | None:
         return self._session
 
+    def diagnostic_counts(self) -> dict[str, Any]:
+        session = self._session
+        if session is None:
+            return {
+                "active_session": False,
+                "session_id": None,
+                "client_count": 0,
+                "loop_task_exists": False,
+                "trajectory_sample_count": 0,
+                "event_feed_auxiliary_entries": 0,
+                "last_history_length_entries": 0,
+                "safety_car": {
+                    "race_phase": "green",
+                    "safety_car_stage": "inactive",
+                    "queue_formed": False,
+                    "running_order": [],
+                    "physical_order": [],
+                    "caught_driver_ids": [],
+                    "unlap_driver_ids": [],
+                    "pit_exit_order_target_ids": [],
+                    "order_yield_targets": {},
+                    "active_correction": None,
+                    "drivers": [],
+                },
+                "tire_temperature": empty_tire_temperature_diagnostic_snapshot(),
+                **track_physics_cache_counts(),
+            }
+        return {"active_session": True, **session.diagnostic_counts()}
+
     def create_session(
         self,
         request: RaceSetupRequest,
@@ -926,6 +1039,14 @@ class SessionManager:
             raise ValueError(f"Circuit {request.circuit_id} not found")
         circuit = circuit.model_copy(update={"total_laps": request.total_laps})
 
+        resolved_conditions, resolved_preset, conditions_source = (
+            resolve_circuit_thermal_conditions(
+                circuit,
+                thermal_preset=request.thermal_preset,
+                track_conditions=request.track_conditions,
+            )
+        )
+
         player_team = next((t for t in teams if t.id == request.player_team_id), None)
         if player_team is None:
             raise ValueError(f"Team {request.player_team_id} not found")
@@ -935,6 +1056,18 @@ class SessionManager:
         if len(player_drivers) < 1:
             raise ValueError("Player team has no drivers")
         player_driver_ids = {d.id for d in player_drivers}
+        starting_tires = {
+            driver_id: role
+            for driver_id, role in request.starting_tires.items()
+            if driver_id in player_driver_ids
+        }
+        starting_physical_tires = {
+            driver.id: resolve_tire_compound(
+                circuit,
+                starting_tires.get(driver.id, TireCompound.MEDIUM),
+            )[0]
+            for driver in drivers
+        }
 
         engine = RaceEngine(
             circuit=circuit,
@@ -942,12 +1075,12 @@ class SessionManager:
             teams=team_map,
             player_team_id=player_team.id,
             player_driver_ids=list(player_driver_ids),
-            starting_tires={
-                driver_id: compound
-                for driver_id, compound in request.starting_tires.items()
-                if driver_id in player_driver_ids
-            },
+            starting_tires=starting_tires,
+            starting_physical_tires=starting_physical_tires,
             grid_order=request.grid_order,
+            track_conditions=resolved_conditions,
+            thermal_preset=resolved_preset,
+            track_conditions_source=conditions_source,
         )
 
         session_id = str(uuid.uuid4())

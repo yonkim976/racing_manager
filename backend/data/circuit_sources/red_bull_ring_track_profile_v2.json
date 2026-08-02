@@ -10,6 +10,14 @@
     "maximum_total_width_m": 13.191,
     "mean_total_width_m": 10.993
   },
+  "track_width_calibration": {
+    "method": "normalize_total_to_range_preserve_side_ratio",
+    "minimum_total_width_m": 12.0,
+    "maximum_total_width_m": 13.0,
+    "source": "Official Austrian Grand Prix media kit",
+    "source_url": "https://www.fia.com/sites/default/files/media_kit_final_aut.pdf",
+    "note": "Normalize the satellite-derived total-width variation into the published 12-13 m F1 envelope while preserving the left/right centerline ratio."
+  },
   "track_width_profile": [
     {
       "progress": 0.0,
@@ -345,6 +353,7 @@
       "RUS 17 1:04.763"
     ],
     "telemetry_speed_reference_weight": 1.0,
+    "telemetry_progress_offset": 0.019,
     "telemetry_reference": [
       {
         "progress": 0.0,

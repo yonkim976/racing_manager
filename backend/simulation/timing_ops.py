@@ -12,13 +12,16 @@ from math import floor
 from models.schemas import (
     DriverRaceHistoryInfo,
     DriverRaceState,
+    DryTireRole,
     LapTimeInfo,
+    PhysicalTireCompound,
     RaceEvent,
     RaceHistoryState,
     Team,
     TireCompound,
 )
 from simulation.state_contract import TickPhase
+from simulation.tire_model import physical_compound_for, physical_compound_for_state
 
 PROGRESS_EPSILON = 1e-9
 TIMING_CROSSING_LAPS_TO_RETAIN = 4
@@ -435,14 +438,27 @@ class TimingOpsMixin:
         stint: int,
         *,
         pit_stop: bool = False,
+        tire_role: DryTireRole | None = None,
+        physical_tire_compound: PhysicalTireCompound | None = None,
     ) -> None:
         sector_times, mini_sector_times = self._lap_split_times(driver_id, lap)
+        resolved_role = tire_role
+        if resolved_role is None:
+            try:
+                resolved_role = DryTireRole(tire_compound.value)
+            except ValueError:
+                resolved_role = None
         self._lap_history.setdefault(driver_id, []).append(
             LapTimeInfo(
                 lap=lap,
                 lap_time=round(lap_time, 3),
                 tire_compound=tire_compound.value,
                 stint=stint,
+                tire_role=resolved_role.value if resolved_role is not None else None,
+                physical_tire_compound=(
+                    physical_tire_compound
+                    or physical_compound_for(tire_compound)
+                ).value,
                 pit_stop=pit_stop,
                 sector_times=[round(value, 3) for value in sector_times],
                 mini_sector_times=[
@@ -498,6 +514,8 @@ class TimingOpsMixin:
             state.last_lap_time,
             state.tire_compound,
             state.pit_count + 1,
+            tire_role=state.tire_role,
+            physical_tire_compound=physical_compound_for_state(state),
         )
 
         if state.pit_request is not None:

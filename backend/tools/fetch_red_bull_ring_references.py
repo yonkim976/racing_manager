@@ -177,6 +177,20 @@ def main() -> int:
         "source_url": WIDTH_SOURCE_URL,
         "license": "LGPL-3.0",
         "width_report": width_report,
+        "track_width_calibration": {
+            "method": "normalize_total_to_range_preserve_side_ratio",
+            "minimum_total_width_m": 12.0,
+            "maximum_total_width_m": 13.0,
+            "source": "Official Austrian Grand Prix media kit",
+            "source_url": (
+                "https://www.fia.com/sites/default/files/media_kit_final_aut.pdf"
+            ),
+            "note": (
+                "Normalize the satellite-derived total-width variation into "
+                "the published 12-13 m F1 envelope while preserving the "
+                "left/right centerline ratio."
+            ),
+        },
         "track_width_profile": widths,
         "physics_calibration": {
             "source": "TracingInsights-Archive/2025",
@@ -190,6 +204,7 @@ def main() -> int:
                 f"{driver} {lap} {time}" for driver, lap, time in REFERENCE_LAPS
             ],
             "telemetry_speed_reference_weight": 1.0,
+            "telemetry_progress_offset": 0.019,
             "telemetry_reference": _telemetry_reference(),
         },
     }

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "reference_lap_distance_m": 5412.0,
+  "circuits": [
+    {
+      "circuit_id": 3,
+      "abrasion_multiplier": 1.0,
+      "source_class": "game_calibration_provisional",
+      "note": "Bahrain is the reference circuit used by the migrated C1-C3 durability calibration."
+    },
+    {
+      "circuit_id": 4,
+      "abrasion_multiplier": 1.0,
+      "source_class": "game_calibration_provisional",
+      "note": "Red Bull Ring uses neutral abrasion; its shorter lap distance extends actual lap life without changing C2-C4 compound physics."
+    },
+    {
+      "circuit_id": 5,
+      "abrasion_multiplier": 1.05,
+      "source_class": "game_calibration_provisional",
+      "note": "High sustained corner load receives a modest mechanical-wear increase."
+    },
+    {
+      "circuit_id": 6,
+      "abrasion_multiplier": 0.85,
+      "source_class": "game_calibration_provisional",
+      "note": "Long lap distance is balanced by a lower abrasion multiplier."
+    },
+    {
+      "circuit_id": 7,
+      "abrasion_multiplier": 1.15,
+      "source_class": "game_calibration_provisional",
+      "note": "Frequent cornering and limited recovery straights increase mechanical wear."
+    },
+    {
+      "circuit_id": 8,
+      "abrasion_multiplier": 0.78,
+      "source_class": "game_calibration_provisional",
+      "note": "Low sustained lateral loading offsets the long lap distance."
+    },
+    {
+      "circuit_id": 9,
+      "abrasion_multiplier": 1.1,
+      "source_class": "game_calibration_provisional",
+      "note": "Repeated loaded and banked corners receive an elevated wear factor."
+    },
+    {
+      "circuit_id": 10,
+      "abrasion_multiplier": 1.15,
+      "source_class": "game_calibration_provisional",
+      "note": "Sustained corner loading receives an elevated mechanical-wear factor."
+    },
+    {
+      "circuit_id": 11,
+      "abrasion_multiplier": 1.08,
+      "source_class": "game_calibration_provisional",
+      "note": "High-speed direction changes receive a modest mechanical-wear increase."
+    }
+  ]
+}

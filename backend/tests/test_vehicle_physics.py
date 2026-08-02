@@ -9,6 +9,7 @@ from simulation.speed_profile import SpeedProfile, build_speed_profile
 from simulation.track_physics import PHYSICAL_CAR_LENGTH_M
 from simulation.vehicle_physics import (
     PHYSICS_STEP_SECONDS,
+    PREDICTIVE_SPEED_CACHE_MAX_ENTRIES,
     LongitudinalVehiclePhysics,
     VehicleFollowingConstraint,
     VehiclePhysicsModifiers,
@@ -65,6 +66,93 @@ class LongitudinalVehiclePhysicsTests(unittest.TestCase):
             places=9,
         )
 
+    def test_controller_scale_cache_key_distinguishes_profile_shape(self) -> None:
+        reordered_profile = SpeedProfile(
+            progress=self.profile.progress,
+            raw_speeds_mps=(
+                self.profile.raw_speeds_mps[1:]
+                + self.profile.raw_speeds_mps[:1]
+            ),
+            curvatures_1pm=self.profile.curvatures_1pm,
+            signed_curvatures_1pm=self.profile.signed_curvatures_1pm,
+            braking_fractions=self.profile.braking_fractions,
+        )
+        reordered = LongitudinalVehiclePhysics(
+            reordered_profile,
+            self.circuit.track_length_m,
+            self.circuit.base_lap_time,
+        )
+
+        self.assertNotEqual(
+            self.physics._controller_scale_key(),
+            reordered._controller_scale_key(),
+        )
+
+    def test_controller_scale_cache_key_includes_braking_curvature_threshold(self) -> None:
+        calibrated = LongitudinalVehiclePhysics(
+            self.profile,
+            self.circuit.track_length_m,
+            self.circuit.base_lap_time,
+            telemetry_braking_curvature_threshold=0.05,
+        )
+
+        self.assertNotEqual(
+            self.physics._controller_scale_key(),
+            calibrated._controller_scale_key(),
+        )
+
+    def test_telemetry_calibration_never_tightens_physical_geometry(self) -> None:
+        telemetry_profile = SpeedProfile(
+            progress=[0.0, 0.25, 0.5, 0.75],
+            raw_speeds_mps=[20.0, 24.0, 38.0, 31.0],
+            curvatures_1pm=[0.004, 0.006, 0.005, 0.007],
+            signed_curvatures_1pm=[0.004, 0.006, 0.005, 0.007],
+            braking_fractions=[0.0, 0.0, 0.0, 1.0],
+        )
+        calibrated = LongitudinalVehiclePhysics(
+            telemetry_profile,
+            4000.0,
+            70.0,
+            telemetry_speed_reference_weight=1.0,
+            telemetry_braking_curvature_threshold=0.5,
+        )
+
+        for progress, raw_curvature in zip(
+            telemetry_profile.progress,
+            telemetry_profile.curvatures_1pm,
+        ):
+            self.assertLessEqual(
+                calibrated._curvature_1pm(progress * 4000.0),
+                raw_curvature + 1e-12,
+            )
+
+    def test_predictive_speed_cache_is_bounded_across_vehicle_states(
+        self,
+    ) -> None:
+        distance_m = 0.27 * self.circuit.track_length_m
+        first_target_speed_mps = self.physics.target_speed_mps(
+            distance_m,
+            VehiclePhysicsModifiers(mass_kg=700.0),
+        )
+        for index in range(PREDICTIVE_SPEED_CACHE_MAX_ENTRIES + 17):
+            self.physics.target_speed_mps(
+                distance_m,
+                VehiclePhysicsModifiers(mass_kg=700.0 + index * 0.1),
+            )
+
+        self.assertEqual(
+            len(self.physics._predictive_speed_cache),
+            PREDICTIVE_SPEED_CACHE_MAX_ENTRIES,
+        )
+        self.assertAlmostEqual(
+            self.physics.target_speed_mps(
+                distance_m,
+                VehiclePhysicsModifiers(mass_kg=700.0),
+            ),
+            first_target_speed_mps,
+            places=12,
+        )
+
     def test_measured_braking_calibration_creates_an_earlier_corner_approach(self) -> None:
         slow_index = self.profile.curvatures_1pm.index(
             max(self.profile.curvatures_1pm)
@@ -109,6 +197,47 @@ class LongitudinalVehiclePhysicsTests(unittest.TestCase):
         )
         self.assertLess(braking.speed_mps, 90.0)
         self.assertGreater(braking.brake, 0.0)
+
+    def test_race_control_cap_can_be_below_nominal_physics_floor(self) -> None:
+        distance_m = 0.27 * self.circuit.track_length_m
+
+        stopped_target = self.physics.target_speed_mps(
+            distance_m,
+            VehiclePhysicsModifiers(maximum_speed_mps=0.0),
+        )
+        low_controlled_target = self.physics.target_speed_mps(
+            distance_m,
+            VehiclePhysicsModifiers(maximum_speed_mps=5.0),
+        )
+
+        self.assertEqual(stopped_target, 0.0)
+        self.assertEqual(low_controlled_target, 5.0)
+
+    def test_braking_transfers_load_forward_and_exposes_axle_state(self) -> None:
+        slow_index = self.profile.raw_speeds_mps.index(
+            min(self.profile.raw_speeds_mps)
+        )
+        braking = self.physics.advance(
+            distance_m=(
+                self.profile.progress[slow_index]
+                * self.circuit.track_length_m
+                - 100.0
+            ) % self.circuit.track_length_m,
+            speed_mps=90.0,
+            delta_seconds=PHYSICS_STEP_SECONDS,
+            modifiers=self.modifiers,
+        )
+        total_load_n = braking.front_normal_load_n + braking.rear_normal_load_n
+        static_front_load_n = total_load_n * self.modifiers.front_aero_share
+
+        self.assertLess(braking.acceleration_mps2, 0.0)
+        self.assertGreater(braking.longitudinal_load_transfer_n, 0.0)
+        self.assertGreater(braking.front_normal_load_n, static_front_load_n)
+        self.assertGreaterEqual(braking.front_wheel_speed_rad_s, 0.0)
+        self.assertGreaterEqual(braking.rear_wheel_speed_rad_s, 0.0)
+        self.assertLessEqual(braking.front_axle_slip_ratio, 0.0)
+        self.assertLessEqual(braking.rear_axle_slip_ratio, 0.0)
+        self.assertGreater(braking.applied_brake_force_n, 0.0)
 
     def test_effective_power_is_applied_as_a_real_drive_force(self) -> None:
         fast_index = self.profile.raw_speeds_mps.index(max(self.profile.raw_speeds_mps))
@@ -301,7 +430,7 @@ class LongitudinalVehiclePhysicsTests(unittest.TestCase):
         # visual slip-angle floor for a run-wide classification.
         self.assertGreater(abs(result.slip_angle_rad), 0.02)
 
-    def test_throttle_overload_in_a_corner_creates_oversteer(self) -> None:
+    def test_clean_attack_throttle_keeps_corner_exit_slip_below_event_band(self) -> None:
         corner_index = min(
             range(len(self.profile.curvatures_1pm)),
             key=lambda index: abs(self.profile.curvatures_1pm[index] - 0.029),
@@ -319,9 +448,17 @@ class LongitudinalVehiclePhysicsTests(unittest.TestCase):
         )
 
         self.assertGreater(result.throttle, 0.45)
-        self.assertEqual(result.handling_state, "oversteer")
+        self.assertEqual(result.handling_state, "stable")
         self.assertNotEqual(result.slip_angle_rad, 0.0)
-        self.assertGreater(result.traction_slip_ratio, 0.05)
+        self.assertGreater(result.traction_slip_ratio, 0.02)
+        self.assertLess(result.traction_slip_ratio, 0.05)
+        self.assertAlmostEqual(
+            result.tire_slide_energy_j,
+            result.front_tire_slide_energy_j + result.rear_tire_slide_energy_j,
+            places=9,
+        )
+        self.assertAlmostEqual(result.front_tire_slide_energy_j, 0.0, places=9)
+        self.assertGreater(result.rear_tire_slide_energy_j, 0.0)
         self.assertGreater(result.tire_slide_energy_j, 0.0)
 
     def test_trail_braking_over_combined_grip_limit_creates_lockup(self) -> None:
@@ -343,6 +480,13 @@ class LongitudinalVehiclePhysicsTests(unittest.TestCase):
 
         self.assertEqual(result.handling_state, "lockup")
         self.assertGreater(result.wheel_lock_ratio, 0.05)
+        self.assertAlmostEqual(
+            result.tire_slide_energy_j,
+            result.front_tire_slide_energy_j + result.rear_tire_slide_energy_j,
+            places=9,
+        )
+        self.assertGreater(result.front_tire_slide_energy_j, 0.0)
+        self.assertGreaterEqual(result.front_tire_slide_energy_j, result.rear_tire_slide_energy_j)
         self.assertGreater(result.tire_slide_energy_j, 0.0)
         self.assertGreater(result.brake, 0.85)
 
@@ -525,6 +669,37 @@ class LongitudinalVehiclePhysicsTests(unittest.TestCase):
         self.assertEqual(recovering.handling_state, "recovering")
         self.assertGreater(recovering.lateral_offset_m, start_offset_m)
         self.assertLess(recovering.lateral_offset_m - start_offset_m, 0.10)
+
+    def test_inward_recovery_does_not_keep_applying_the_outward_speed_cap(self) -> None:
+        release_physics = LongitudinalVehiclePhysics(
+            self.profile,
+            self.circuit.track_length_m,
+            self.circuit.base_lap_time,
+            release_inward_recovery_speed_cap=True,
+        )
+        common = {
+            "distance_m": 100.0,
+            "speed_mps": 35.0,
+            "delta_seconds": 0.1,
+            "modifiers": self.modifiers,
+            "lateral_offset_m": 3.5,
+            "target_lateral_offset_m": 0.0,
+            "minimum_lateral_offset_m": -6.0,
+            "maximum_lateral_offset_m": 6.0,
+            "nominal_minimum_lateral_offset_m": -3.0,
+            "nominal_maximum_lateral_offset_m": 3.0,
+        }
+        moving_inward = release_physics.advance(
+            **common,
+            lateral_speed_mps=-1.0,
+        )
+        moving_outward = release_physics.advance(
+            **common,
+            lateral_speed_mps=1.0,
+        )
+
+        self.assertEqual(moving_inward.handling_state, "recovering")
+        self.assertGreater(moving_inward.speed_mps, moving_outward.speed_mps)
 
 
 if __name__ == "__main__":

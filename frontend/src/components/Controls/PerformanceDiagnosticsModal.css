@@ -1,0 +1,212 @@
+.performance-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: start end;
+  padding: 66px 20px 20px;
+  background: rgba(3, 4, 8, 0.16);
+}
+
+.performance-modal {
+  width: min(540px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 86px));
+  overflow-y: auto;
+  border-color: rgba(225, 6, 0, 0.28);
+  background:
+    linear-gradient(145deg, rgba(225, 6, 0, 0.035), transparent 34%),
+    rgba(10, 10, 17, 0.98);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.68);
+}
+
+.performance-modal__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(10, 10, 17, 0.96);
+}
+
+.performance-modal__header span,
+.performance-modal__section h3,
+.performance-modal__metric > span,
+.performance-modal__assessment span {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.performance-modal__header h2 {
+  margin: 4px 0 0;
+  color: var(--text-primary);
+  font-size: 0.94rem;
+  letter-spacing: 0.03em;
+}
+
+.performance-modal__header button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-light);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.performance-modal__assessment {
+  display: grid;
+  grid-template-columns: 118px 1fr;
+  gap: 12px;
+  margin: 12px 15px 2px;
+  padding: 9px 11px;
+  border: 1px solid var(--border-subtle);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.performance-modal__assessment strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.82rem;
+}
+
+.performance-modal__assessment p {
+  align-self: center;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.performance-modal__assessment.is-stable {
+  border-left-color: var(--accent-green);
+}
+
+.performance-modal__assessment.is-stable strong {
+  color: var(--accent-green);
+}
+
+.performance-modal__assessment.is-warning {
+  border-left-color: var(--accent-yellow);
+}
+
+.performance-modal__assessment.is-warning strong {
+  color: var(--accent-yellow);
+}
+
+.performance-modal__assessment.is-danger {
+  border-left-color: var(--accent-red);
+}
+
+.performance-modal__assessment.is-danger strong {
+  color: var(--accent-red);
+}
+
+.performance-modal__assessment.is-neutral {
+  border-left-color: var(--text-muted);
+}
+
+.performance-modal__assessment.is-neutral strong {
+  color: var(--text-secondary);
+}
+
+.performance-modal__section {
+  padding: 12px 15px 0;
+}
+
+.performance-modal__section h3 {
+  margin: 0 0 6px;
+}
+
+.performance-modal__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.performance-modal__metric {
+  min-height: 66px;
+  padding: 8px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.performance-modal__metric strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.performance-modal__metric small {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  line-height: 1.35;
+}
+
+.performance-modal__note {
+  margin: 12px 15px 0;
+  padding: 9px 11px;
+  border: 1px solid rgba(97, 218, 251, 0.2);
+  border-radius: 5px;
+  background: rgba(97, 218, 251, 0.035);
+}
+
+.performance-modal__note strong {
+  color: #61dafb;
+  font-size: 0.66rem;
+}
+
+.performance-modal__note p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+  line-height: 1.55;
+}
+
+.performance-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 15px 15px;
+}
+
+.performance-modal__footer button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+.performance-modal__footer button.is-primary {
+  border-color: var(--accent-red);
+  background: var(--accent-red);
+  color: #fff;
+}
+
+@media (max-width: 820px) {
+  .performance-modal__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .performance-modal__assessment {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}

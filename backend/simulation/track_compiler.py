@@ -220,6 +220,109 @@ def _same_point(a: Point, b: Point) -> bool:
     return isclose(a[0], b[0], abs_tol=0.001) and isclose(a[1], b[1], abs_tol=0.001)
 
 
+def _chaikin_smooth_open(points: list[Point], passes: int = 3) -> list[Point]:
+    """Corner-cut an open path without spline overshoot or endpoint drift."""
+    smoothed = points[:]
+    for _ in range(max(0, passes)):
+        if len(smoothed) < 3:
+            break
+        refined = [smoothed[0]]
+        for start, end in zip(smoothed, smoothed[1:]):
+            refined.extend(
+                (
+                    _lerp(start, end, 0.25),
+                    _lerp(start, end, 0.75),
+                )
+            )
+        refined.append(smoothed[-1])
+        smoothed = refined
+    return smoothed
+
+
+def _smooth_anchored_open_path(
+    points: list[Point],
+    entry_tangent: Point,
+    exit_tangent: Point,
+    *,
+    spacing: float,
+) -> list[list[float]]:
+    """Smooth an open route and blend both endpoints to required tangents."""
+    if len(points) < 3:
+        return _resample_points(points, spacing=spacing, closed=False)
+
+    base = _chaikin_smooth_open(points)
+    cumulative = _cumulative_lengths(base)
+    total_length = cumulative[-1]
+    if total_length <= spacing * 2.0:
+        return _resample_points(base, spacing=spacing, closed=False)
+
+    connector_length = min(
+        total_length * 0.20,
+        max(spacing * 4.0, total_length * 0.08),
+    )
+    connector_length = min(connector_length, total_length * 0.30)
+    entry_target, entry_inner_tangent = _point_and_tangent_at_distance(
+        base,
+        cumulative,
+        connector_length,
+    )
+    exit_source, exit_inner_tangent = _point_and_tangent_at_distance(
+        base,
+        cumulative,
+        total_length - connector_length,
+    )
+    handle = connector_length / 3.0
+    entry_control = (
+        points[0][0] + entry_tangent[0] * handle,
+        points[0][1] + entry_tangent[1] * handle,
+    )
+    entry_inner_control = (
+        entry_target[0] - entry_inner_tangent[0] * handle,
+        entry_target[1] - entry_inner_tangent[1] * handle,
+    )
+    exit_inner_control = (
+        exit_source[0] + exit_inner_tangent[0] * handle,
+        exit_source[1] + exit_inner_tangent[1] * handle,
+    )
+    exit_control = (
+        points[-1][0] - exit_tangent[0] * handle,
+        points[-1][1] - exit_tangent[1] * handle,
+    )
+
+    connector_samples = max(8, ceil(connector_length / max(1.0, spacing) * 3.0))
+    raw: list[Point] = [
+        _cubic_bezier(
+            points[0],
+            entry_control,
+            entry_inner_control,
+            entry_target,
+            step / connector_samples,
+        )
+        for step in range(connector_samples)
+    ]
+    middle_length = max(0.0, total_length - connector_length * 2.0)
+    middle_steps = max(1, ceil(middle_length / max(1.0, spacing)))
+    raw.extend(
+        _point_at_distance(
+            base,
+            cumulative,
+            connector_length + middle_length * step / middle_steps,
+        )
+        for step in range(middle_steps)
+    )
+    raw.extend(
+        _cubic_bezier(
+            exit_source,
+            exit_inner_control,
+            exit_control,
+            points[-1],
+            step / connector_samples,
+        )
+        for step in range(connector_samples + 1)
+    )
+    return _resample_points(raw, spacing=spacing, closed=False)
+
+
 def compile_layout_segments(
     segments: list[TrackLayoutSegment],
     *,
@@ -453,15 +556,30 @@ def _anchor_explicit_pit_lane(
     ):
         return pit_lane_coords
 
-    entry = _point_and_tangent_at_progress(track_coords, config.entry_progress)[0]
-    exit_ = _point_and_tangent_at_progress(track_coords, config.exit_progress)[0]
+    entry, entry_tangent = _point_and_tangent_at_progress(
+        track_coords,
+        config.entry_progress,
+    )
+    exit_, exit_tangent = _point_and_tangent_at_progress(
+        track_coords,
+        config.exit_progress,
+    )
     raw_points = [entry, *[_point(coord) for coord in pit_lane_coords], exit_]
     deduped: list[Point] = []
     for point in raw_points:
         if not deduped or not _same_point(deduped[-1], point):
             deduped.append(point)
 
-    return _resample_points(deduped, spacing=PIT_LANE_POINT_SPACING, closed=False)
+    smoothed = _smooth_anchored_open_path(
+        deduped,
+        entry_tangent,
+        exit_tangent,
+        spacing=PIT_LANE_POINT_SPACING * 0.5,
+    )
+    if smoothed:
+        smoothed[0] = [round(entry[0], 3), round(entry[1], 3)]
+        smoothed[-1] = [round(exit_[0], 3), round(exit_[1], 3)]
+    return smoothed
 
 
 def _nearest_progress_on_path(coords: list[list[float]], x: float, y: float) -> float:

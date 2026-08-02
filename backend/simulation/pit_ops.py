@@ -8,14 +8,21 @@ runtime pit-ops domain.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import atan2, cos, hypot, pi, sin, sqrt
+from math import atan2, ceil, cos, floor, hypot, pi, sin, sqrt
 from typing import Any
 
-from models.schemas import DriverRaceState, RaceEvent, Team, TireCompound
+from models.schemas import (
+    DriverRaceState,
+    DryTireRole,
+    PhysicalTireCompound,
+    RaceEvent,
+    Team,
+    TireCompound,
+)
 from simulation.collision import BodyPose, oriented_body_overlap
 from simulation.pit_stop import compute_pit_components
 from simulation.state_contract import TickPhase
-from simulation.tire_model import tire_blanket_temperature_c
+from simulation.tire_model import physical_compound_for_state, tire_blanket_temperature_c
 from simulation.track_physics import DRIVING_LINE_RACING, TrackPhysicsProfile
 from simulation.vehicle_physics import PHYSICS_STEP_SECONDS
 
@@ -35,6 +42,7 @@ PIT_MERGE_LATERAL_MARGIN_M = 0.60
 PIT_MERGE_GROUP_CLEARANCE_SECONDS = 0.40
 PIT_ROUTE_ANCHOR_MERGE_DISTANCE_M = 5.0
 PIT_ROUTE_TANGENT_LEAD_M = 8.0
+PIT_EXIT_LANE_SAMPLE_SPACING_M = 4.0
 
 
 @dataclass(frozen=True)
@@ -52,12 +60,15 @@ class PitOpsMixin:
 
     def _init_pit_ops_state(self) -> None:
         """Initialize per-driver pit-lane runtime state on the host engine."""
-        self._pit_phase: dict[int, str] = {}  # "in" | "stop" | "out"
+        self._pit_phase: dict[int, str] = {}  # in | stop | out | exit_lane
         self._pit_phase_remaining: dict[int, float] = {}
         self._pit_phase_duration: dict[int, float] = {}
         self._pit_lane_half_time: dict[int, float] = {}
         self._pit_route_progress: dict[int, float] = {}
         self._pit_route_speed_mps: dict[int, float] = {}
+        self._pit_exit_lane_progress: dict[int, float] = {}
+        self._pit_exit_lane_start_total_progress: dict[int, float] = {}
+        self._pit_exit_lane_end_total_progress: dict[int, float] = {}
         self._pit_merge_state: dict[int, str] = {}
         self._pit_merge_conflict_driver_id: dict[int, int | None] = {}
         self._pit_merge_conflict_group_id: dict[int, str | None] = {}
@@ -66,7 +77,10 @@ class PitOpsMixin:
         self._pit_elapsed: dict[int, float] = {}
         self._pit_stop_elapsed: dict[int, float] = {}
         self._pit_tire: dict[int, TireCompound] = {}
+        self._pit_physical_tire: dict[int, PhysicalTireCompound] = {}
         self._pit_entry_compound: dict[int, TireCompound] = {}
+        self._pit_entry_role: dict[int, DryTireRole | None] = {}
+        self._pit_entry_physical_tire: dict[int, PhysicalTireCompound] = {}
 
     def _pit_route_points_m(
         self,
@@ -114,25 +128,35 @@ class PitOpsMixin:
             interior_points.pop()
 
         points = [(entry_x, entry_y)]
-        if interior_points and hypot(
-            interior_points[0][0] - entry_x,
-            interior_points[0][1] - entry_y,
-        ) > 2.0 * PIT_ROUTE_TANGENT_LEAD_M:
+        if interior_points:
+            entry_distance = hypot(
+                interior_points[0][0] - entry_x,
+                interior_points[0][1] - entry_y,
+            )
+            entry_lead = min(
+                PIT_ROUTE_TANGENT_LEAD_M,
+                entry_distance * 0.4,
+            )
             points.append(
                 (
-                    entry_x + cos(entry_heading) * PIT_ROUTE_TANGENT_LEAD_M,
-                    entry_y + sin(entry_heading) * PIT_ROUTE_TANGENT_LEAD_M,
+                    entry_x + cos(entry_heading) * entry_lead,
+                    entry_y + sin(entry_heading) * entry_lead,
                 )
             )
         points.extend(interior_points)
-        if interior_points and hypot(
-            interior_points[-1][0] - exit_x,
-            interior_points[-1][1] - exit_y,
-        ) > 2.0 * PIT_ROUTE_TANGENT_LEAD_M:
+        if interior_points:
+            exit_distance = hypot(
+                interior_points[-1][0] - exit_x,
+                interior_points[-1][1] - exit_y,
+            )
+            exit_lead = min(
+                PIT_ROUTE_TANGENT_LEAD_M,
+                exit_distance * 0.4,
+            )
             points.append(
                 (
-                    exit_x - cos(exit_heading) * PIT_ROUTE_TANGENT_LEAD_M,
-                    exit_y - sin(exit_heading) * PIT_ROUTE_TANGENT_LEAD_M,
+                    exit_x - cos(exit_heading) * exit_lead,
+                    exit_y - sin(exit_heading) * exit_lead,
                 )
             )
         points.append((exit_x, exit_y))
@@ -162,6 +186,172 @@ class PitOpsMixin:
             list(coordinate_frame.from_local_m(x_m, y_m))
             for x_m, y_m in self._pit_route_points_m()
         ]
+
+    def _has_dedicated_pit_exit_lane(self) -> bool:
+        pit_lane = self.circuit.pit_lane
+        return (
+            pit_lane is not None
+            and pit_lane.exit_lane_rejoin_progress is not None
+        )
+
+    def _pit_exit_lane_start_track_progress(
+        self,
+        track_profile: TrackPhysicsProfile | None = None,
+    ) -> float | None:
+        """Project the operational pit-route release pose onto the racing line."""
+        pit_lane = self.circuit.pit_lane
+        entry = self._pit_entry_progress()
+        exit_ = self._pit_exit_progress()
+        if pit_lane is None or entry is None or exit_ is None:
+            return None
+        track_profile = track_profile or self._track_physics
+        pit_x, pit_y, _ = self._pit_lane_pose_at_progress_m(
+            pit_lane.side_rejoin_progress,
+            track_profile,
+        )
+        progress = (
+            entry
+            + self._progress_distance(entry, exit_)
+            * pit_lane.side_rejoin_progress
+        ) % 1.0
+        line_length_m = max(
+            1.0,
+            track_profile.length_for_line(DRIVING_LINE_RACING),
+        )
+        for _ in range(4):
+            line_x, line_y, line_heading = track_profile.line_pose_at_progress_m(
+                DRIVING_LINE_RACING,
+                progress,
+            )
+            tangent_delta_m = (
+                (pit_x - line_x) * cos(line_heading)
+                + (pit_y - line_y) * sin(line_heading)
+            )
+            progress = (progress + tangent_delta_m / line_length_m) % 1.0
+        return progress
+
+    def _pit_exit_lane_points_m(
+        self,
+        track_profile: TrackPhysicsProfile | None = None,
+    ) -> list[tuple[float, float]]:
+        """Build the side lane followed after pit-out before the racing line."""
+        pit_lane = self.circuit.pit_lane
+        if pit_lane is None or pit_lane.exit_lane_rejoin_progress is None:
+            return []
+        track_profile = track_profile or self._track_physics
+        start_progress = self._pit_exit_lane_start_track_progress(track_profile)
+        if start_progress is None:
+            return []
+        rejoin_progress = pit_lane.exit_lane_rejoin_progress % 1.0
+        progress_range = self._progress_distance(start_progress, rejoin_progress)
+        if progress_range <= PROGRESS_EPSILON:
+            return []
+
+        start_x, start_y, _ = self._pit_lane_pose_at_progress_m(
+            pit_lane.side_rejoin_progress,
+            track_profile,
+        )
+        line_x, line_y, line_heading = track_profile.line_pose_at_progress_m(
+            DRIVING_LINE_RACING,
+            start_progress,
+        )
+        start_lateral_delta_m = (
+            (start_x - line_x) * -sin(line_heading)
+            + (start_y - line_y) * cos(line_heading)
+        )
+        sample_count = max(
+            12,
+            ceil(
+                progress_range
+                * self.track_length_m
+                / PIT_EXIT_LANE_SAMPLE_SPACING_M
+            ),
+        )
+        merge_start = pit_lane.exit_lane_merge_start
+        points: list[tuple[float, float]] = []
+        for index in range(sample_count + 1):
+            route_progress = index / sample_count
+            track_progress = (
+                start_progress + progress_range * route_progress
+            ) % 1.0
+            x, y, heading = track_profile.line_pose_at_progress_m(
+                DRIVING_LINE_RACING,
+                track_progress,
+            )
+            if route_progress <= merge_start:
+                lateral_scale = 1.0
+            else:
+                merge_ratio = (
+                    (route_progress - merge_start)
+                    / max(PROGRESS_EPSILON, 1.0 - merge_start)
+                )
+                merge_ratio = min(1.0, max(0.0, merge_ratio))
+                smooth = merge_ratio * merge_ratio * (3.0 - 2.0 * merge_ratio)
+                lateral_scale = 1.0 - smooth
+            lateral_delta_m = start_lateral_delta_m * lateral_scale
+            points.append(
+                (
+                    x - sin(heading) * lateral_delta_m,
+                    y + cos(heading) * lateral_delta_m,
+                )
+            )
+        points[0] = (start_x, start_y)
+        return points
+
+    def get_pit_exit_lane_coords(self) -> list[list[float]]:
+        """Expose the dedicated post-pit side lane in circuit coordinates."""
+        coordinate_frame = self._track_physics.coordinate_frame
+        points = self._pit_exit_lane_points_m()
+        if coordinate_frame is None:
+            return [[x, y] for x, y in points]
+        return [
+            list(coordinate_frame.from_local_m(x_m, y_m))
+            for x_m, y_m in points
+        ]
+
+    def _pit_exit_lane_length_m(
+        self,
+        track_profile: TrackPhysicsProfile | None = None,
+    ) -> float:
+        points = self._pit_exit_lane_points_m(track_profile)
+        return sum(
+            hypot(next_point[0] - point[0], next_point[1] - point[1])
+            for point, next_point in zip(points, points[1:])
+        )
+
+    def _pit_exit_lane_pose_at_progress_m(
+        self,
+        lane_progress: float,
+        track_profile: TrackPhysicsProfile | None = None,
+    ) -> tuple[float, float, float]:
+        track_profile = track_profile or self._track_physics
+        points = self._pit_exit_lane_points_m(track_profile)
+        if len(points) < 2:
+            return self._pit_lane_pose_at_progress_m(1.0, track_profile)
+        clamped = min(1.0, max(0.0, lane_progress))
+        lengths = [
+            hypot(next_point[0] - point[0], next_point[1] - point[1])
+            for point, next_point in zip(points, points[1:])
+        ]
+        target_distance = clamped * sum(lengths)
+        traversed = 0.0
+        for index, length_m in enumerate(lengths):
+            if traversed + length_m >= target_distance:
+                ratio = (target_distance - traversed) / max(length_m, 1e-9)
+                point = points[index]
+                next_point = points[index + 1]
+                return (
+                    point[0] + (next_point[0] - point[0]) * ratio,
+                    point[1] + (next_point[1] - point[1]) * ratio,
+                    atan2(next_point[1] - point[1], next_point[0] - point[0]),
+                )
+            traversed += length_m
+        point = points[-2]
+        next_point = points[-1]
+        return next_point[0], next_point[1], atan2(
+            next_point[1] - point[1],
+            next_point[0] - point[0],
+        )
 
     def _pit_lane_pose_at_progress_m(
         self,
@@ -282,6 +472,11 @@ class PitOpsMixin:
     ) -> tuple[float, float, float]:
         """Return the pit vehicle pose including the garage-front lateral path."""
         track_profile = track_profile or self._track_physics
+        if self._pit_phase.get(driver_id) == "exit_lane":
+            return self._pit_exit_lane_pose_at_progress_m(
+                self._pit_exit_lane_progress.get(driver_id, 0.0),
+                track_profile,
+            )
         route_length_m = self._pit_route_length_m(track_profile)
 
         def offset_point(progress: float) -> tuple[float, float]:
@@ -385,6 +580,9 @@ class PitOpsMixin:
         self._pit_lane_half_time[driver_id] = half_lane
         self._pit_route_progress[driver_id] = 0.0
         self._pit_route_speed_mps[driver_id] = max(0.0, state.speed_kph / 3.6)
+        self._pit_exit_lane_progress.pop(driver_id, None)
+        self._pit_exit_lane_start_total_progress.pop(driver_id, None)
+        self._pit_exit_lane_end_total_progress.pop(driver_id, None)
         self._pit_merge_state[driver_id] = "approach"
         self._pit_merge_conflict_driver_id[driver_id] = None
         self._pit_merge_conflict_group_id[driver_id] = None
@@ -393,13 +591,21 @@ class PitOpsMixin:
         self._pit_elapsed[driver_id] = 0.0
         self._pit_stop_elapsed[driver_id] = 0.0
         self._pit_tire[driver_id] = tire
+        self._pit_physical_tire[driver_id] = self.physical_compound_for_role(tire)
         self._pit_entry_compound[driver_id] = state.tire_compound
+        self._pit_entry_role[driver_id] = state.tire_role
+        self._pit_entry_physical_tire[driver_id] = physical_compound_for_state(state)
         state.grip_utilization = 0.0
         state.handling_state = "stable"
         state.slip_angle_rad = 0.0
         state.wheel_lock_ratio = 0.0
         state.traction_slip_ratio = 0.0
+        state.front_tire_slide_energy_j = 0.0
+        state.rear_tire_slide_energy_j = 0.0
         state.tire_slide_energy_j = 0.0
+        state.rear_applied_drive_energy_j = 0.0
+        state.front_applied_brake_energy_j = 0.0
+        state.rear_applied_brake_energy_j = 0.0
         events.append(
             RaceEvent(
                 type="pit_entry",
@@ -434,18 +640,31 @@ class PitOpsMixin:
             state.brake = 1.0
             if self._pit_phase_remaining[driver_id] <= 0.0:
                 new_compound = self._pit_tire[driver_id]
-                state.tire_compound = new_compound
+                new_physical_compound = self.set_driver_tire_compound(
+                    state,
+                    new_compound,
+                )
                 state.tire_age = 0
                 state.tire_usage = 0.0
                 state.tire_wear = 0.0
-                blanket_temperature_c = tire_blanket_temperature_c(new_compound)
+                blanket_temperature_c = tire_blanket_temperature_c(new_physical_compound)
                 state.tire_surface_temperature_c = blanket_temperature_c
                 state.tire_core_temperature_c = blanket_temperature_c
                 state.tire_thermal_grip = 1.0
+                state.front_tire_surface_temperature_c = blanket_temperature_c
+                state.front_tire_core_temperature_c = blanket_temperature_c
+                state.front_tire_thermal_grip = 1.0
+                state.rear_tire_surface_temperature_c = blanket_temperature_c
+                state.rear_tire_core_temperature_c = blanket_temperature_c
+                state.rear_tire_thermal_grip = 1.0
                 self._pit_phase[driver_id] = "out"
                 self._pit_phase_duration[driver_id] = 0.0
                 self._pit_route_speed_mps[driver_id] = 0.0
             self._sync_pit_race_progress(driver_id, state)
+            return
+
+        if phase == "exit_lane":
+            self._tick_pit_exit_lane(driver_id, state, meta, delta, events)
             return
 
         pit_lane = self.circuit.pit_lane
@@ -498,78 +717,59 @@ class PitOpsMixin:
             elif speed_mps > limit_mps + 1e-6:
                 acceleration_mps2 = -PIT_BOX_BRAKING_MPS2
         else:
-            previous_merge_state = self._pit_merge_state.get(driver_id)
-            merge_decision = self._pit_rejoin_decision(
-                driver_id,
-                state,
-                progress,
-                speed_mps,
-            )
-            merge_state = merge_decision.state
-            conflict_driver_id = merge_decision.conflict_driver_id
-            self._pit_merge_state[driver_id] = merge_state
-            self._pit_merge_conflict_driver_id[driver_id] = conflict_driver_id
-            self._pit_merge_conflict_group_id[driver_id] = (
-                merge_decision.conflict_group_id
-            )
-            self._pit_merge_conflict_group_member_ids[driver_id] = (
-                merge_decision.conflict_group_member_ids
-            )
-            if (
-                merge_state in {"yield", "hold"}
-                and merge_state != previous_merge_state
-            ):
-                conflict_name = (
-                    self._driver_meta[conflict_driver_id]["abbreviation"]
-                    if conflict_driver_id in self._driver_meta
-                    else "traffic"
-                )
-                events.append(
-                    RaceEvent(
-                        type=f"pit_merge_{merge_state}",
-                        driver=meta["abbreviation"],
-                        message=(
-                            f"{meta['full_name']} {merge_state}s for {conflict_name} "
-                            "at pit exit"
-                        ),
-                        message_ko=(
-                            f"{meta['full_name']}가 피트 출구에서 {conflict_name} 차량에 "
-                            f"{('양보합니다' if merge_state == 'yield' else '대기합니다')}"
-                        ),
-                        payload={
-                            "driver_id": driver_id,
-                            "conflict_driver_id": conflict_driver_id or 0,
-                            "conflict_group_id": (
-                                merge_decision.conflict_group_id or ""
-                            ),
-                            "conflict_group_member_ids": ",".join(
-                                str(item)
-                                for item in merge_decision.conflict_group_member_ids
-                            ),
-                            "merge_state": merge_state,
-                        },
-                    )
-                )
-            if merge_state == "merge":
+            if self._has_dedicated_pit_exit_lane():
+                self._pit_merge_state[driver_id] = "exit_lane"
+                self._pit_merge_conflict_driver_id[driver_id] = None
+                self._pit_merge_conflict_group_id[driver_id] = None
+                self._pit_merge_conflict_group_member_ids[driver_id] = ()
                 landmark_progress = pit_lane.side_rejoin_progress
                 landmark_speed_mps = speed_mps
                 acceleration_mps2 = PIT_EXIT_ACCELERATION_MPS2
             else:
-                hold_progress = max(
+                previous_merge_state = self._pit_merge_state.get(driver_id)
+                merge_decision = self._pit_rejoin_decision(
+                    driver_id,
+                    state,
                     progress,
-                    pit_lane.side_rejoin_progress
-                    - PIT_MERGE_HOLD_DISTANCE_M / route_length_m,
+                    speed_mps,
                 )
-                landmark_progress = hold_progress
-                landmark_speed_mps = 0.0
-                distance_m = max(0.0, (hold_progress - progress) * route_length_m)
-                braking_envelope = sqrt(
-                    2.0 * PIT_MERGE_BRAKING_MPS2 * distance_m
+                merge_state = merge_decision.state
+                conflict_driver_id = merge_decision.conflict_driver_id
+                self._pit_merge_state[driver_id] = merge_state
+                self._pit_merge_conflict_driver_id[driver_id] = conflict_driver_id
+                self._pit_merge_conflict_group_id[driver_id] = (
+                    merge_decision.conflict_group_id
                 )
-                if speed_mps > braking_envelope + 1e-6:
-                    acceleration_mps2 = -PIT_MERGE_BRAKING_MPS2
-                elif distance_m <= 1e-6:
-                    acceleration_mps2 = -PIT_MERGE_BRAKING_MPS2
+                self._pit_merge_conflict_group_member_ids[driver_id] = (
+                    merge_decision.conflict_group_member_ids
+                )
+                self._append_pit_merge_event(
+                    driver_id,
+                    meta,
+                    previous_merge_state,
+                    merge_decision,
+                    events,
+                )
+                if merge_state == "merge":
+                    landmark_progress = pit_lane.side_rejoin_progress
+                    landmark_speed_mps = speed_mps
+                    acceleration_mps2 = PIT_EXIT_ACCELERATION_MPS2
+                else:
+                    hold_progress = max(
+                        progress,
+                        pit_lane.side_rejoin_progress
+                        - PIT_MERGE_HOLD_DISTANCE_M / route_length_m,
+                    )
+                    landmark_progress = hold_progress
+                    landmark_speed_mps = 0.0
+                    distance_m = max(0.0, (hold_progress - progress) * route_length_m)
+                    braking_envelope = sqrt(
+                        2.0 * PIT_MERGE_BRAKING_MPS2 * distance_m
+                    )
+                    if speed_mps > braking_envelope + 1e-6:
+                        acceleration_mps2 = -PIT_MERGE_BRAKING_MPS2
+                    elif distance_m <= 1e-6:
+                        acceleration_mps2 = -PIT_MERGE_BRAKING_MPS2
 
         next_speed_mps = max(0.0, speed_mps + acceleration_mps2 * delta)
         if phase == "in" and progress >= pit_lane.speed_limit_start:
@@ -607,6 +807,173 @@ class PitOpsMixin:
         self._sync_pit_race_progress(driver_id, state)
 
         if phase == "out" and next_progress >= pit_lane.side_rejoin_progress:
+            if self._has_dedicated_pit_exit_lane():
+                self._begin_pit_exit_lane(driver_id, state)
+            else:
+                self._finish_pit_rejoin(driver_id, state, meta, events)
+
+    def _append_pit_merge_event(
+        self,
+        driver_id: int,
+        meta: dict,
+        previous_merge_state: str | None,
+        merge_decision: PitMergeDecision,
+        events: list[RaceEvent],
+    ) -> None:
+        merge_state = merge_decision.state
+        if (
+            merge_state not in {"yield", "hold"}
+            or merge_state == previous_merge_state
+        ):
+            return
+        conflict_driver_id = merge_decision.conflict_driver_id
+        conflict_name = (
+            self._driver_meta[conflict_driver_id]["abbreviation"]
+            if conflict_driver_id in self._driver_meta
+            else "traffic"
+        )
+        events.append(
+            RaceEvent(
+                type=f"pit_merge_{merge_state}",
+                driver=meta["abbreviation"],
+                message=(
+                    f"{meta['full_name']} {merge_state}s for {conflict_name} "
+                    "at pit exit"
+                ),
+                message_ko=(
+                    f"{meta['full_name']}가 피트 출구에서 {conflict_name} 차량에 "
+                    f"{('양보합니다' if merge_state == 'yield' else '대기합니다')}"
+                ),
+                payload={
+                    "driver_id": driver_id,
+                    "conflict_driver_id": conflict_driver_id or 0,
+                    "conflict_group_id": merge_decision.conflict_group_id or "",
+                    "conflict_group_member_ids": ",".join(
+                        str(item)
+                        for item in merge_decision.conflict_group_member_ids
+                    ),
+                    "merge_state": merge_state,
+                },
+            )
+        )
+
+    def _begin_pit_exit_lane(
+        self,
+        driver_id: int,
+        state: DriverRaceState,
+    ) -> None:
+        """Continue beside the main track instead of snapping to its line."""
+        pit_lane = self.circuit.pit_lane
+        if pit_lane is None or pit_lane.exit_lane_rejoin_progress is None:
+            return
+        start_total_progress = state.total_progress
+        end_total_progress = floor(start_total_progress) + (
+            pit_lane.exit_lane_rejoin_progress % 1.0
+        )
+        if end_total_progress <= start_total_progress + PROGRESS_EPSILON:
+            end_total_progress += 1.0
+        self._pit_phase[driver_id] = "exit_lane"
+        self._pit_exit_lane_progress[driver_id] = 0.0
+        self._pit_exit_lane_start_total_progress[driver_id] = start_total_progress
+        self._pit_exit_lane_end_total_progress[driver_id] = end_total_progress
+        self._pit_merge_state[driver_id] = "exit_lane"
+        self._pit_merge_conflict_driver_id[driver_id] = None
+        self._pit_merge_conflict_group_id[driver_id] = None
+        self._pit_merge_conflict_group_member_ids[driver_id] = ()
+        self._sync_pit_race_progress(driver_id, state)
+
+    def _tick_pit_exit_lane(
+        self,
+        driver_id: int,
+        state: DriverRaceState,
+        meta: dict,
+        delta: float,
+        events: list[RaceEvent],
+    ) -> None:
+        """Integrate the separated pit-exit continuation and its final merge."""
+        pit_lane = self.circuit.pit_lane
+        route_length_m = self._pit_exit_lane_length_m()
+        if pit_lane is None or route_length_m <= 1e-6:
+            self._finish_pit_rejoin(driver_id, state, meta, events)
+            return
+
+        progress = self._pit_exit_lane_progress.get(driver_id, 0.0)
+        speed_mps = self._pit_route_speed_mps.get(driver_id, state.speed_kph / 3.6)
+        limit_mps = pit_lane.exit_lane_speed_limit_kph / 3.6
+        merge_start = pit_lane.exit_lane_merge_start
+        merge_decision = PitMergeDecision("merge")
+        acceleration_mps2 = PIT_EXIT_ACCELERATION_MPS2
+        landmark_progress = 1.0
+        landmark_speed_mps = speed_mps
+
+        if progress < merge_start:
+            self._pit_merge_state[driver_id] = "exit_lane"
+            self._pit_merge_conflict_driver_id[driver_id] = None
+            self._pit_merge_conflict_group_id[driver_id] = None
+            self._pit_merge_conflict_group_member_ids[driver_id] = ()
+        else:
+            previous_merge_state = self._pit_merge_state.get(driver_id)
+            merge_decision = self._pit_rejoin_decision(
+                driver_id,
+                state,
+                progress,
+                speed_mps,
+            )
+            self._pit_merge_state[driver_id] = merge_decision.state
+            self._pit_merge_conflict_driver_id[driver_id] = (
+                merge_decision.conflict_driver_id
+            )
+            self._pit_merge_conflict_group_id[driver_id] = (
+                merge_decision.conflict_group_id
+            )
+            self._pit_merge_conflict_group_member_ids[driver_id] = (
+                merge_decision.conflict_group_member_ids
+            )
+            self._append_pit_merge_event(
+                driver_id,
+                meta,
+                previous_merge_state,
+                merge_decision,
+                events,
+            )
+            if merge_decision.state != "merge":
+                landmark_progress = max(
+                    progress,
+                    1.0 - PIT_MERGE_HOLD_DISTANCE_M / route_length_m,
+                )
+                landmark_speed_mps = 0.0
+                distance_m = max(0.0, (landmark_progress - progress) * route_length_m)
+                braking_envelope = sqrt(
+                    2.0 * PIT_MERGE_BRAKING_MPS2 * distance_m
+                )
+                if speed_mps > braking_envelope + 1e-6:
+                    acceleration_mps2 = -PIT_MERGE_BRAKING_MPS2
+                elif distance_m <= 1e-6:
+                    acceleration_mps2 = -PIT_MERGE_BRAKING_MPS2
+
+        next_speed_mps = min(
+            limit_mps,
+            max(0.0, speed_mps + acceleration_mps2 * delta),
+        )
+        distance_step_m = max(0.0, 0.5 * (speed_mps + next_speed_mps) * delta)
+        next_progress = progress + distance_step_m / route_length_m
+        if next_progress >= landmark_progress - 1e-12:
+            next_progress = landmark_progress
+            next_speed_mps = landmark_speed_mps
+
+        self._pit_exit_lane_progress[driver_id] = min(1.0, next_progress)
+        self._pit_route_speed_mps[driver_id] = next_speed_mps
+        state.speed_kph = next_speed_mps * 3.6
+        state.acceleration_mps2 = acceleration_mps2
+        state.target_speed_kph = pit_lane.exit_lane_speed_limit_kph
+        state.throttle = 1.0 if acceleration_mps2 > 0.0 else 0.0
+        state.brake = min(
+            1.0,
+            max(0.0, -acceleration_mps2 / PIT_ENTRY_BRAKING_MPS2),
+        )
+        self._sync_pit_race_progress(driver_id, state)
+
+        if next_progress >= 1.0 and merge_decision.state == "merge":
             self._finish_pit_rejoin(driver_id, state, meta, events)
 
     def _pit_rejoin_decision(
@@ -620,12 +987,64 @@ class PitOpsMixin:
         pit_lane = self.circuit.pit_lane
         entry = self._pit_entry_progress()
         exit_ = self._pit_exit_progress()
-        route_length_m = self._pit_route_length_m()
-        if pit_lane is None or entry is None or exit_ is None or route_length_m <= 1e-6:
+        if pit_lane is None or entry is None or exit_ is None:
             return PitMergeDecision("merge")
+        track_profile = self._track_physics_for_driver(state)
+        if self._pit_phase.get(driver_id) == "exit_lane":
+            route_length_m = self._pit_exit_lane_length_m(track_profile)
+            if route_length_m <= 1e-6:
+                return PitMergeDecision("merge")
+            remaining_m = max(0.0, (1.0 - lane_progress) * route_length_m)
+            pit_x, pit_y, pit_heading = self._pit_exit_lane_pose_at_progress_m(
+                1.0,
+                track_profile,
+            )
+            target_total_progress = self._pit_exit_lane_end_total_progress.get(
+                driver_id,
+                state.total_progress,
+            )
+            track_progress = target_total_progress % 1.0
+        else:
+            route_length_m = self._pit_route_length_m(track_profile)
+            if route_length_m <= 1e-6:
+                return PitMergeDecision("merge")
+            rejoin_progress = pit_lane.side_rejoin_progress
+            remaining_m = max(
+                0.0,
+                (rejoin_progress - lane_progress) * route_length_m,
+            )
+            mapped_total_progress = (
+                state.current_lap
+                + entry
+                + self._progress_distance(entry, exit_) * rejoin_progress
+            )
+            track_progress = mapped_total_progress % 1.0
+            pit_x, pit_y, pit_heading = self._pit_lane_pose_at_progress_m(
+                rejoin_progress,
+                track_profile,
+            )
+            line_length_m = max(
+                1.0,
+                track_profile.length_for_line(DRIVING_LINE_RACING),
+            )
+            for _ in range(4):
+                line_x, line_y, line_heading = track_profile.line_pose_at_progress_m(
+                    DRIVING_LINE_RACING,
+                    track_progress,
+                )
+                tangent_delta_m = (
+                    (pit_x - line_x) * cos(line_heading)
+                    + (pit_y - line_y) * sin(line_heading)
+                )
+                track_progress = (
+                    track_progress + tangent_delta_m / line_length_m
+                ) % 1.0
+            mapped_fraction = mapped_total_progress % 1.0
+            refinement_delta = (
+                track_progress - mapped_fraction + 0.5
+            ) % 1.0 - 0.5
+            target_total_progress = mapped_total_progress + refinement_delta
 
-        rejoin_progress = pit_lane.side_rejoin_progress
-        remaining_m = max(0.0, (rejoin_progress - lane_progress) * route_length_m)
         if speed_mps > 1.0:
             time_to_rejoin_s = remaining_m / speed_mps
         else:
@@ -633,34 +1052,6 @@ class PitOpsMixin:
                 2.0 * remaining_m / max(0.1, PIT_EXIT_ACCELERATION_MPS2)
             )
         time_to_rejoin_s = min(5.0, max(PHYSICS_STEP_SECONDS, time_to_rejoin_s))
-
-        mapped_total_progress = (
-            state.current_lap
-            + entry
-            + self._progress_distance(entry, exit_) * rejoin_progress
-        )
-        track_profile = self._track_physics_for_driver(state)
-        track_progress = mapped_total_progress % 1.0
-        pit_x, pit_y, pit_heading = self._pit_lane_pose_at_progress_m(
-            rejoin_progress,
-            track_profile,
-        )
-        line_length_m = max(1.0, track_profile.length_for_line(DRIVING_LINE_RACING))
-        for _ in range(4):
-            line_x, line_y, line_heading = track_profile.line_pose_at_progress_m(
-                DRIVING_LINE_RACING,
-                track_progress,
-            )
-            tangent_delta_m = (
-                (pit_x - line_x) * cos(line_heading)
-                + (pit_y - line_y) * sin(line_heading)
-            )
-            track_progress = (track_progress + tangent_delta_m / line_length_m) % 1.0
-        mapped_fraction = mapped_total_progress % 1.0
-        refinement_delta = (
-            track_progress - mapped_fraction + 0.5
-        ) % 1.0 - 0.5
-        target_total_progress = mapped_total_progress + refinement_delta
         line_x, line_y, line_heading = track_profile.line_pose_at_progress_m(
             DRIVING_LINE_RACING,
             track_progress,
@@ -764,15 +1155,34 @@ class PitOpsMixin:
         entry = self._pit_entry_progress()
         exit_ = self._pit_exit_progress()
         pit_entry_stint = state.pit_count + 1
-        lane_progress = self._pit_route_progress[driver_id]
-        pit_x, pit_y, pit_heading = self._pit_lane_pose_at_progress_m(lane_progress)
+        if self._pit_phase.get(driver_id) == "exit_lane":
+            lane_progress = self._pit_exit_lane_progress.get(driver_id, 1.0)
+            pit_x, pit_y, pit_heading = self._pit_exit_lane_pose_at_progress_m(
+                lane_progress
+            )
+            start_total_progress = self._pit_exit_lane_start_total_progress.get(
+                driver_id,
+                state.total_progress,
+            )
+            end_total_progress = self._pit_exit_lane_end_total_progress.get(
+                driver_id,
+                state.total_progress,
+            )
+            mapped_total_progress = start_total_progress + (
+                end_total_progress - start_total_progress
+            ) * lane_progress
+        else:
+            lane_progress = self._pit_route_progress[driver_id]
+            pit_x, pit_y, pit_heading = self._pit_lane_pose_at_progress_m(lane_progress)
+            mapped_total_progress = state.total_progress
+            if entry is not None and exit_ is not None:
+                mapped_total_progress = (
+                    state.current_lap
+                    + entry
+                    + self._progress_distance(entry, exit_) * lane_progress
+                )
 
         if entry is not None and exit_ is not None:
-            mapped_total_progress = (
-                state.current_lap
-                + entry
-                + self._progress_distance(entry, exit_) * lane_progress
-            )
             if mapped_total_progress >= state.current_lap + 1.0:
                 state.current_lap += 1
                 lap_start = getattr(state, "_lap_start_time", 0.0)
@@ -789,6 +1199,8 @@ class PitOpsMixin:
                     self._pit_entry_compound.get(driver_id, new_compound),
                     pit_entry_stint,
                     pit_stop=True,
+                    tire_role=self._pit_entry_role.get(driver_id),
+                    physical_tire_compound=self._pit_entry_physical_tire.get(driver_id),
                 )
                 state._lap_start_time = state.total_time  # type: ignore[attr-defined]
             state.total_progress = mapped_total_progress
@@ -856,6 +1268,9 @@ class PitOpsMixin:
             self._pit_lane_half_time,
             self._pit_route_progress,
             self._pit_route_speed_mps,
+            self._pit_exit_lane_progress,
+            self._pit_exit_lane_start_total_progress,
+            self._pit_exit_lane_end_total_progress,
             self._pit_merge_state,
             self._pit_merge_conflict_driver_id,
             self._pit_merge_conflict_group_id,
@@ -864,12 +1279,20 @@ class PitOpsMixin:
             self._pit_elapsed,
             self._pit_stop_elapsed,
             self._pit_tire,
+            self._pit_physical_tire,
             self._pit_entry_compound,
+            self._pit_entry_role,
+            self._pit_entry_physical_tire,
         ):
             store.pop(driver_id, None)
 
     def _pit_lane_progress(self, driver_id: int) -> float:
-        """Position along the pit lane (0=entry, 1=exit) for an in-pit car."""
+        """Position along the active pit route for an in-pit car."""
+        if self._pit_phase.get(driver_id) == "exit_lane":
+            return min(
+                1.0,
+                max(0.0, self._pit_exit_lane_progress.get(driver_id, 0.0)),
+            )
         return min(1.0, max(0.0, self._pit_route_progress.get(driver_id, 0.0)))
 
     def _sync_pit_race_progress(
@@ -883,6 +1306,25 @@ class PitOpsMixin:
         if entry is None or exit_ is None:
             return
 
+        if self._pit_phase.get(driver_id) == "exit_lane":
+            lane_progress = min(
+                1.0,
+                max(0.0, self._pit_exit_lane_progress.get(driver_id, 0.0)),
+            )
+            start_total_progress = self._pit_exit_lane_start_total_progress.get(
+                driver_id,
+                state.total_progress,
+            )
+            end_total_progress = self._pit_exit_lane_end_total_progress.get(
+                driver_id,
+                state.total_progress,
+            )
+            state.total_progress = start_total_progress + (
+                end_total_progress - start_total_progress
+            ) * lane_progress
+            state.total_distance_m = state.total_progress * self.track_length_m
+            return
+
         lane_progress = self._pit_lane_progress(driver_id)
         route_distance = self._progress_distance(entry, exit_)
         state.total_progress = state.current_lap + entry + route_distance * lane_progress
@@ -890,7 +1332,7 @@ class PitOpsMixin:
 
     def _pit_lane_progress_rate(self, driver_id: int) -> float:
         """Pit-lane progress rate per game second for front-end prediction."""
-        if self._pit_phase.get(driver_id) in {None, "stop"}:
+        if self._pit_phase.get(driver_id) in {None, "stop", "exit_lane"}:
             return 0.0
         route_length_m = self._pit_route_length_m()
         if route_length_m <= 1e-9:

@@ -39,6 +39,40 @@
   letter-spacing: 0;
 }
 
+.event-feed__diagnostics {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid rgba(97, 218, 251, 0.32);
+  border-radius: 4px;
+  background: rgba(97, 218, 251, 0.04);
+  color: #61dafb;
+  font-size: 0.56rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.event-feed__diagnostics:hover {
+  border-color: #61dafb;
+  background: rgba(97, 218, 251, 0.12);
+}
+
+.event-feed__diagnostics-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 6px rgba(46, 204, 113, 0.55);
+}
+
+.event-feed__diagnostics-dot.is-warning {
+  background: var(--accent-red);
+  box-shadow: 0 0 7px rgba(225, 6, 0, 0.72);
+}
+
 .event-feed__language button,
 .event-feed__mode button {
   min-width: 26px;

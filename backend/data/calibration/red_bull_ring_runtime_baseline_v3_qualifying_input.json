@@ -1,0 +1,897 @@
+{
+  "schema_version": 1,
+  "circuit_id": 4,
+  "circuit_name": "Red Bull Ring",
+  "generated_at": "2026-07-30T21:16:21.258679+00:00",
+  "git_commit": "03ea5eede471133c550452470e1934c26947fee7",
+  "working_tree_dirty": true,
+  "working_tree_note": "Existing user changes were preserved; this is a diagnostic snapshot.",
+  "environment": {
+    "thermal_preset": "NORMAL",
+    "ambient_temperature_c": 18.0,
+    "track_temperature_c": 30.0,
+    "source": "circuit thermal preset"
+  },
+  "nomination": {
+    "circuit_id": 4,
+    "ruleset": "2026_C1_C5",
+    "hard": "C2",
+    "medium": "C3",
+    "soft": "C4",
+    "source_class": "game_calibration_provisional",
+    "source_url": "https://press.pirelli.com/the-range-of-compounds-for-the-2026-season-has-been-set/",
+    "status": "provisional",
+    "note": "Initial provisional nomination pending event-specific official confirmation."
+  },
+  "sector_timing_source": {
+    "source": "FIA 2025 Austrian Grand Prix circuit map",
+    "source_url": "https://www.fia.com/system/files/decision-document/2025_austrian_grand_prix_-_event_notes_-_circuit_map_pit_lane_emergency_exit_map_quarantine_zone_red_zones.pdf",
+    "acquired_at": "2026-07-31",
+    "source_centerline_length_m": 4326.0,
+    "sector_lengths_m": [
+      1215.0,
+      1697.0,
+      1414.0
+    ],
+    "method": "Normalize FIA published sector distances to progress; compiled game length remains 4318m."
+  },
+  "source_identity": [
+    {
+      "path": "backend/data/circuits.json",
+      "sha256": "d78b93002548792c166f923f59529550bd25ddc34185422802cd095536758520"
+    },
+    {
+      "path": "backend/data/circuit_sources/red_bull_ring_osm_geo.json",
+      "sha256": "9496d99d73adca2f89d9a18fd32eeed3ab6a8bf5b84bbbbbc1364b92081ac739"
+    },
+    {
+      "path": "backend/data/circuit_sources/red_bull_ring_track_profile_v2.json",
+      "sha256": "c6ed44e9673b3831b337b13d31ca27e4977e2054f5d5a49c4ee1ba8f7b76418a"
+    },
+    {
+      "path": "backend/data/circuit_thermal_profiles.json",
+      "sha256": "05bd81e5d42a640368c5f9a711a92f6539c18028bd383f320b5c7b022f810231"
+    },
+    {
+      "path": "backend/data/tire_compound_nominations.json",
+      "sha256": "c2a90dc04cff9618b3185f402397baf50130d010d6486e5db5b2e6dcc7f12840"
+    }
+  ],
+  "static_telemetry_metrics": {
+    "status": "pass",
+    "pace_modifier": 1.04,
+    "reference_lap_count": 5,
+    "reference_laps": [
+      "NOR 17 1:03.971",
+      "LEC 17 1:04.492",
+      "PIA 16 1:04.554",
+      "HAM 20 1:04.582",
+      "RUS 17 1:04.763"
+    ],
+    "reference_lap_time_median_seconds": 64.472,
+    "sample_count": 128,
+    "mae_kph": 5.257,
+    "rmse_kph": 7.529,
+    "bias_kph": -3.038,
+    "maximum_over_kph": 31.738,
+    "maximum_under_kph": -32.719,
+    "maximum_absolute_error_kph": 32.719,
+    "thresholds": {
+      "mae_kph_lt": 6.0,
+      "rmse_kph_lt": 9.0,
+      "absolute_bias_kph_lt": 4.0,
+      "maximum_absolute_error_kph_lt": 35.0
+    }
+  },
+  "tier_a_audit": {
+    "geo_source_present": true,
+    "source_license": "ODbL",
+    "source_id": "osm:red-bull-ring-gp",
+    "source_length_m": 4308.606,
+    "computed_length_m": 4318.0,
+    "source_length_within_1pct": true,
+    "compiled_length_within_0p5m": true,
+    "centerline_points": 157,
+    "centerline_points_ge_80": true,
+    "pit_points": 43,
+    "pit_points_ge_8": true,
+    "max_point_spacing": 15.932,
+    "max_point_spacing_lt_24": true,
+    "pit_missing_fields": [],
+    "pit_fields_left_at_default": [],
+    "pit_start_projection_err": 8e-05,
+    "pit_end_projection_err": 0.00045,
+    "pit_projection_ok": true,
+    "pit_exit_follows_race_direction": true,
+    "drs_zones_on_straights": true,
+    "drs_detail": [
+      {
+        "name": "Main Straight",
+        "start_seg": "straight",
+        "end_seg": "straight",
+        "ok": true
+      },
+      {
+        "name": "Uphill DRS Climb",
+        "start_seg": "straight",
+        "end_seg": "straight",
+        "ok": true
+      },
+      {
+        "name": "Top Straight",
+        "start_seg": "straight",
+        "end_seg": "straight",
+        "ok": true
+      }
+    ],
+    "landmark_count": 12,
+    "landmarks_indexed_in_range": true,
+    "has_pit_landmark": true,
+    "has_start_finish_landmark": true,
+    "segments_cover_lap": true,
+    "segment_count": 13,
+    "sector_count": 3,
+    "sectors_have_timing_ranges": true
+  },
+  "single_car_dynamic": {
+    "status": "pass",
+    "seed": 42,
+    "laps_requested": 5,
+    "laps_completed": 5,
+    "valid_laps": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "physics_step_seconds": 0.02,
+    "physics_hz": 50,
+    "input_contract": {
+      "driver_id": 1,
+      "tire_role": "SOFT",
+      "physical_tire_compound": "C4",
+      "pace_mode": "ATTACK",
+      "driver_pace_multiplier": 1.028,
+      "fuel_start_kg": 7.561,
+      "tire_age_start_laps": 0,
+      "tire_wear_start": 0.0,
+      "track_conditions": {
+        "ambient_temperature_c": 18.0,
+        "track_temperature_c": 30.0
+      }
+    },
+    "steps": 17412,
+    "simulation_time_seconds": 348.24,
+    "lap_history": [
+      {
+        "lap": 1,
+        "lap_time": 69.554,
+        "tire_compound": "SOFT",
+        "stint": 1,
+        "tire_role": "SOFT",
+        "physical_tire_compound": "C4",
+        "pit_stop": false,
+        "sector_times": [
+          17.111,
+          31.587,
+          20.855
+        ],
+        "mini_sector_times": [
+          1.703,
+          1.672,
+          1.796,
+          2.71,
+          2.227,
+          1.901,
+          1.764,
+          1.689,
+          1.649,
+          2.243,
+          4.007,
+          2.376,
+          1.981,
+          1.819,
+          1.731,
+          2.809,
+          3.976,
+          2.611,
+          2.013,
+          3.015,
+          3.006,
+          3.659,
+          3.632,
+          3.061,
+          3.061,
+          4.001,
+          3.442
+        ]
+      },
+      {
+        "lap": 2,
+        "lap_time": 69.568,
+        "tire_compound": "SOFT",
+        "stint": 1,
+        "tire_role": "SOFT",
+        "physical_tire_compound": "C4",
+        "pit_stop": false,
+        "sector_times": [
+          17.158,
+          31.534,
+          20.876
+        ],
+        "mini_sector_times": [
+          1.744,
+          1.675,
+          1.796,
+          2.712,
+          2.227,
+          1.901,
+          1.764,
+          1.689,
+          1.649,
+          2.246,
+          4.021,
+          2.378,
+          1.981,
+          1.819,
+          1.731,
+          2.817,
+          3.987,
+          2.619,
+          2.013,
+          2.962,
+          2.961,
+          3.668,
+          3.641,
+          3.061,
+          3.06,
+          4.005,
+          3.443
+        ]
+      },
+      {
+        "lap": 3,
+        "lap_time": 69.662,
+        "tire_compound": "SOFT",
+        "stint": 1,
+        "tire_role": "SOFT",
+        "physical_tire_compound": "C4",
+        "pit_stop": false,
+        "sector_times": [
+          17.153,
+          31.603,
+          20.906
+        ],
+        "mini_sector_times": [
+          1.744,
+          1.675,
+          1.794,
+          2.709,
+          2.227,
+          1.901,
+          1.764,
+          1.689,
+          1.649,
+          2.244,
+          4.023,
+          2.38,
+          1.981,
+          1.818,
+          1.731,
+          2.825,
+          3.997,
+          2.626,
+          2.014,
+          2.968,
+          2.996,
+          3.684,
+          3.649,
+          3.061,
+          3.061,
+          4.008,
+          3.443
+        ]
+      },
+      {
+        "lap": 4,
+        "lap_time": 69.696,
+        "tire_compound": "SOFT",
+        "stint": 1,
+        "tire_role": "SOFT",
+        "physical_tire_compound": "C4",
+        "pit_stop": false,
+        "sector_times": [
+          17.163,
+          31.586,
+          20.947
+        ],
+        "mini_sector_times": [
+          1.744,
+          1.675,
+          1.796,
+          2.718,
+          2.226,
+          1.901,
+          1.764,
+          1.689,
+          1.648,
+          2.251,
+          4.04,
+          2.385,
+          1.981,
+          1.818,
+          1.732,
+          2.806,
+          4.017,
+          2.641,
+          2.014,
+          2.92,
+          2.98,
+          3.706,
+          3.665,
+          3.061,
+          3.06,
+          4.011,
+          3.443
+        ]
+      },
+      {
+        "lap": 5,
+        "lap_time": 69.741,
+        "tire_compound": "SOFT",
+        "stint": 1,
+        "tire_role": "SOFT",
+        "physical_tire_compound": "C4",
+        "pit_stop": false,
+        "sector_times": [
+          17.168,
+          31.562,
+          21.011
+        ],
+        "mini_sector_times": [
+          1.744,
+          1.675,
+          1.797,
+          2.722,
+          2.226,
+          1.901,
+          1.764,
+          1.689,
+          1.648,
+          2.264,
+          4.067,
+          2.391,
+          1.981,
+          1.818,
+          1.732,
+          2.779,
+          4.005,
+          2.661,
+          2.016,
+          2.871,
+          2.977,
+          3.738,
+          3.686,
+          3.061,
+          3.061,
+          4.021,
+          3.444
+        ]
+      }
+    ],
+    "fastest_valid_lap_time_seconds": 69.568,
+    "reference_lap_time_median_seconds": 64.472,
+    "fastest_valid_lap_relative_delta": 0.07904,
+    "speed_comparison": {
+      "mae_kph": 27.101,
+      "rmse_kph": 32.919,
+      "bias_kph": -20.385,
+      "maximum_absolute_error_kph": 118.755,
+      "target_minus_actual_mean_kph": 18.416
+    },
+    "corners": [
+      {
+        "corner": "T1",
+        "apex_progress": 0.086,
+        "actual_apex_progress": 0.086075,
+        "reference_apex_progress": 0.085938,
+        "minimum_speed_kph": 158.1,
+        "reference_minimum_speed_kph": 150.025,
+        "minimum_speed_error_kph": 8.075,
+        "brake_start_progress": 0.079098,
+        "reference_brake_start_progress": 0.078125,
+        "brake_start_distance_delta_m": 4.199,
+        "throttle_resume_progress": 0.106409,
+        "reference_throttle_resume_progress": 0.109375,
+        "throttle_resume_distance_delta_m": -12.808
+      },
+      {
+        "corner": "T2",
+        "apex_progress": 0.232,
+        "actual_apex_progress": 0.232073,
+        "reference_apex_progress": 0.234375,
+        "minimum_speed_kph": 263.476,
+        "reference_minimum_speed_kph": 290.268,
+        "minimum_speed_error_kph": -26.792,
+        "brake_start_progress": null,
+        "reference_brake_start_progress": null,
+        "brake_start_distance_delta_m": null,
+        "throttle_resume_progress": null,
+        "reference_throttle_resume_progress": 0.234375,
+        "throttle_resume_distance_delta_m": null
+      },
+      {
+        "corner": "T3",
+        "apex_progress": 0.304,
+        "actual_apex_progress": 0.304009,
+        "reference_apex_progress": 0.304688,
+        "minimum_speed_kph": 98.25,
+        "reference_minimum_speed_kph": 74.0,
+        "minimum_speed_error_kph": 24.25,
+        "brake_start_progress": 0.289711,
+        "reference_brake_start_progress": 0.296875,
+        "brake_start_distance_delta_m": -30.935,
+        "throttle_resume_progress": 0.329924,
+        "reference_throttle_resume_progress": 0.335938,
+        "throttle_resume_distance_delta_m": -25.969
+      },
+      {
+        "corner": "T4",
+        "apex_progress": 0.49,
+        "actual_apex_progress": 0.49,
+        "reference_apex_progress": 0.492188,
+        "minimum_speed_kph": 108.253,
+        "reference_minimum_speed_kph": 112.497,
+        "minimum_speed_error_kph": -4.244,
+        "brake_start_progress": 0.475989,
+        "reference_brake_start_progress": 0.484375,
+        "brake_start_distance_delta_m": -36.209,
+        "throttle_resume_progress": 0.512513,
+        "reference_throttle_resume_progress": 0.523438,
+        "throttle_resume_distance_delta_m": -47.172
+      },
+      {
+        "corner": "T5",
+        "apex_progress": 0.543,
+        "actual_apex_progress": 0.543029,
+        "reference_apex_progress": 0.546875,
+        "minimum_speed_kph": 108.253,
+        "reference_minimum_speed_kph": 112.497,
+        "minimum_speed_error_kph": -4.244,
+        "brake_start_progress": 0.493015,
+        "reference_brake_start_progress": 0.5,
+        "brake_start_distance_delta_m": -30.16,
+        "throttle_resume_progress": 0.543029,
+        "reference_throttle_resume_progress": 0.546875,
+        "throttle_resume_distance_delta_m": -16.608
+      },
+      {
+        "corner": "T6",
+        "apex_progress": 0.609,
+        "actual_apex_progress": 0.60907,
+        "reference_apex_progress": 0.609375,
+        "minimum_speed_kph": 97.389,
+        "reference_minimum_speed_kph": 207.717,
+        "minimum_speed_error_kph": -110.328,
+        "brake_start_progress": 0.6074,
+        "reference_brake_start_progress": 0.601562,
+        "brake_start_distance_delta_m": 25.209,
+        "throttle_resume_progress": 0.631807,
+        "reference_throttle_resume_progress": 0.640625,
+        "throttle_resume_distance_delta_m": -38.076
+      },
+      {
+        "corner": "T7",
+        "apex_progress": 0.688,
+        "actual_apex_progress": 0.687864,
+        "reference_apex_progress": 0.6875,
+        "minimum_speed_kph": 97.389,
+        "reference_minimum_speed_kph": 216.144,
+        "minimum_speed_error_kph": -118.755,
+        "brake_start_progress": 0.638011,
+        "reference_brake_start_progress": 0.679688,
+        "brake_start_distance_delta_m": -179.962,
+        "throttle_resume_progress": 0.710443,
+        "reference_throttle_resume_progress": 0.703125,
+        "throttle_resume_distance_delta_m": 31.598
+      },
+      {
+        "corner": "T8",
+        "apex_progress": 0.735,
+        "actual_apex_progress": 0.735013,
+        "reference_apex_progress": 0.734375,
+        "minimum_speed_kph": 194.267,
+        "reference_minimum_speed_kph": 228.896,
+        "minimum_speed_error_kph": -34.629,
+        "brake_start_progress": 0.69177,
+        "reference_brake_start_progress": null,
+        "brake_start_distance_delta_m": null,
+        "throttle_resume_progress": 0.735013,
+        "reference_throttle_resume_progress": 0.742188,
+        "throttle_resume_distance_delta_m": -30.983
+      },
+      {
+        "corner": "T9",
+        "apex_progress": 0.861,
+        "actual_apex_progress": 0.860938,
+        "reference_apex_progress": 0.859375,
+        "minimum_speed_kph": 225.945,
+        "reference_minimum_speed_kph": 235.315,
+        "minimum_speed_error_kph": -9.37,
+        "brake_start_progress": 0.859402,
+        "reference_brake_start_progress": 0.867188,
+        "brake_start_distance_delta_m": -33.621,
+        "throttle_resume_progress": null,
+        "reference_throttle_resume_progress": 0.882812,
+        "throttle_resume_distance_delta_m": null
+      },
+      {
+        "corner": "T10",
+        "apex_progress": 0.907,
+        "actual_apex_progress": 0.906955,
+        "reference_apex_progress": 0.90625,
+        "minimum_speed_kph": 179.151,
+        "reference_minimum_speed_kph": 197.59,
+        "minimum_speed_error_kph": -18.439,
+        "brake_start_progress": 0.859402,
+        "reference_brake_start_progress": 0.867188,
+        "brake_start_distance_delta_m": -33.621,
+        "throttle_resume_progress": 0.925819,
+        "reference_throttle_resume_progress": 0.921875,
+        "throttle_resume_distance_delta_m": 17.03
+      }
+    ],
+    "safety": {
+      "contact_samples": 0,
+      "off_track_samples": 0,
+      "track_limit_samples": 0,
+      "run_wide_samples": 26,
+      "planner_fallback_samples": 150,
+      "maximum_consecutive_planner_fallback_steps": 50,
+      "numeric_guard_hits": 0,
+      "run_wide_by_corner": {
+        "T10": 10,
+        "T4": 16
+      },
+      "event_counts": {
+        "traction_loss": 30
+      },
+      "maximum_lateral_error_m": 5.016,
+      "lateral_error_p95_m": 4.212,
+      "heading_error_p95_rad": 0.105
+    },
+    "thermal": {
+      "schema_version": 2,
+      "track_conditions": {
+        "ambient_temperature_c": 18.0,
+        "track_temperature_c": 30.0
+      },
+      "thermal_preset": "NORMAL",
+      "track_conditions_source": "circuit_preset",
+      "sample_count": 17412,
+      "thresholds": {
+        "rear_surface_overheat_c": 130.0,
+        "legacy_130_c": 130.0
+      },
+      "per_compound": {
+        "C1": {
+          "active_count": 0,
+          "surface_min_c": null,
+          "surface_max_c": null,
+          "core_min_c": null,
+          "core_max_c": null,
+          "peak_surface_max_c": null,
+          "peak_core_max_c": null,
+          "operating_lower_c": 89.0,
+          "operating_upper_c": 121.0,
+          "hot_threshold_c": 136.0,
+          "current_overheat_count": 0,
+          "current_overheat_driver_ids": [],
+          "current_max_continuous_overheat_seconds": 0.0,
+          "current_max_continuous_overheat_driver_id": null,
+          "peak_overheat_count": 0,
+          "peak_overheat_driver_ids": [],
+          "max_continuous_overheat_seconds": 0.0,
+          "max_continuous_overheat_driver_id": null
+        },
+        "C2": {
+          "active_count": 0,
+          "surface_min_c": null,
+          "surface_max_c": null,
+          "core_min_c": null,
+          "core_max_c": null,
+          "peak_surface_max_c": null,
+          "peak_core_max_c": null,
+          "operating_lower_c": 86.0,
+          "operating_upper_c": 114.0,
+          "hot_threshold_c": 129.0,
+          "current_overheat_count": 0,
+          "current_overheat_driver_ids": [],
+          "current_max_continuous_overheat_seconds": 0.0,
+          "current_max_continuous_overheat_driver_id": null,
+          "peak_overheat_count": 0,
+          "peak_overheat_driver_ids": [],
+          "max_continuous_overheat_seconds": 0.0,
+          "max_continuous_overheat_driver_id": null
+        },
+        "C3": {
+          "active_count": 0,
+          "surface_min_c": null,
+          "surface_max_c": null,
+          "core_min_c": null,
+          "core_max_c": null,
+          "peak_surface_max_c": null,
+          "peak_core_max_c": null,
+          "operating_lower_c": 83.0,
+          "operating_upper_c": 107.0,
+          "hot_threshold_c": 122.0,
+          "current_overheat_count": 0,
+          "current_overheat_driver_ids": [],
+          "current_max_continuous_overheat_seconds": 0.0,
+          "current_max_continuous_overheat_driver_id": null,
+          "peak_overheat_count": 0,
+          "peak_overheat_driver_ids": [],
+          "max_continuous_overheat_seconds": 0.0,
+          "max_continuous_overheat_driver_id": null
+        },
+        "C4": {
+          "active_count": 0,
+          "surface_min_c": null,
+          "surface_max_c": null,
+          "core_min_c": null,
+          "core_max_c": null,
+          "peak_surface_max_c": 101.855,
+          "peak_core_max_c": 91.15,
+          "operating_lower_c": 81.0,
+          "operating_upper_c": 103.0,
+          "hot_threshold_c": 118.0,
+          "current_overheat_count": 0,
+          "current_overheat_driver_ids": [],
+          "current_max_continuous_overheat_seconds": 0.0,
+          "current_max_continuous_overheat_driver_id": null,
+          "peak_overheat_count": 0,
+          "peak_overheat_driver_ids": [],
+          "max_continuous_overheat_seconds": 0.0,
+          "max_continuous_overheat_driver_id": null
+        },
+        "C5": {
+          "active_count": 0,
+          "surface_min_c": null,
+          "surface_max_c": null,
+          "core_min_c": null,
+          "core_max_c": null,
+          "peak_surface_max_c": null,
+          "peak_core_max_c": null,
+          "operating_lower_c": 80.0,
+          "operating_upper_c": 100.0,
+          "hot_threshold_c": 115.0,
+          "current_overheat_count": 0,
+          "current_overheat_driver_ids": [],
+          "current_max_continuous_overheat_seconds": 0.0,
+          "current_max_continuous_overheat_driver_id": null,
+          "peak_overheat_count": 0,
+          "peak_overheat_driver_ids": [],
+          "max_continuous_overheat_seconds": 0.0,
+          "max_continuous_overheat_driver_id": null
+        }
+      },
+      "compound_distribution": {
+        "C1": 0,
+        "C2": 0,
+        "C3": 0,
+        "C4": 0,
+        "C5": 0
+      },
+      "current": {
+        "active_driver_count": 0,
+        "front_surface_min_c": 90.477,
+        "front_surface_max_c": 90.477,
+        "rear_surface_min_c": 101.616,
+        "rear_surface_max_c": 101.616,
+        "front_core_min_c": 88.246,
+        "front_core_max_c": 88.246,
+        "rear_core_min_c": 91.149,
+        "rear_core_max_c": 91.149,
+        "rear_overheat_driver_count": 0,
+        "rear_overheat_driver_ids": [],
+        "compound_overheat_driver_count": 0,
+        "compound_overheat_driver_ids": [],
+        "max_compound_overheat_seconds": 0.0,
+        "max_compound_overheat_driver_id": null,
+        "max_current_overheat_seconds": 0.0,
+        "max_current_overheat_driver_id": null,
+        "front": {
+          "heat_input_w": 0.0,
+          "cooling_w": 0.0,
+          "net_w": 0.0,
+          "source_heat_w": {
+            "baseline_heat_w": 0.0,
+            "lateral_heat_w": 0.0,
+            "braking_heat_w": 0.0,
+            "traction_heat_w": 0.0,
+            "slide_heat_w": 0.0
+          }
+        },
+        "rear": {
+          "heat_input_w": 0.0,
+          "cooling_w": 0.0,
+          "net_w": 0.0,
+          "source_heat_w": {
+            "baseline_heat_w": 0.0,
+            "lateral_heat_w": 0.0,
+            "braking_heat_w": 0.0,
+            "traction_heat_w": 0.0,
+            "slide_heat_w": 0.0
+          }
+        },
+        "front_heat_input_w": 0.0,
+        "rear_heat_input_w": 0.0,
+        "front_cooling_w": 0.0,
+        "rear_cooling_w": 0.0,
+        "front_net_w": 0.0,
+        "rear_net_w": 0.0,
+        "front_source_heat_w": {
+          "baseline_heat_w": 0.0,
+          "lateral_heat_w": 0.0,
+          "braking_heat_w": 0.0,
+          "traction_heat_w": 0.0,
+          "slide_heat_w": 0.0
+        },
+        "rear_source_heat_w": {
+          "baseline_heat_w": 0.0,
+          "lateral_heat_w": 0.0,
+          "braking_heat_w": 0.0,
+          "traction_heat_w": 0.0,
+          "slide_heat_w": 0.0
+        }
+      },
+      "peak": {
+        "front_surface_max_c": 90.847,
+        "rear_surface_max_c": 101.855,
+        "front_core_max_c": 90.0,
+        "rear_core_max_c": 91.149,
+        "max_rear_overheat_driver_count": 0,
+        "max_rear_overheat_driver_ids": [],
+        "max_compound_overheat_driver_count": 0,
+        "max_compound_overheat_driver_ids": [],
+        "max_compound_overheat_seconds": 0.0,
+        "max_compound_overheat_driver_id": null,
+        "max_continuous_overheat_seconds": 0.0,
+        "max_continuous_overheat_driver_id": null,
+        "front": {
+          "heat_input_w": 33226.416075,
+          "cooling_w": 3635.265227,
+          "net_w": 30143.231699,
+          "source_heat_w": {
+            "baseline_heat_w": 500.0,
+            "lateral_heat_w": 8231.101311,
+            "braking_heat_w": 5440.354604,
+            "traction_heat_w": 0.0,
+            "slide_heat_w": 29861.479853
+          }
+        },
+        "rear": {
+          "heat_input_w": 29358.484939,
+          "cooling_w": 4191.841304,
+          "net_w": 25722.983713,
+          "source_heat_w": {
+            "baseline_heat_w": 500.0,
+            "lateral_heat_w": 9364.284468,
+            "braking_heat_w": 3939.567127,
+            "traction_heat_w": 2605.5,
+            "slide_heat_w": 24196.850231
+          }
+        },
+        "front_heat_input_w": 33226.416075,
+        "rear_heat_input_w": 29358.484939,
+        "front_cooling_w": 3635.265227,
+        "rear_cooling_w": 4191.841304,
+        "front_net_w": 30143.231699,
+        "rear_net_w": 25722.983713,
+        "front_source_heat_w": {
+          "baseline_heat_w": 500.0,
+          "lateral_heat_w": 8231.101311,
+          "braking_heat_w": 5440.354604,
+          "traction_heat_w": 0.0,
+          "slide_heat_w": 29861.479853
+        },
+        "rear_source_heat_w": {
+          "baseline_heat_w": 500.0,
+          "lateral_heat_w": 9364.284468,
+          "braking_heat_w": 3939.567127,
+          "traction_heat_w": 2605.5,
+          "slide_heat_w": 24196.850231
+        }
+      },
+      "cumulative": {
+        "front": {
+          "baseline_heat_j": 174120.0,
+          "lateral_heat_j": 524122.47132254497,
+          "braking_heat_j": 97540.83688986526,
+          "traction_heat_j": 0.0,
+          "slide_heat_j": 182347.4587826004,
+          "surface_air_track_cooling_j": 932535.6153835984,
+          "surface_to_core_transfer_j": 33869.035939999856,
+          "core_ambient_cooling_j": 173348.99881599948,
+          "surface_net_energy_j": 11726.115671412537,
+          "core_net_energy_j": -139479.96287600047
+        },
+        "rear": {
+          "baseline_heat_j": 174120.0,
+          "lateral_heat_j": 612443.4704608734,
+          "braking_heat_j": 71457.31097494128,
+          "traction_heat_j": 357397.0685659178,
+          "slide_heat_j": 378792.0484221854,
+          "surface_air_track_cooling_j": 1039498.5558235085,
+          "surface_to_core_transfer_j": 264323.02419999987,
+          "core_ambient_cooling_j": 176004.03329600248,
+          "surface_net_energy_j": 290388.31840040983,
+          "core_net_energy_j": 88318.99090399992
+        }
+      },
+      "clamp": {
+        "current": {
+          "surface_driver_ids": [],
+          "core_driver_ids": [],
+          "surface_active_seconds": 0.0,
+          "core_active_seconds": 0.0,
+          "max_continuous_seconds": 0.0,
+          "max_continuous_driver_id": null
+        },
+        "cumulative": {
+          "surface_hit_count": 0,
+          "core_hit_count": 0,
+          "surface_active_seconds": 0.0,
+          "core_active_seconds": 0.0
+        },
+        "first": {
+          "surface": null,
+          "core": null
+        },
+        "peak": {
+          "surface_unclamped_temperature_c": null,
+          "core_unclamped_temperature_c": null,
+          "surface_overshoot_c": 0.0,
+          "core_overshoot_c": 0.0,
+          "max_continuous_seconds": 0.0
+        }
+      }
+    },
+    "brakes": {
+      "front_c": 439.032,
+      "rear_c": 405.715,
+      "minimum_fade_factor": 1.0
+    },
+    "acceptance": {
+      "five_laps_complete": true,
+      "four_valid_laps": true,
+      "contact_off_track_numeric_guard_zero": true,
+      "repeated_run_wide_zero": false,
+      "fastest_valid_lap_within_3_percent": false,
+      "numeric_guard_zero": true,
+      "within_step_stability_budget": true
+    }
+  },
+  "traffic": {
+    "status": "not_run",
+    "reason": "single-car baseline mode"
+  },
+  "pit": {
+    "status": "not_run",
+    "reason": "single-car baseline mode"
+  },
+  "safety_car": {
+    "status": "not_run",
+    "reason": "single-car baseline mode"
+  },
+  "determinism": {
+    "status": "not_run",
+    "reason": "1x/2x matrix is a separate integration test"
+  },
+  "cleanup": {
+    "status": "not_run",
+    "reason": "requires session lifecycle harness"
+  },
+  "accepted": false,
+  "acceptance_note": "This report is a single-car baseline. It is not a full Red Bull Ring product approval."
+}

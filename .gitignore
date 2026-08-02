@@ -3,6 +3,12 @@ backend/.venv/
 *.pyc
 frontend/dist/
 frontend/node_modules/
+desktop/node_modules/
+desktop/out/
+desktop/.electron-cache/
+desktop/resources/frontend-dist/
+desktop/resources/backend/
+desktop/resources/python/
 .DS_Store
 .env
 .env.*

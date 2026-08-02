@@ -1,8 +1,19 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import CircuitDesigner from './CircuitDesigner';
+import {
+  THERMAL_PRESET_OPTIONS,
+  beginQualifyingRequest,
+  buildQualifyingPayload,
+  buildRaceSetupPayload,
+  defaultStartingTiresForDrivers,
+  defaultThermalPresetForCircuit,
+  invalidateQualifyingRequest,
+  isCurrentQualifyingRequest,
+  thermalConditionsForPreset,
+  weekendTireOptionsForCircuit,
+} from './raceSetupContract';
 import './RaceSetup.css';
 
-const STARTING_TIRE_OPTIONS = ['SOFT', 'MEDIUM', 'HARD'];
 const MIN_LAPS = 5;
 const MAX_LAPS = 100;
 
@@ -33,6 +44,7 @@ export default function RaceSetup({ onStart }) {
   const [teams, setTeams] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [circuitId, setCircuitId] = useState(1);
+  const [thermalPreset, setThermalPreset] = useState('NORMAL');
   const [teamId, setTeamId] = useState(1);
   const [lapCount, setLapCount] = useState(30);
   const [startingTires, setStartingTires] = useState({});
@@ -40,6 +52,7 @@ export default function RaceSetup({ onStart }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [designerOpen, setDesignerOpen] = useState(false);
+  const qualifyingRequestIdRef = useRef(0);
 
   useEffect(() => {
     Promise.all([
@@ -54,6 +67,7 @@ export default function RaceSetup({ onStart }) {
         if (c.length) {
           setCircuitId(c[0].id);
           setLapCount(clampLapCount(c[0].total_laps));
+          setThermalPreset(defaultThermalPresetForCircuit(c[0]));
         }
         if (t.length) setTeamId(t[0].id);
       })
@@ -61,6 +75,9 @@ export default function RaceSetup({ onStart }) {
   }, []);
 
   const selectedCircuit = circuits.find((c) => c.id === circuitId);
+  const startingTireOptions = weekendTireOptionsForCircuit(selectedCircuit);
+  const thermalProfile = selectedCircuit?.thermal_profile;
+  const selectedThermalConditions = thermalConditionsForPreset(selectedCircuit, thermalPreset);
   const selectedTeam = teams.find((t) => t.id === teamId);
   const selectedTeamDrivers = useMemo(
     () => drivers.filter((d) => d.team_id === teamId),
@@ -89,12 +106,21 @@ export default function RaceSetup({ onStart }) {
   };
 
   const handleCircuitChange = (nextCircuitId) => {
+    invalidateQualifyingRequest(qualifyingRequestIdRef, setLoading);
     setCircuitId(nextCircuitId);
+    setStartingTires(defaultStartingTiresForDrivers(selectedTeamDrivers));
     setQualifying(null);
     const nextCircuit = circuits.find((c) => c.id === nextCircuitId);
     if (nextCircuit) {
       setLapCount(clampLapCount(nextCircuit.total_laps));
+      setThermalPreset(defaultThermalPresetForCircuit(nextCircuit));
     }
+  };
+
+  const handleThermalPresetChange = (nextPreset) => {
+    invalidateQualifyingRequest(qualifyingRequestIdRef, setLoading);
+    setThermalPreset(nextPreset);
+    setQualifying(null);
   };
 
   const handleLapCountChange = (value) => {
@@ -102,6 +128,7 @@ export default function RaceSetup({ onStart }) {
   };
 
   const handleRunQualifying = async () => {
+    const requestId = beginQualifyingRequest(qualifyingRequestIdRef);
     setLoading(true);
     setError(null);
     setQualifying(null);
@@ -109,22 +136,28 @@ export default function RaceSetup({ onStart }) {
       const res = await fetch('/api/qualifying/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          circuit_id: circuitId,
-          player_team_id: teamId,
-          attempt_laps: 3,
-        }),
+        body: JSON.stringify(buildQualifyingPayload({
+          circuitId,
+          playerTeamId: teamId,
+          thermalPreset,
+        })),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.detail || 'Qualifying failed');
       }
       const data = await res.json();
-      setQualifying(data);
+      if (isCurrentQualifyingRequest(qualifyingRequestIdRef, requestId)) {
+        setQualifying(data);
+      }
     } catch (err) {
-      setError(err.message);
+      if (isCurrentQualifyingRequest(qualifyingRequestIdRef, requestId)) {
+        setError(err.message);
+      }
     } finally {
-      setLoading(false);
+      if (isCurrentQualifyingRequest(qualifyingRequestIdRef, requestId)) {
+        setLoading(false);
+      }
     }
   };
 
@@ -137,18 +170,15 @@ export default function RaceSetup({ onStart }) {
       const res = await fetch('/api/race/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          circuit_id: circuitId,
-          player_team_id: teamId,
-          total_laps: selectedLapCount,
-          starting_tires: Object.fromEntries(
-            selectedTeamDrivers.map((driver) => [
-              driver.id,
-              startingTires[driver.id] || 'MEDIUM',
-            ]),
-          ),
-          grid_order: qualifying?.grid_order || [],
-        }),
+        body: JSON.stringify(buildRaceSetupPayload({
+          circuitId,
+          playerTeamId: teamId,
+          thermalPreset,
+          totalLaps: selectedLapCount,
+          selectedTeamDrivers,
+          startingTires,
+          gridOrder: qualifying?.grid_order || [],
+        })),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -247,6 +277,29 @@ export default function RaceSetup({ onStart }) {
         </div>
 
         <div className="race-setup__field">
+          <label htmlFor="thermal-preset">Track Temperature</label>
+          <select
+            id="thermal-preset"
+            value={thermalPreset}
+            onChange={(e) => handleThermalPresetChange(e.target.value)}
+            disabled={!thermalProfile}
+          >
+            {THERMAL_PRESET_OPTIONS.map((preset) => (
+              <option key={preset} value={preset}>
+                {preset[0] + preset.slice(1).toLowerCase()}
+                {preset === thermalProfile?.default_preset ? ' (Default)' : ''}
+              </option>
+            ))}
+          </select>
+          {selectedThermalConditions && (
+            <span className="race-setup__thermal-preview">
+              <span>Ambient {selectedThermalConditions.ambient_temperature_c}°C</span>
+              <span>Track {selectedThermalConditions.track_temperature_c}°C</span>
+            </span>
+          )}
+        </div>
+
+        <div className="race-setup__field">
           <label htmlFor="team">Your Team</label>
           <select
             id="team"
@@ -278,16 +331,19 @@ export default function RaceSetup({ onStart }) {
                     <span>{driver.name}</span>
                   </div>
                   <div className="race-setup__tire-options">
-                    {STARTING_TIRE_OPTIONS.map((compound) => {
-                      const selected = (startingTires[driver.id] || 'MEDIUM') === compound;
+                    {startingTireOptions.map((option) => {
+                      const selected = (startingTires[driver.id] || 'MEDIUM') === option.role;
                       return (
                         <button
-                          key={compound}
+                          key={option.role}
                           type="button"
-                          className={`race-setup__tire-option ${getTireClass(compound)} ${selected ? 'race-setup__tire-option--selected' : ''}`}
-                          onClick={() => handleStartingTireChange(driver.id, compound)}
+                          className={`race-setup__tire-option ${getTireClass(option.role)} ${selected ? 'race-setup__tire-option--selected' : ''}`}
+                          onClick={() => handleStartingTireChange(driver.id, option.role)}
+                          title={option.label}
                         >
-                          {compound[0]}
+                          {option.physicalCompound
+                            ? `${option.role[0]} · ${option.physicalCompound}`
+                            : option.role[0]}
                         </button>
                       );
                     })}

@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import unittest
 import asyncio
+import gc
+import weakref
 from types import SimpleNamespace
 
 from session import (
     BROADCAST_HZ,
     BROADCAST_INTERVAL,
+    DASHBOARD_POSITION_FIELDS,
     DASHBOARD_BROADCAST_HZ,
     PAUSED_BROADCAST_HZ,
     POSE_DRIVER_HEADER,
@@ -17,6 +20,7 @@ from session import (
     POSE_SAMPLE,
     POSE_BROADCAST_HZ,
     RaceSession,
+    SessionManager,
     SessionCadenceMetrics,
     TIMING_BROADCAST_HZ,
 )
@@ -90,6 +94,30 @@ class RaceSessionCadenceTests(unittest.TestCase):
         self.assertEqual(dashboard_payload["lap"], 1)
         self.assertEqual(dashboard_payload["total_laps"], 57)
         self.assertNotIn("events", dashboard_payload)
+
+    def test_dashboard_feed_exposes_live_vehicle_condition(self) -> None:
+        expected = {
+            "tire_surface_temperature_c",
+            "tire_core_temperature_c",
+            "front_tire_surface_temperature_c",
+            "front_tire_core_temperature_c",
+            "front_tire_thermal_grip",
+            "rear_tire_surface_temperature_c",
+            "rear_tire_core_temperature_c",
+            "rear_tire_thermal_grip",
+            "tire_wear",
+            "fuel_mass_kg",
+            "vehicle_mass_kg",
+            "front_normal_load_n",
+            "rear_normal_load_n",
+            "front_axle_slip_ratio",
+            "rear_axle_slip_ratio",
+            "front_brake_temperature_c",
+            "rear_brake_temperature_c",
+            "brake_fade_factor",
+        }
+
+        self.assertTrue(expected.issubset(DASHBOARD_POSITION_FIELDS))
 
     def test_public_feed_hides_internal_events_and_applies_cooldown(self) -> None:
         class FakeEngine:
@@ -304,6 +332,25 @@ class RaceSessionCadenceTests(unittest.TestCase):
             self.assertTrue(socket.closed)
 
         asyncio.run(exercise_close())
+
+    def test_async_clear_releases_old_session_and_engine_weakrefs(self) -> None:
+        class FakeEngine:
+            finished = False
+
+        manager = SessionManager()
+        engine = FakeEngine()
+        session = RaceSession("weakref", engine, None, None, [])
+        manager._session = session
+        session_ref = weakref.ref(session)
+        engine_ref = weakref.ref(engine)
+
+        asyncio.run(manager.clear_async())
+        del session
+        del engine
+        gc.collect()
+
+        self.assertIsNone(session_ref())
+        self.assertIsNone(engine_ref())
 
 
 if __name__ == "__main__":

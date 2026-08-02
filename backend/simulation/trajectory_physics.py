@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import sqrt
 
-from models.schemas import TireCompound
+from models.schemas import PhysicalTireCompound, TireCompound
 from simulation.car_performance import CarPerformanceFactors
 from simulation.tire_model import TirePhysicsFactors
 from simulation.vehicle_dynamics import (
@@ -60,7 +60,7 @@ class VehicleTrajectorySpec:
 class TireTrajectorySpec:
     """Compound and wear-dependent force factors for a nominal trajectory."""
 
-    compound: TireCompound
+    compound: PhysicalTireCompound | TireCompound
     wear: float
     lateral_grip: float
     braking_grip: float
@@ -69,7 +69,7 @@ class TireTrajectorySpec:
     @classmethod
     def from_tire_physics(
         cls,
-        compound: TireCompound,
+        compound: PhysicalTireCompound | TireCompound,
         factors: TirePhysicsFactors,
     ) -> "TireTrajectorySpec":
         return cls(

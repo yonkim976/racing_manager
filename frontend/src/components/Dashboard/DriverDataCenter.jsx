@@ -19,11 +19,37 @@ function tireLifePercent(wear) {
   return Math.max(0, Math.round((1 - Math.min(Number(wear) || 0, 1)) * 100));
 }
 
+function formatNumber(value, digits = 1, fallback = '—') {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(digits) : fallback;
+}
+
+function formatPercent(value, digits = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `${(number * 100).toFixed(digits)}%` : '—';
+}
+
+function axleSlipLabel(value) {
+  const slip = Number(value);
+  if (!Number.isFinite(slip) || Math.abs(slip) < 0.0005) return 'ROLLING';
+  return `${slip < 0 ? 'LOCK ' : 'SPIN +'}${Math.abs(slip * 100).toFixed(1)}%`;
+}
+
 function SummaryItem({ label, value, tone = '' }) {
   return (
     <div className={`driver-data-center__summary-item ${tone ? `is-${tone}` : ''}`}>
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function ConditionMetric({ label, value, detail = '', tone = '' }) {
+  return (
+    <div className={`driver-data-center__metric ${tone ? `is-${tone}` : ''}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {detail && <small>{detail}</small>}
     </div>
   );
 }
@@ -93,6 +119,120 @@ export default function DriverDataCenter({ driver, sectors, onClose }) {
             <SummaryItem label="BEST LAP" value={formatLapTime(driver.best_lap_time)} tone="best" />
             <SummaryItem label="TIRE" value={`${driver.tire_compound} · ${tireLifePercent(driver.tire_wear)}%`} />
             <SummaryItem label="CURRENT" value={`S${driver.current_sector || 1} · M${driver.current_mini_sector || 1}`} />
+          </section>
+
+          <section className="driver-data-center__condition" aria-label="Live car condition">
+            <header>
+              <div>
+                <span>LIVE CAR CONDITION</span>
+                <small>PHYSICS &amp; RESOURCE STATE</small>
+              </div>
+              <strong>{String(driver.handling_state || 'stable').toUpperCase()}</strong>
+            </header>
+
+            <div className="driver-data-center__condition-group">
+              <h3>TYRES &amp; FUEL</h3>
+              <div className="driver-data-center__metric-grid">
+                <ConditionMetric
+                  label="TIRE LIFE"
+                  value={`${tireLifePercent(driver.tire_wear)}%`}
+                  detail={`${driver.tire_compound || '—'} · ${driver.tire_age || 0} laps`}
+                />
+                <ConditionMetric
+                  label="FRONT TYRES"
+                  value={`${formatNumber(
+                    driver.front_tire_surface_temperature_c
+                      ?? driver.tire_surface_temperature_c,
+                  )}°C`}
+                  detail={`core ${formatNumber(
+                    driver.front_tire_core_temperature_c
+                      ?? driver.tire_core_temperature_c,
+                  )}°C · grip ${formatPercent(
+                    driver.front_tire_thermal_grip
+                      ?? driver.tire_thermal_grip
+                      ?? 1,
+                  )}`}
+                />
+                <ConditionMetric
+                  label="REAR TYRES"
+                  value={`${formatNumber(
+                    driver.rear_tire_surface_temperature_c
+                      ?? driver.tire_surface_temperature_c,
+                  )}°C`}
+                  detail={`core ${formatNumber(
+                    driver.rear_tire_core_temperature_c
+                      ?? driver.tire_core_temperature_c,
+                  )}°C · grip ${formatPercent(
+                    driver.rear_tire_thermal_grip
+                      ?? driver.tire_thermal_grip
+                      ?? 1,
+                  )}`}
+                />
+                <ConditionMetric
+                  label="GRIP INDEX"
+                  value={formatPercent(
+                    driver.tire_lateral_grip_index
+                      ?? (Number(driver.tire_lateral_grip) || 0) / 1.025,
+                  )}
+                  detail={`C3=100 · traction ${formatPercent(
+                    driver.tire_traction_grip_index
+                      ?? (Number(driver.tire_traction_grip) || 0) / 1.025,
+                  )} · brake ${formatPercent(
+                    driver.tire_braking_grip_index
+                      ?? (Number(driver.tire_braking_grip) || 0) / 1.015,
+                  )}`}
+                />
+                <ConditionMetric
+                  label="FUEL"
+                  value={`${formatNumber(driver.fuel_mass_kg)} kg`}
+                  detail={`${formatNumber(driver.fuel_laps_remaining, 1)} laps remaining`}
+                />
+                <ConditionMetric
+                  label="FUEL USED"
+                  value={`${formatNumber(driver.fuel_burned_kg)} kg`}
+                  detail={`vehicle ${formatNumber(driver.vehicle_mass_kg, 0)} kg`}
+                />
+              </div>
+            </div>
+
+            <div className="driver-data-center__condition-group">
+              <h3>BRAKES, LOAD &amp; SLIP</h3>
+              <div className="driver-data-center__metric-grid">
+                <ConditionMetric
+                  label="FRONT BRAKES"
+                  value={`${formatNumber(driver.front_brake_temperature_c, 0)}°C`}
+                  detail={`${formatNumber((Number(driver.applied_brake_force_n) || 0) / 1000, 1)} kN applied`}
+                />
+                <ConditionMetric
+                  label="REAR BRAKES"
+                  value={`${formatNumber(driver.rear_brake_temperature_c, 0)}°C`}
+                  detail={`effectiveness ${formatPercent(driver.brake_fade_factor ?? 1)}`}
+                  tone={Number(driver.brake_fade_factor ?? 1) < 0.97 ? 'warning' : ''}
+                />
+                <ConditionMetric
+                  label="FRONT LOAD"
+                  value={`${formatNumber((Number(driver.front_normal_load_n) || 0) / 1000, 1)} kN`}
+                  detail={`transfer ${formatNumber((Number(driver.longitudinal_load_transfer_n) || 0) / 1000, 1)} kN`}
+                />
+                <ConditionMetric
+                  label="REAR LOAD"
+                  value={`${formatNumber((Number(driver.rear_normal_load_n) || 0) / 1000, 1)} kN`}
+                  detail={`grip use ${formatPercent(driver.grip_utilization)}`}
+                />
+                <ConditionMetric
+                  label="FRONT AXLE"
+                  value={axleSlipLabel(driver.front_axle_slip_ratio)}
+                  detail={`${formatNumber(driver.front_wheel_speed_rad_s, 0)} rad/s`}
+                  tone={Math.abs(Number(driver.front_axle_slip_ratio) || 0) >= 0.05 ? 'warning' : ''}
+                />
+                <ConditionMetric
+                  label="REAR AXLE"
+                  value={axleSlipLabel(driver.rear_axle_slip_ratio)}
+                  detail={`${formatNumber(driver.rear_wheel_speed_rad_s, 0)} rad/s`}
+                  tone={Math.abs(Number(driver.rear_axle_slip_ratio) || 0) >= 0.05 ? 'warning' : ''}
+                />
+              </div>
+            </div>
           </section>
 
           <SectorTimingPanel

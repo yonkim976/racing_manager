@@ -12,9 +12,12 @@ from unittest.mock import patch
 from data_loader import load_circuits, load_drivers, load_teams
 from models.schemas import (
     Circuit,
+    CircuitThermalProfile,
     RaceInfoMessage,
+    ThermalPresetName,
     TireCompound,
     TrackConditionSample,
+    TrackConditions,
     TrackWidthSample,
 )
 from simulation.incidents import Incident, IncidentCause, IncidentSeverity
@@ -43,6 +46,25 @@ from simulation.track_physics import (
 from simulation.track_surface import CAR_WHEELBASE_M
 from simulation.vehicle_dimensions import PHYSICAL_CAR_WHEELBASE_M
 from simulation.vehicle_physics import PHYSICS_STEP_SECONDS
+
+
+def _test_thermal_profile() -> CircuitThermalProfile:
+    return CircuitThermalProfile(
+        presets={
+            ThermalPresetName.COOL: TrackConditions(
+                ambient_temperature_c=24.0,
+                track_temperature_c=32.0,
+            ),
+            ThermalPresetName.NORMAL: TrackConditions(
+                ambient_temperature_c=30.0,
+                track_temperature_c=40.0,
+            ),
+            ThermalPresetName.HOT: TrackConditions(
+                ambient_temperature_c=36.0,
+                track_temperature_c=52.0,
+            ),
+        }
+    )
 
 
 class SimulationFoundationBaselineTests(unittest.TestCase):
@@ -350,6 +372,7 @@ class SimulationFoundationBaselineTests(unittest.TestCase):
                 country="Test",
                 base_lap_time=60.0,
                 track_length_m=2.0 * pi * render_radius,
+                thermal_profile=_test_thermal_profile(),
                 track_coords=points,
             )
 

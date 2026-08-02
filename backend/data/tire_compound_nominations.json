@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "ruleset": "2026_C1_C5",
+  "circuits": [
+    {
+      "circuit_id": 3,
+      "hard": "C1",
+      "medium": "C2",
+      "soft": "C3",
+      "source_class": "derived_mapping",
+      "source_url": "https://www.formula1.com/en/latest/article/what-tyres-will-the-teams-and-drivers-have-for-the-2025-bahrain-grand-prix.7gnHbNpm0OJQIjPqsWoyof",
+      "status": "provisional",
+      "note": "Bahrain C1/C2/C3 migration mapping; verify against the target season nomination before final approval."
+    },
+    {
+      "circuit_id": 4,
+      "hard": "C2",
+      "medium": "C3",
+      "soft": "C4",
+      "source_class": "game_calibration_provisional",
+      "source_url": "https://press.pirelli.com/the-range-of-compounds-for-the-2026-season-has-been-set/",
+      "status": "provisional",
+      "note": "Initial provisional nomination pending event-specific official confirmation."
+    },
+    {
+      "circuit_id": 5,
+      "hard": "C1",
+      "medium": "C2",
+      "soft": "C3",
+      "source_class": "game_calibration_provisional",
+      "source_url": "https://press.pirelli.com/the-range-of-compounds-for-the-2026-season-has-been-set/",
+      "status": "provisional",
+      "note": "Initial provisional nomination pending event-specific official confirmation."
+    },
+    {
+      "circuit_id": 6,
+      "hard": "C1",
+      "medium": "C2",
+      "soft": "C3",
+      "source_class": "game_calibration_provisional",
+      "source_url": "https://press.pirelli.com/the-range-of-compounds-for-the-2026-season-has-been-set/",
+      "status": "provisional",
+      "note": "Initial provisional nomination pending event-specific official confirmation."
+    },
+    {
+      "circuit_id": 7,
+      "hard": "C2",
+      "medium": "C3",
+      "soft": "C4",
+      "source_class": "game_calibration_provisional",
+      "source_url": "https://press.pirelli.com/the-range-of-compounds-for-the-2026-season-has-been-set/",
+      "status": "provisional",
+      "note": "Initial provisional nomination pending event-specific official confirmation."
+    },
+    {
+      "circuit_id": 8,
+      "hard": "C3",
+      "medium": "C4",
+      "soft": "C5",
+      "source_class": "game_calibration_provisional",
+      "source_url": "https://press.pirelli.com/the-range-of-compounds-for-the-2026-season-has-been-set/",
+      "status": "provisional",
+      "note": "Initial provisional nomination pending event-specific official confirmation."
+    },
+    {
+      "circuit_id": 9,
+      "hard": "C3",
+      "medium": "C4",
+      "soft": "C5",
+      "source_class": "game_calibration_provisional",
+      "source_url": "https://press.pirelli.com/the-range-of-compounds-for-the-2026-season-has-been-set/",
+      "status": "provisional",
+      "note": "Initial provisional nomination pending event-specific official confirmation."
+    },
+    {
+      "circuit_id": 10,
+      "hard": "C2",
+      "medium": "C3",
+      "soft": "C4",
+      "source_class": "game_calibration_provisional",
+      "source_url": "https://press.pirelli.com/the-range-of-compounds-for-the-2026-season-has-been-set/",
+      "status": "provisional",
+      "note": "Initial provisional nomination pending event-specific official confirmation."
+    },
+    {
+      "circuit_id": 11,
+      "hard": "C1",
+      "medium": "C2",
+      "soft": "C3",
+      "source_class": "game_calibration_provisional",
+      "source_url": "https://press.pirelli.com/the-range-of-compounds-for-the-2026-season-has-been-set/",
+      "status": "provisional",
+      "note": "Initial provisional nomination pending event-specific official confirmation."
+    }
+  ]
+}

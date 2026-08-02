@@ -36,12 +36,7 @@
 }
 
 .three-track__performance {
-  min-width: 150px;
-  color: #61dafb;
-  font-size: 0.54rem;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
+  display: none;
 }
 
 .three-track__labels {

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { weekendTireOptionsForNomination } from '../raceSetupContract';
 import './StrategyPanel.css';
 
-const TIRE_OPTIONS = ['SOFT', 'MEDIUM', 'HARD'];
 const PACE_MODES = [
   { value: 'CONSERVE', label: 'SAVE' },
   { value: 'STANDARD', label: 'STD' },
@@ -18,6 +18,10 @@ function wearColor(wear) {
 
 function tireLifePercent(wear) {
   return Math.max(0, Math.round((1 - Math.min(wear || 0, 1)) * 100));
+}
+
+function formatTireLabel(role, physicalCompound) {
+  return physicalCompound ? `${role} · ${physicalCompound}` : role;
 }
 
 function tireColor(compound) {
@@ -42,7 +46,7 @@ function formatDelta(seconds) {
 }
 
 function formatLapPointTitle(lap) {
-  return `Lap ${lap.lap} · ${formatLapTime(lap.lap_time)} · ${lap.tire_compound}${lap.pit_stop ? ' · PIT' : ''}`;
+  return `Lap ${lap.lap} · ${formatLapTime(lap.lap_time)} · ${formatTireLabel(lap.tire_role || lap.tire_compound, lap.physical_tire_compound)}${lap.pit_stop ? ' · PIT' : ''}`;
 }
 
 function averageLapTime(laps) {
@@ -60,10 +64,12 @@ function buildStints(laps) {
   laps.forEach((lap) => {
     let stint = stints.find((item) => item.stint === lap.stint);
     if (!stint) {
-      stint = {
-        stint: lap.stint,
-        tire_compound: lap.tire_compound,
-        laps: [],
+        stint = {
+          stint: lap.stint,
+          tire_compound: lap.tire_compound,
+          tire_role: lap.tire_role || lap.tire_compound,
+          physical_tire_compound: lap.physical_tire_compound,
+          laps: [],
       };
       stints.push(stint);
     }
@@ -196,7 +202,7 @@ function DriverLapStats({ driver }) {
                           style={{ backgroundColor: tireColor(stint.tire_compound) }}
                         />
                         <span>ST{stint.stint}</span>
-                        <span>{stint.tire_compound}</span>
+                        <span>{formatTireLabel(stint.tire_role, stint.physical_tire_compound)}</span>
                         <span>L{firstLap.lap}-{lastLap.lap}</span>
                         <strong>{formatLapTime(stintBest.lap_time)}</strong>
                       </div>
@@ -220,7 +226,7 @@ function DriverLapStats({ driver }) {
                     <span>{lap.lap}</span>
                     <span>
                       <i style={{ backgroundColor: tireColor(lap.tire_compound) }} />
-                      {lap.tire_compound}
+                      {formatTireLabel(lap.tire_role || lap.tire_compound, lap.physical_tire_compound)}
                       {lap.pit_stop && <b>PIT</b>}
                     </span>
                     <span>{formatLapTime(lap.lap_time)}</span>
@@ -236,7 +242,13 @@ function DriverLapStats({ driver }) {
   );
 }
 
-export default function StrategyPanel({ drivers, pitWindowOpen = false, onPitCall, onPaceModeChange }) {
+export default function StrategyPanel({
+  drivers,
+  tireNomination = null,
+  pitWindowOpen = false,
+  onPitCall,
+  onPaceModeChange,
+}) {
   const [tireChoices, setTireChoices] = useState({});
   const [statsDriverId, setStatsDriverId] = useState(null);
 
@@ -266,6 +278,8 @@ export default function StrategyPanel({ drivers, pitWindowOpen = false, onPitCal
     () => drivers?.find((driver) => driver.driver_id === statsDriverId) || null,
     [drivers, statsDriverId],
   );
+
+  const tireOptions = weekendTireOptionsForNomination(tireNomination);
 
   if (!drivers || drivers.length === 0) {
     return (
@@ -365,7 +379,9 @@ export default function StrategyPanel({ drivers, pitWindowOpen = false, onPitCal
           </div>
 
           <div className="strategy-driver__tire-row">
-            <span className="strategy-driver__compound">{driver.tire_compound}</span>
+            <span className="strategy-driver__compound">
+              {formatTireLabel(driver.tire_role || driver.tire_compound, driver.physical_tire_compound)}
+            </span>
             <span className="strategy-driver__age">{driver.tire_age} laps</span>
             <span
               className="strategy-driver__life"
@@ -439,8 +455,10 @@ export default function StrategyPanel({ drivers, pitWindowOpen = false, onPitCal
               }
               disabled={driver.in_pit || driver.retired}
             >
-              {TIRE_OPTIONS.map((t) => (
-                <option key={t} value={t}>{t}</option>
+              {tireOptions.map((option) => (
+                <option key={option.role} value={option.role}>
+                  {formatTireLabel(option.role, option.physicalCompound)}
+                </option>
               ))}
             </select>
 

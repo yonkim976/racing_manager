@@ -2,25 +2,57 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+import hmac
 import logging
+import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from data_loader import enrich_drivers, load_circuits, load_drivers, load_teams
-from models.schemas import Circuit, QualifyingRequest, QualifyingResponse, RaceSetupRequest, RaceSetupResponse
+from data_loader import (
+    enrich_drivers,
+    load_circuits,
+    load_drivers,
+    load_teams,
+    resolve_circuit_thermal_conditions,
+)
+from desktop_diagnostics import desktop_mode_enabled, desktop_token, process_metrics
+from models.schemas import (
+    Circuit,
+    QualifyingRequest,
+    QualifyingResponse,
+    RaceSetupRequest,
+    RaceSetupResponse,
+)
 from session import session_manager
 from simulation.qualifying import run_qualifying
 from simulation.track_compiler import compile_circuit_layout
 from simulation.track_geometry import validate_circuit_geometry_detailed
 
-FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+FRONTEND_DIST = Path(
+    os.getenv(
+        "F1_FRONTEND_DIST",
+        str(Path(__file__).resolve().parent.parent / "frontend" / "dist"),
+    )
+).resolve()
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="F1 Race Manager", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    logger.info("FastAPI sidecar starting pid=%s desktop=%s", os.getpid(), desktop_mode_enabled())
+    try:
+        yield
+    finally:
+        await session_manager.clear_async()
+        logger.info("FastAPI sidecar shutdown complete pid=%s", os.getpid())
+
+
+app = FastAPI(title="F1 Race Manager", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -73,6 +105,16 @@ def run_qualifying_session(request: QualifyingRequest):
     if player_team is None:
         raise HTTPException(status_code=400, detail=f"Team {request.player_team_id} not found")
 
+    try:
+        track_conditions, thermal_preset, conditions_source = (
+            resolve_circuit_thermal_conditions(
+                circuit,
+                thermal_preset=request.thermal_preset,
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     team_map = {team.id: team for team in _teams}
     return run_qualifying(
         circuit=circuit,
@@ -80,6 +122,10 @@ def run_qualifying_session(request: QualifyingRequest):
         teams=team_map,
         player_team=player_team,
         attempt_laps=request.attempt_laps,
+        track_conditions=track_conditions,
+        thermal_preset=thermal_preset,
+        track_conditions_source=conditions_source,
+        tire_compound_nomination=circuit.tire_compound_nomination,
     )
 
 
@@ -100,6 +146,10 @@ async def setup_race(request: RaceSetupRequest):
         player_team=session.player_team,
         player_drivers=player_drivers,
         grid_order=session.engine.get_grid_order(),
+        track_conditions=session.engine.track_conditions,
+        thermal_preset=session.resolved_thermal_preset,
+        track_conditions_source=session.track_conditions_source,
+        tire_compound_nomination=session.circuit.tire_compound_nomination,
     )
 
 
@@ -143,7 +193,34 @@ async def race_websocket(ws: WebSocket):
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "active_session": session_manager.session is not None}
+    return {
+        "status": "ok",
+        "active_session": session_manager.session is not None,
+        "desktop_mode": desktop_mode_enabled(),
+        "pid": os.getpid(),
+    }
+
+
+def _require_desktop_token(request: Request) -> None:
+    if not desktop_mode_enabled():
+        raise HTTPException(status_code=404, detail="Desktop diagnostics are disabled")
+    expected = desktop_token()
+    received = request.headers.get("x-f1-desktop-token", "")
+    if not expected or not hmac.compare_digest(received, expected):
+        raise HTTPException(status_code=403, detail="Desktop diagnostics token required")
+
+
+@app.get("/api/desktop/diagnostics")
+def desktop_diagnostics(request: Request):
+    """Return bounded ownership and SC control facts, never raw pose/dashboard state."""
+    _require_desktop_token(request)
+    counts = session_manager.diagnostic_counts()
+    return {
+        "schema_version": 1,
+        "pid": os.getpid(),
+        "process": process_metrics(),
+        **counts,
+    }
 
 
 if FRONTEND_DIST.is_dir() and (FRONTEND_DIST / "index.html").is_file():

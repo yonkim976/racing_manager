@@ -372,6 +372,9 @@
       "speed_limit_end": 0.70,
       "side_rejoin_progress": 0.94,
       "safety_car_line_2_progress": 0.102,
+      "exit_lane_rejoin_progress": 0.122,
+      "exit_lane_merge_start": 0.55,
+      "exit_lane_speed_limit_kph": 130,
       "entry_blend": 0.018,
       "exit_blend": 0.02,
       "samples": 64
@@ -1822,24 +1825,41 @@
     "overtaking_difficulty": 0.32,
     "geo_file": "circuit_sources/red_bull_ring_osm_geo.json",
     "profile_file": "circuit_sources/red_bull_ring_track_profile_v2.json",
-    "track_width_m": 11.0,
+    "track_width_m": 12.5,
     "sectors": [
       {
         "name": "Sector 1",
         "type": "main_straight_and_uphill_climb",
-        "speed_factor": 1.06
+        "speed_factor": 1.06,
+        "start": 0.0,
+        "end": 0.28086,
+        "mini_sector_count": 9
       },
       {
         "name": "Sector 2",
         "type": "top_straights_and_hairpins",
-        "speed_factor": 1.02
+        "speed_factor": 1.02,
+        "start": 0.28086,
+        "end": 0.673139,
+        "mini_sector_count": 12
       },
       {
         "name": "Sector 3",
         "type": "downhill_sweeps",
-        "speed_factor": 0.98
+        "speed_factor": 0.98,
+        "start": 0.673139,
+        "end": 1.0,
+        "mini_sector_count": 6
       }
     ],
+    "sector_timing_source": {
+      "source": "FIA 2025 Austrian Grand Prix circuit map",
+      "source_url": "https://www.fia.com/system/files/decision-document/2025_austrian_grand_prix_-_event_notes_-_circuit_map_pit_lane_emergency_exit_map_quarantine_zone_red_zones.pdf",
+      "acquired_at": "2026-07-31",
+      "source_centerline_length_m": 4326.0,
+      "sector_lengths_m": [1215.0, 1697.0, 1414.0],
+      "method": "Normalize FIA published sector distances to progress; compiled game length remains 4318m."
+    },
     "layout_segments": [
       {
         "type": "bezier",
@@ -2143,6 +2163,9 @@
       "speed_limit_end": 0.70,
       "side_rejoin_progress": 0.94,
       "safety_car_line_2_progress": 0.119,
+      "exit_lane_rejoin_progress": 0.15,
+      "exit_lane_merge_start": 0.55,
+      "exit_lane_speed_limit_kph": 130,
       "entry_blend": 0.014,
       "exit_blend": 0.018,
       "samples": 56
@@ -2551,7 +2574,9 @@
         "HAM 20 1:04.582",
         "RUS 17 1:04.763"
       ],
-      "planner_braking_utilization": 0.3,
+      "telemetry_progress_offset": 0.019,
+      "planner_braking_utilization": 0.4,
+      "release_inward_recovery_speed_cap": true,
       "controller_sample_distance_m": 10.0,
       "racing_line_reference": [
         {

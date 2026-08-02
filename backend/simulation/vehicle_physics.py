@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import hashlib
 from math import sqrt
+import struct
 
 from simulation.speed_profile import SpeedProfile
 from simulation.vehicle_dynamics import (
     DynamicBicycleState,
+    GRAVITY_MPS2,
     MAX_ACCELERATION_MPS2,
     MAX_BRAKING_MPS2,
     MAX_SPEED_MPS as PHYSICS_MAX_SPEED_MPS,
@@ -28,6 +31,8 @@ PHYSICS_MAX_LATERAL_SPEED_MPS = 4.0
 CONTROLLER_LOOKAHEAD_M = 450.0
 CONTROLLER_SAMPLE_DISTANCE_M = 50.0
 CONTROLLER_CACHE_DISTANCE_M = 10.0
+PREDICTIVE_SPEED_CACHE_MAX_ENTRIES = 256
+CONTROLLER_SCALE_CACHE_MAX_ENTRIES = 128
 TELEMETRY_BRAKING_CURVATURE_RESERVE = 0.25
 TELEMETRY_SPEED_CEILING_BRAKING_THRESHOLD = 0.5
 RUN_WIDE_LATERAL_GRIP_THRESHOLD = 1.50
@@ -37,7 +42,23 @@ AXLE_SLIP_CLASSIFICATION_THRESHOLD_RAD = 0.16
 AXLE_SLIP_BALANCE_MARGIN_RAD = 0.025
 FOLLOWING_PREDICTIVE_DECELERATION_MPS2 = 24.0
 FOLLOWING_CONTROL_REACTION_SECONDS = 0.12
-_CONTROLLER_SCALE_CACHE: dict[tuple[float, ...], float] = {}
+_CONTROLLER_SCALE_CACHE: dict[tuple[object, ...], float] = {}
+
+
+def _speed_profile_fingerprint(profile: SpeedProfile) -> bytes:
+    """Return a collision-resistant identity for the controller input shape."""
+    digest = hashlib.blake2b(digest_size=16)
+    for values in (
+        profile.progress,
+        profile.raw_speeds_mps,
+        profile.curvatures_1pm,
+        profile.signed_curvatures_1pm,
+        profile.braking_fractions,
+    ):
+        digest.update(struct.pack("<I", len(values)))
+        if values:
+            digest.update(struct.pack(f"<{len(values)}d", *values))
+    return digest.digest()
 
 
 @dataclass(frozen=True)
@@ -71,6 +92,9 @@ class VehiclePhysicsModifiers:
     emergency_braking: bool = False
     wheelbase_m: float = 3.4
     yaw_inertia_kgm2: float = 1700.0
+    center_of_gravity_height_m: float = 0.30
+    wheel_radius_m: float = 0.36
+    front_brake_bias: float = 0.58
 
 
 @dataclass(frozen=True)
@@ -106,7 +130,21 @@ class VehiclePhysicsResult:
     rear_slip_angle_rad: float
     wheel_lock_ratio: float
     traction_slip_ratio: float
+    front_tire_slide_energy_j: float
+    rear_tire_slide_energy_j: float
     tire_slide_energy_j: float
+    rear_applied_drive_energy_j: float
+    front_applied_brake_energy_j: float
+    rear_applied_brake_energy_j: float
+    vehicle_mass_kg: float
+    front_normal_load_n: float
+    rear_normal_load_n: float
+    longitudinal_load_transfer_n: float
+    front_wheel_speed_rad_s: float
+    rear_wheel_speed_rad_s: float
+    front_axle_slip_ratio: float
+    rear_axle_slip_ratio: float
+    applied_brake_force_n: float
 
 
 class LongitudinalVehiclePhysics:
@@ -127,6 +165,7 @@ class LongitudinalVehiclePhysics:
         telemetry_braking_speed_reserve: float = 1.0,
         braking_longitudinal_grip_factor: float = 1.0,
         brake_control_error_fraction: float = 0.1,
+        release_inward_recovery_speed_cap: bool = False,
     ) -> None:
         self.profile = profile
         self.track_length_m = max(1.0, float(track_length_m))
@@ -167,6 +206,9 @@ class LongitudinalVehiclePhysics:
             0.03,
             min(0.2, float(brake_control_error_fraction)),
         )
+        self.release_inward_recovery_speed_cap = bool(
+            release_inward_recovery_speed_cap
+        )
         self._predictive_speed_cache: dict[tuple[float, ...], float] = {}
         self._predictive_track_sample_cache: dict[
             int,
@@ -182,43 +224,48 @@ class LongitudinalVehiclePhysics:
                 min(1.10, predicted_lap_time / self.reference_lap_time),
             )
             _CONTROLLER_SCALE_CACHE[scale_key] = cached_scale
+            if len(_CONTROLLER_SCALE_CACHE) > CONTROLLER_SCALE_CACHE_MAX_ENTRIES:
+                del _CONTROLLER_SCALE_CACHE[next(iter(_CONTROLLER_SCALE_CACHE))]
         self.controller_speed_scale = cached_scale
 
-    def _controller_scale_key(self) -> tuple[float, ...]:
+    def _controller_scale_key(self) -> tuple[object, ...]:
         if self.profile is None:
             return (
-                round(self.track_length_m, 3),
-                round(self.reference_lap_time, 3),
-                round(self.planner_braking_utilization, 3),
-                round(self.controller_sample_distance_m, 3),
-                round(self.controller_speed_scale_floor, 3),
-                round(self.telemetry_speed_reference_weight, 3),
-                round(TELEMETRY_BRAKING_CURVATURE_RESERVE, 3),
-                round(TELEMETRY_SPEED_CEILING_BRAKING_THRESHOLD, 3),
-                round(self.telemetry_braking_speed_reserve, 3),
-                round(self.telemetry_max_braking_utilization, 3),
-                round(self.braking_longitudinal_grip_factor, 3),
-                round(self.brake_control_error_fraction, 3),
+                self.track_length_m,
+                self.reference_lap_time,
+                self.planner_braking_utilization,
+                self.controller_sample_distance_m,
+                self.controller_speed_scale_floor,
+                self.telemetry_speed_reference_weight,
+                TELEMETRY_BRAKING_CURVATURE_RESERVE,
+                TELEMETRY_SPEED_CEILING_BRAKING_THRESHOLD,
+                self.telemetry_braking_curvature_threshold,
+                self.telemetry_braking_speed_reserve,
+                self.telemetry_max_braking_utilization,
+                self.braking_longitudinal_grip_factor,
+                self.brake_control_error_fraction,
                 0.0,
                 0.0,
             )
         return (
-            round(self.track_length_m, 3),
-            round(self.reference_lap_time, 3),
-            round(self.planner_braking_utilization, 3),
-            round(self.controller_sample_distance_m, 3),
-            round(self.controller_speed_scale_floor, 3),
-            round(self.telemetry_speed_reference_weight, 3),
-            round(TELEMETRY_BRAKING_CURVATURE_RESERVE, 3),
-            round(TELEMETRY_SPEED_CEILING_BRAKING_THRESHOLD, 3),
-            round(self.telemetry_braking_speed_reserve, 3),
-            round(self.telemetry_max_braking_utilization, 3),
-            round(self.braking_longitudinal_grip_factor, 3),
-            round(self.brake_control_error_fraction, 3),
+            self.track_length_m,
+            self.reference_lap_time,
+            self.planner_braking_utilization,
+            self.controller_sample_distance_m,
+            self.controller_speed_scale_floor,
+            self.telemetry_speed_reference_weight,
+            TELEMETRY_BRAKING_CURVATURE_RESERVE,
+            TELEMETRY_SPEED_CEILING_BRAKING_THRESHOLD,
+            self.telemetry_braking_curvature_threshold,
+            self.telemetry_braking_speed_reserve,
+            self.telemetry_max_braking_utilization,
+            self.braking_longitudinal_grip_factor,
+            self.brake_control_error_fraction,
             float(len(self.profile.progress)),
             round(sum(self.profile.curvatures_1pm), 6),
             round(sum(self.profile.raw_speeds_mps), 3),
             round(sum(self.profile.braking_fractions), 3),
+            _speed_profile_fingerprint(self.profile),
         )
 
     def _estimate_predictive_lap_time(self) -> float:
@@ -256,9 +303,16 @@ class LongitudinalVehiclePhysics:
         )
         target *= driver_utilization
         target *= max(0.2, min(1.50, modifiers.speed_limit_factor))
+        # The nominal controller floor keeps an unconstrained car moving, but
+        # a race-control ceiling is an explicit authority and may be below
+        # that floor (including a full stop during a controlled yield).
+        nominal_target = max(PHYSICS_MIN_SPEED_MPS, target)
         if modifiers.maximum_speed_mps is not None:
-            target = min(target, max(PHYSICS_MIN_SPEED_MPS, modifiers.maximum_speed_mps))
-        return max(PHYSICS_MIN_SPEED_MPS, min(PHYSICS_MAX_SPEED_MPS, target))
+            return min(
+                PHYSICS_MAX_SPEED_MPS,
+                min(nominal_target, max(0.0, modifiers.maximum_speed_mps)),
+            )
+        return min(PHYSICS_MAX_SPEED_MPS, nominal_target)
 
     def _aero_coefficients(
         self,
@@ -274,16 +328,17 @@ class LongitudinalVehiclePhysics:
         return self.profile.curvature_at_progress(progress)
 
     def _curvature_1pm(self, distance_m: float) -> float:
+        """Return geometry curvature for the physical tyre-force envelope."""
         curvature = self._raw_curvature_1pm(distance_m)
         if self.telemetry_speed_reference_weight <= 0.0 or curvature <= 1e-9:
             return curvature
 
-        # The measured envelope also calibrates the curvature consumed by the
-        # force model.  Calibrating only the controller target lets a car aim
-        # for a real-world speed while the handling model still believes that
-        # speed exceeds available lateral force, producing artificial
-        # understeer.  v_limit is proportional to sqrt(1 / curvature), so the
-        # squared speed ratio is the matching empirical curvature correction.
+        # Telemetry may relax a sampled line curvature that would make an
+        # observed speed physically impossible, but it must never make the
+        # geometry tighter.  A low measured speed can be caused by braking or
+        # by acceleration history after an apex.  Treating either as curvature
+        # evidence consumed lateral grip twice and kept cars artificially slow
+        # through linked exits such as Red Bull Ring T4-T8.
         assert self.profile is not None
         progress = (distance_m / self.track_length_m) % 1.0
         measured_speed = self.profile.raw_speed_at_progress(progress)
@@ -297,13 +352,53 @@ class LongitudinalVehiclePhysics:
             curvature,
             VehiclePhysicsModifiers(),
         )
+        # Keep a braking reserve so the same tyre envelope can still provide
+        # longitudinal deceleration. Outside a braking sample the neutral
+        # geometry remains the lower bound for calibration speed, which is
+        # equivalent to forbidding telemetry from increasing curvature.
+        calibration_speed = max(
+            neutral_limit,
+            measured_speed
+            * (
+                1.0
+                + TELEMETRY_BRAKING_CURVATURE_RESERVE
+                * (
+                    braking_fraction
+                    if braking_fraction
+                    >= self.telemetry_braking_curvature_threshold
+                    else 0.0
+                )
+            ),
+        )
+        speed_ratio = max(
+            0.15,
+            min(3.00, calibration_speed / max(1.0, neutral_limit)),
+        )
+        curvature_scale = 1.0 + self.telemetry_speed_reference_weight * (
+            speed_ratio * speed_ratio - 1.0
+        )
+        return curvature / max(0.25, curvature_scale)
+
+    def _controller_curvature_1pm(self, distance_m: float) -> float:
+        """Return empirical curvature used only by the target-speed planner.
+
+        The planner may use a low measured speed to shape its desired-speed
+        envelope. The physical force solver must not consume that inferred
+        curvature a second time.
+        """
+        curvature = self._raw_curvature_1pm(distance_m)
+        if self.telemetry_speed_reference_weight <= 0.0 or curvature <= 1e-9:
+            return curvature
+        assert self.profile is not None
+        progress = (distance_m / self.track_length_m) % 1.0
+        measured_speed = self.profile.raw_speed_at_progress(progress)
+        braking_fraction = self.profile.braking_fraction_at_progress(progress)
+        neutral_limit = lateral_speed_limit_mps(
+            curvature,
+            VehiclePhysicsModifiers(),
+        )
         calibration_speed = measured_speed
         if braking_fraction >= self.telemetry_braking_curvature_threshold:
-            # In a braking sample, only use telemetry to *relax* a centerline
-            # curvature that would make the measured speed impossible.  Keep
-            # a braking reserve so the same tyre envelope can still provide
-            # longitudinal deceleration; never tighten geometry merely because
-            # the driver is slowing for the next apex.
             calibration_speed = max(
                 neutral_limit,
                 measured_speed
@@ -363,7 +458,7 @@ class LongitudinalVehiclePhysics:
         if cached is not None:
             return cached
         sample_distance_m = distance_bin * CONTROLLER_CACHE_DISTANCE_M
-        curvature = self._curvature_1pm(sample_distance_m)
+        curvature = self._controller_curvature_1pm(sample_distance_m)
         if self.profile is None:
             result = (curvature, PHYSICS_MAX_SPEED_MPS, 0.0)
         else:
@@ -412,6 +507,10 @@ class LongitudinalVehiclePhysics:
         )
         cached = self._predictive_speed_cache.get(cache_key)
         if cached is not None:
+            # Keep recently used fuel/tyre/brake combinations hot without
+            # retaining every 10 m state from every lap for the whole race.
+            self._predictive_speed_cache.pop(cache_key)
+            self._predictive_speed_cache[cache_key] = cached
             return cached
 
         sample_count = int(
@@ -494,6 +593,13 @@ class LongitudinalVehiclePhysics:
             )
             speed_limits[index] = min(speed_limits[index], braking_limit)
         self._predictive_speed_cache[cache_key] = speed_limits[0]
+        if (
+            len(self._predictive_speed_cache)
+            > PREDICTIVE_SPEED_CACHE_MAX_ENTRIES
+        ):
+            del self._predictive_speed_cache[
+                next(iter(self._predictive_speed_cache))
+            ]
         return speed_limits[0]
 
     def advance(
@@ -573,7 +679,26 @@ class LongitudinalVehiclePhysics:
         rear_slip_angle_rad = 0.0
         wheel_lock_ratio = 0.0
         traction_slip_ratio = 0.0
-        tire_slide_energy_j = 0.0
+        front_tire_slide_energy_j = 0.0
+        rear_tire_slide_energy_j = 0.0
+        rear_applied_drive_energy_j = 0.0
+        front_applied_brake_energy_j = 0.0
+        rear_applied_brake_energy_j = 0.0
+        vehicle_mass_kg = max(1.0, modifiers.mass_kg)
+        static_front_share = max(0.35, min(0.65, modifiers.front_aero_share))
+        front_normal_load_n = (
+            vehicle_mass_kg * GRAVITY_MPS2 * static_front_share
+        )
+        rear_normal_load_n = (
+            vehicle_mass_kg * GRAVITY_MPS2 - front_normal_load_n
+        )
+        longitudinal_load_transfer_n = 0.0
+        wheel_radius_m = max(0.20, modifiers.wheel_radius_m)
+        front_wheel_speed_rad_s = speed / wheel_radius_m
+        rear_wheel_speed_rad_s = speed / wheel_radius_m
+        front_axle_slip_ratio = 0.0
+        rear_axle_slip_ratio = 0.0
+        applied_brake_force_n = 0.0
 
         for _ in range(step_count):
             step = PHYSICS_STEP_SECONDS
@@ -587,10 +712,29 @@ class LongitudinalVehiclePhysics:
                     <= nominal_maximum_lateral_offset_m
                 )
             )
-            if outside_nominal_track:
+            moving_farther_outside = bool(
+                nominal_minimum_lateral_offset_m is not None
+                and nominal_maximum_lateral_offset_m is not None
+                and (
+                    (
+                        lateral_offset < nominal_minimum_lateral_offset_m
+                        and lateral_speed < 0.0
+                    )
+                    or (
+                        lateral_offset > nominal_maximum_lateral_offset_m
+                        and lateral_speed > 0.0
+                    )
+                )
+            )
+            if outside_nominal_track and (
+                moving_farther_outside
+                or not self.release_inward_recovery_speed_cap
+            ):
                 # A real driver lifts while recovering across the white line;
-                # continuing to chase the normal exit-speed target compounds
-                # wheelspin and can keep an otherwise clean car off track.
+                # continuing to accelerate while still moving outward compounds
+                # the excursion. Once the car is moving back toward the track,
+                # however, repeatedly subtracting 3 m/s from the target can
+                # brake a clean recovery all the way to the 64.8 km/h floor.
                 target = min(target, max(PHYSICS_MIN_SPEED_MPS, speed - 3.0))
             leader_distance = None
             if following is not None:
@@ -655,15 +799,14 @@ class LongitudinalVehiclePhysics:
                     modifiers,
                 )
                 raw_drive_request_n = power_limited_force_n * throttle
-                # A clean standard lap should not visibly break traction at
-                # every apex. The small overdrive represents the driver's
-                # throttle modulation error and grows only for the very
-                # highest pace requests; true low-grip/attack situations can
-                # still exceed the rear-axle envelope.
+                # Preserve a small, controlled amount of rear slip on a clean
+                # attack lap without crossing the visible traction-loss band.
+                # Explicit input error still pushes the request beyond the
+                # rear-axle envelope and produces genuine wheelspin.
                 traction_overdrive = min(
                     0.35,
-                    0.06
-                    + max(0.0, modifiers.pace - 1.03) * 1.25
+                    0.045
+                    + max(0.0, modifiers.pace - 1.03) * 0.90
                     + max(0.0, modifiers.throttle_modulation_error),
                 )
                 controlled_drive_limit_n = traction_limited_force_n * (
@@ -702,11 +845,15 @@ class LongitudinalVehiclePhysics:
                     requested_drive_force_n,
                     post_peak_traction_force_n,
                 )
-                tire_slide_energy_j += max(
+                rear_tire_slide_energy_j += max(
                     0.0,
                     requested_drive_force_n - longitudinal_force_n,
                 ) * speed * step
+                rear_applied_drive_energy_j += (
+                    max(0.0, longitudinal_force_n) * speed * step
+                )
                 applied_drive_force_n = longitudinal_force_n
+                applied_brake_force_n = 0.0
                 acceleration = max(
                     -MAX_BRAKING_MPS2,
                     min(
@@ -777,11 +924,8 @@ class LongitudinalVehiclePhysics:
                     requested_brake_force_n,
                     post_peak_brake_force_n,
                 )
-                tire_slide_energy_j += max(
-                    0.0,
-                    requested_brake_force_n - longitudinal_force_n,
-                ) * speed * step
                 applied_drive_force_n = 0.0
+                applied_brake_force_n = longitudinal_force_n
                 acceleration = max(
                     -MAX_BRAKING_MPS2,
                     -(
@@ -799,6 +943,122 @@ class LongitudinalVehiclePhysics:
                     acceleration
                     - max(0.0, modifiers.surface_drag_deceleration_mps2),
                 ),
+            )
+
+            # Quasi-static longitudinal load transfer.  This keeps the stable
+            # track-relative body model while making axle loads and slip
+            # respond to the actual acceleration solved in this 20 ms step.
+            vehicle_mass_kg = mass_kg
+            static_front_load_n = (
+                mass_kg * GRAVITY_MPS2 * static_front_share
+                + envelope.downforce_n * modifiers.front_aero_share
+            )
+            static_rear_load_n = envelope.normal_force_n - static_front_load_n
+            longitudinal_load_transfer_n = (
+                -mass_kg
+                * acceleration
+                * max(0.05, modifiers.center_of_gravity_height_m)
+                / max(1.0, modifiers.wheelbase_m)
+            )
+            minimum_axle_load_n = envelope.normal_force_n * 0.10
+            front_normal_load_n = max(
+                minimum_axle_load_n,
+                min(
+                    envelope.normal_force_n - minimum_axle_load_n,
+                    static_front_load_n + longitudinal_load_transfer_n,
+                ),
+            )
+            rear_normal_load_n = envelope.normal_force_n - front_normal_load_n
+
+            road_wheel_speed_rad_s = speed / wheel_radius_m
+            front_axle_slip_ratio = 0.0
+            rear_axle_slip_ratio = 0.0
+            if brake > 0.0:
+                front_bias = max(0.50, min(0.68, modifiers.front_brake_bias))
+                total_normal_load_n = max(
+                    1.0,
+                    front_normal_load_n + rear_normal_load_n,
+                )
+                front_capacity_n = (
+                    available_brake_force_n
+                    * front_normal_load_n
+                    / total_normal_load_n
+                )
+                rear_capacity_n = (
+                    available_brake_force_n
+                    * rear_normal_load_n
+                    / total_normal_load_n
+                )
+                total_brake_request_n = requested_brake_force_n
+                front_brake_request_n = total_brake_request_n * front_bias
+                rear_brake_request_n = total_brake_request_n * (1.0 - front_bias)
+                front_lock = max(
+                    0.0,
+                    (
+                        front_brake_request_n - front_capacity_n
+                    ) / max(1.0, front_capacity_n),
+                )
+                rear_lock = max(
+                    0.0,
+                    (
+                        rear_brake_request_n - rear_capacity_n
+                    ) / max(1.0, rear_capacity_n),
+                )
+                raw_front_applied_brake_force_n = min(
+                    front_brake_request_n,
+                    front_capacity_n,
+                )
+                raw_rear_applied_brake_force_n = min(
+                    rear_brake_request_n,
+                    rear_capacity_n,
+                )
+                raw_applied_brake_force_n = (
+                    raw_front_applied_brake_force_n
+                    + raw_rear_applied_brake_force_n
+                )
+                applied_scale = (
+                    min(
+                        1.0,
+                        longitudinal_force_n
+                        / max(1.0, raw_applied_brake_force_n),
+                    )
+                    if raw_applied_brake_force_n > 1e-9
+                    else 0.0
+                )
+                front_applied_brake_force_n = (
+                    raw_front_applied_brake_force_n * applied_scale
+                )
+                rear_applied_brake_force_n = (
+                    raw_rear_applied_brake_force_n * applied_scale
+                )
+                front_tire_slide_energy_j += max(
+                    0.0,
+                    front_brake_request_n - front_applied_brake_force_n,
+                ) * speed * step
+                rear_tire_slide_energy_j += max(
+                    0.0,
+                    rear_brake_request_n - rear_applied_brake_force_n,
+                ) * speed * step
+                front_applied_brake_energy_j += (
+                    front_applied_brake_force_n * speed * step
+                )
+                rear_applied_brake_energy_j += (
+                    rear_applied_brake_force_n * speed * step
+                )
+                if max(front_lock, rear_lock) < wheel_lock_ratio:
+                    if front_lock >= rear_lock:
+                        front_lock = wheel_lock_ratio
+                    else:
+                        rear_lock = wheel_lock_ratio
+                front_axle_slip_ratio = -min(1.0, front_lock)
+                rear_axle_slip_ratio = -min(1.0, rear_lock)
+            elif throttle > 0.0:
+                rear_axle_slip_ratio = min(2.0, traction_slip_ratio)
+            front_wheel_speed_rad_s = road_wheel_speed_rad_s * (
+                1.0 + front_axle_slip_ratio
+            )
+            rear_wheel_speed_rad_s = road_wheel_speed_rad_s * (
+                1.0 + rear_axle_slip_ratio
             )
 
             normalized_longitudinal_force_n = (
@@ -895,6 +1155,7 @@ class LongitudinalVehiclePhysics:
                 maximum_tire_force_n=available_lateral_force_n,
                 front_force_share=modifiers.front_aero_share,
                 grip_factor=modifiers.grip * modifiers.mechanical_grip,
+                nominal_tire_force_n=maximum_tire_force_n,
                 # Tyre-force saturation in the bicycle model already creates
                 # the physical run-wide motion.  The former point-mass model's
                 # extra scripted drift would count the same loss twice.
@@ -1009,5 +1270,21 @@ class LongitudinalVehiclePhysics:
             rear_slip_angle_rad=rear_slip_angle_rad,
             wheel_lock_ratio=wheel_lock_ratio,
             traction_slip_ratio=traction_slip_ratio,
-            tire_slide_energy_j=tire_slide_energy_j,
+            front_tire_slide_energy_j=front_tire_slide_energy_j,
+            rear_tire_slide_energy_j=rear_tire_slide_energy_j,
+            tire_slide_energy_j=(
+                front_tire_slide_energy_j + rear_tire_slide_energy_j
+            ),
+            rear_applied_drive_energy_j=rear_applied_drive_energy_j,
+            front_applied_brake_energy_j=front_applied_brake_energy_j,
+            rear_applied_brake_energy_j=rear_applied_brake_energy_j,
+            vehicle_mass_kg=vehicle_mass_kg,
+            front_normal_load_n=front_normal_load_n,
+            rear_normal_load_n=rear_normal_load_n,
+            longitudinal_load_transfer_n=longitudinal_load_transfer_n,
+            front_wheel_speed_rad_s=front_wheel_speed_rad_s,
+            rear_wheel_speed_rad_s=rear_wheel_speed_rad_s,
+            front_axle_slip_ratio=front_axle_slip_ratio,
+            rear_axle_slip_ratio=rear_axle_slip_ratio,
+            applied_brake_force_n=applied_brake_force_n,
         )

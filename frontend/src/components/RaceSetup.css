@@ -168,6 +168,16 @@
   color: var(--text-muted);
 }
 
+.race-setup__thermal-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin-top: var(--space-sm);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .race-setup__team-color {
   position: absolute;
   right: 12px;

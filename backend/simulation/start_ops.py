@@ -6,7 +6,14 @@ same method names.  Behavior is unchanged.
 
 from __future__ import annotations
 
-from models.schemas import Driver, DriverRaceState, PaceMode, RaceEvent, TireCompound
+from models.schemas import (
+    Driver,
+    DriverRaceState,
+    DryTireRole,
+    PaceMode,
+    RaceEvent,
+    TireCompound,
+)
 from simulation.car_performance import car_performance_factors
 from simulation.physics import driver_pace_multiplier
 from simulation.racecraft_ops import MANEUVER_CLEARANCE_MARGIN_M
@@ -81,6 +88,11 @@ class StartOpsMixin:
             team = self.teams[driver.team_id]
             car_factors = car_performance_factors(team)
             starting_compound = self.starting_tires.get(driver.id, TireCompound.MEDIUM)
+            physical_compound = self.physical_compound_for_role(starting_compound)
+            try:
+                tire_role = DryTireRole(starting_compound.value)
+            except ValueError:
+                tire_role = DryTireRole.MEDIUM
             if self.start_sequence_enabled:
                 grid_distance_m = (
                     GRID_POLE_DISTANCE_BEHIND_LINE_M
@@ -101,7 +113,7 @@ class StartOpsMixin:
                     grid_progress,
                     car_factors,
                     driver_pace_multiplier(driver.stats.pace),
-                    starting_compound,
+                    physical_compound,
                 )
             self._grid_start_progress[driver.id] = grid_progress
             self._grid_lateral_offsets[driver.id] = grid_lateral_offset_m
@@ -111,7 +123,7 @@ class StartOpsMixin:
                 * self.total_laps
                 * FUEL_LOAD_RESERVE_FACTOR,
             )
-            blanket_temperature_c = tire_blanket_temperature_c(starting_compound)
+            blanket_temperature_c = tire_blanket_temperature_c(physical_compound)
             self.driver_states[driver.id] = DriverRaceState(
                 driver_id=driver.id,
                 position=position,
@@ -119,6 +131,8 @@ class StartOpsMixin:
                 current_lap=0,
                 total_progress=grid_progress,
                 tire_compound=starting_compound,
+                tire_role=tire_role,
+                physical_tire_compound=physical_compound,
                 tire_age=0,
                 tire_wear=0.0,
                 gap_to_leader=0.0,
@@ -137,6 +151,10 @@ class StartOpsMixin:
                 wheelbase_m=PHYSICAL_CAR_WHEELBASE_M,
                 tire_surface_temperature_c=blanket_temperature_c,
                 tire_core_temperature_c=blanket_temperature_c,
+                front_tire_surface_temperature_c=blanket_temperature_c,
+                front_tire_core_temperature_c=blanket_temperature_c,
+                rear_tire_surface_temperature_c=blanket_temperature_c,
+                rear_tire_core_temperature_c=blanket_temperature_c,
                 fuel_mass_kg=initial_fuel_mass_kg,
                 fuel_laps_remaining=(
                     initial_fuel_mass_kg / self._expected_fuel_per_lap_kg()

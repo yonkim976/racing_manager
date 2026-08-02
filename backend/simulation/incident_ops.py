@@ -61,6 +61,8 @@ HAZARD_EVASIVE_LATERAL_ACCELERATION_MPS2 = 4.0
 HAZARD_EVASIVE_TIME_BUFFER_SECONDS = 0.5
 HAZARD_CLUSTER_LONGITUDINAL_GAP_M = 12.0
 HAZARD_BLOCKED_CLEAR_SECONDS = 5.0
+HAZARD_RECOVERY_GRACE_SECONDS = 2.0
+HAZARD_RECOVERY_RELEASE_SPEED_KPH = 12.0
 
 
 @dataclass
@@ -86,6 +88,10 @@ class IncidentOpsMixin:
         self._contact_display_remaining: dict[int, float] = {}
         self._hazard_tail_targets: dict[int, tuple[int, float]] = {}
         self._hazard_activated_at: dict[int, float] = {}
+        self._hazard_recovery_until: dict[int, float] = {}
+
+    def _hazard_recovery_active(self, state: DriverRaceState) -> bool:
+        return self._hazard_recovery_until.get(state.driver_id, 0.0) > self.race_elapsed
 
     def _active_stopped_hazards(self) -> list[DriverRaceState]:
         return [
@@ -788,6 +794,9 @@ class IncidentOpsMixin:
                 del self._physical_handling_event_cooldown[driver_id]
             else:
                 self._physical_handling_event_cooldown[driver_id] = remaining
+        for driver_id, until in list(self._hazard_recovery_until.items()):
+            if until <= self.race_elapsed:
+                del self._hazard_recovery_until[driver_id]
         for key, remaining in list(self._collision_pair_cooldown.items()):
             remaining -= delta
             if remaining <= 0.0:
@@ -1341,6 +1350,22 @@ class IncidentOpsMixin:
                 and not blocked_clearance
             ):
                 continue
+            recovery_until = self.race_elapsed + HAZARD_RECOVERY_GRACE_SECONDS
+            for state in running:
+                if (
+                    self._physical_track_distance_m(hazard, state)
+                    <= HAZARD_DETECTION_DISTANCE_M
+                ):
+                    self._hazard_recovery_until[state.driver_id] = max(
+                        self._hazard_recovery_until.get(state.driver_id, 0.0),
+                        recovery_until,
+                    )
+                    if state.speed_kph < 5.0:
+                        # A blocked cluster can leave the last cars at zero
+                        # after the hazard is neutralized.  Give the bounded
+                        # recovery controller a rolling start; this changes no
+                        # position and expires with the recovery grace period.
+                        state.speed_kph = HAZARD_RECOVERY_RELEASE_SPEED_KPH
             hazard.hazard_active = False
             hazard.vehicle_status = "cleared"
             self._hazard_tail_targets.pop(hazard.driver_id, None)

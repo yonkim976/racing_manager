@@ -19,6 +19,9 @@ DYNAMIC_BICYCLE_MAX_STEERING_RAD = 0.35
 DYNAMIC_BICYCLE_MAX_CONTROLLED_HEADING_ERROR_RAD = 0.105
 DYNAMIC_BICYCLE_FRONT_CORNERING_STIFFNESS_NPRAD = 90000.0
 DYNAMIC_BICYCLE_REAR_CORNERING_STIFFNESS_NPRAD = 105000.0
+DYNAMIC_BICYCLE_AERO_LOAD_STIFFNESS_EXPONENT = 0.65
+DYNAMIC_BICYCLE_MAX_AERO_LOAD_STIFFNESS_SCALE = 2.5
+DYNAMIC_BICYCLE_YAW_RATE_RELAXATION_PER_SECOND = 18.0
 
 
 class VehicleDynamicsParameters(Protocol):
@@ -97,6 +100,7 @@ def advance_dynamic_bicycle(
     maximum_tire_force_n: float,
     front_force_share: float,
     grip_factor: float,
+    nominal_tire_force_n: float | None = None,
     external_lateral_acceleration_mps2: float = 0.0,
 ) -> DynamicBicycleResult:
     """Advance a linear dynamic bicycle model in track-relative coordinates.
@@ -160,7 +164,33 @@ def advance_dynamic_bicycle(
         speed,
     )
 
-    stiffness_scale = _clamp(grip_factor, 0.45, 1.35)
+    # Cornering stiffness grows with vertical load, but more slowly than the
+    # available lateral force because pneumatic tyres are load-sensitive.  A
+    # fixed static-load stiffness made a high-downforce car require excessive
+    # body sideslip even while it still had ample force capacity.  That drove
+    # the track-relative heading controller into its safety clamp and caused
+    # the car to drift away from an otherwise feasible constant-radius path.
+    #
+    # Use the nominal force envelope here, not the force left after braking or
+    # traction demand.  Combined-slip demand reduces the force that can be
+    # applied, but does not instantly remove the tyre's vertical-load-derived
+    # cornering stiffness.
+    effective_grip_factor = _clamp(grip_factor, 0.45, 1.35)
+    static_tire_force_n = (
+        mass * GRAVITY_MPS2 * BASE_TYRE_FRICTION * effective_grip_factor
+    )
+    load_force_n = (
+        float(nominal_tire_force_n)
+        if nominal_tire_force_n is not None
+        else float(maximum_tire_force_n)
+    )
+    aero_load_ratio = max(1.0, load_force_n / max(1.0, static_tire_force_n))
+    aero_load_stiffness_scale = _clamp(
+        aero_load_ratio ** DYNAMIC_BICYCLE_AERO_LOAD_STIFFNESS_EXPONENT,
+        1.0,
+        DYNAMIC_BICYCLE_MAX_AERO_LOAD_STIFFNESS_SCALE,
+    )
+    stiffness_scale = effective_grip_factor * aero_load_stiffness_scale
     front_force_n = (
         DYNAMIC_BICYCLE_FRONT_CORNERING_STIFFNESS_NPRAD
         * stiffness_scale
@@ -193,7 +223,7 @@ def advance_dynamic_bicycle(
     # contact patches, steering compliance and differential response).  A
     # bounded yaw relaxation represents those sources and prevents the linear
     # tyre approximation from becoming non-physical after force saturation.
-    yaw_acceleration_rad_s2 -= 18.0 * (
+    yaw_acceleration_rad_s2 -= DYNAMIC_BICYCLE_YAW_RATE_RELAXATION_PER_SECOND * (
         state.yaw_rate_rad_s - desired_yaw_rate_rad_s
     )
     yaw_acceleration_rad_s2 = _clamp(yaw_acceleration_rad_s2, -18.0, 18.0)

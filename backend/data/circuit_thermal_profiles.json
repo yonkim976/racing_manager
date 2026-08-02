@@ -1,0 +1,83 @@
+[
+  {
+    "circuit_id": 3,
+    "default_preset": "NORMAL",
+    "presets": {
+      "COOL": {"ambient_temperature_c": 24.0, "track_temperature_c": 32.0},
+      "NORMAL": {"ambient_temperature_c": 30.0, "track_temperature_c": 40.0},
+      "HOT": {"ambient_temperature_c": 36.0, "track_temperature_c": 52.0}
+    }
+  },
+  {
+    "circuit_id": 4,
+    "default_preset": "NORMAL",
+    "presets": {
+      "COOL": {"ambient_temperature_c": 10.0, "track_temperature_c": 18.0},
+      "NORMAL": {"ambient_temperature_c": 18.0, "track_temperature_c": 30.0},
+      "HOT": {"ambient_temperature_c": 28.0, "track_temperature_c": 48.0}
+    }
+  },
+  {
+    "circuit_id": 5,
+    "default_preset": "NORMAL",
+    "presets": {
+      "COOL": {"ambient_temperature_c": 12.0, "track_temperature_c": 20.0},
+      "NORMAL": {"ambient_temperature_c": 20.0, "track_temperature_c": 32.0},
+      "HOT": {"ambient_temperature_c": 28.0, "track_temperature_c": 45.0}
+    }
+  },
+  {
+    "circuit_id": 6,
+    "default_preset": "NORMAL",
+    "presets": {
+      "COOL": {"ambient_temperature_c": 10.0, "track_temperature_c": 18.0},
+      "NORMAL": {"ambient_temperature_c": 18.0, "track_temperature_c": 30.0},
+      "HOT": {"ambient_temperature_c": 27.0, "track_temperature_c": 46.0}
+    }
+  },
+  {
+    "circuit_id": 7,
+    "default_preset": "NORMAL",
+    "presets": {
+      "COOL": {"ambient_temperature_c": 18.0, "track_temperature_c": 28.0},
+      "NORMAL": {"ambient_temperature_c": 27.0, "track_temperature_c": 43.0},
+      "HOT": {"ambient_temperature_c": 34.0, "track_temperature_c": 58.0}
+    }
+  },
+  {
+    "circuit_id": 8,
+    "default_preset": "NORMAL",
+    "presets": {
+      "COOL": {"ambient_temperature_c": 16.0, "track_temperature_c": 26.0},
+      "NORMAL": {"ambient_temperature_c": 24.0, "track_temperature_c": 38.0},
+      "HOT": {"ambient_temperature_c": 32.0, "track_temperature_c": 54.0}
+    }
+  },
+  {
+    "circuit_id": 9,
+    "default_preset": "NORMAL",
+    "presets": {
+      "COOL": {"ambient_temperature_c": 13.0, "track_temperature_c": 22.0},
+      "NORMAL": {"ambient_temperature_c": 20.0, "track_temperature_c": 32.0},
+      "HOT": {"ambient_temperature_c": 27.0, "track_temperature_c": 45.0}
+    }
+  },
+  {
+    "circuit_id": 10,
+    "default_preset": "NORMAL",
+    "presets": {
+      "COOL": {"ambient_temperature_c": 16.0, "track_temperature_c": 26.0},
+      "NORMAL": {"ambient_temperature_c": 24.0, "track_temperature_c": 38.0},
+      "HOT": {"ambient_temperature_c": 32.0, "track_temperature_c": 54.0}
+    }
+  },
+  {
+    "circuit_id": 11,
+    "default_preset": "NORMAL",
+    "presets": {
+      "COOL": {"ambient_temperature_c": 15.0, "track_temperature_c": 24.0},
+      "NORMAL": {"ambient_temperature_c": 23.0, "track_temperature_c": 36.0},
+      "HOT": {"ambient_temperature_c": 30.0, "track_temperature_c": 50.0}
+    }
+  }
+]

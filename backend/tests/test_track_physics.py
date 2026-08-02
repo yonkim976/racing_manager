@@ -22,6 +22,7 @@ from simulation.track_physics import (
     TRACK_EDGE_MARGIN_M,
     _TRACK_PHYSICS_CACHE,
     _VEHICLE_TRACK_PHYSICS_CACHE,
+    LIVE_TRAJECTORY_CENTER_STRIDE,
     _path_physics,
     build_track_physics_profile,
     build_vehicle_track_physics_profile,
@@ -162,6 +163,30 @@ class TrackPhysicsProfileTests(unittest.TestCase):
         )
         self.assertIsNot(rebuilt, first)
         self.assertEqual(rebuilt_signature, first_signature)
+
+    def test_red_bull_ring_live_optimizer_samples_corner_entry_apex_and_exit(self) -> None:
+        circuit = next(circuit for circuit in load_circuits() if circuit.id == 4)
+        team = next(team for team in load_teams() if team.id == 1)
+        vehicle = VehicleTrajectorySpec.from_car_performance(
+            car_performance_factors(team)
+        )
+        tire = TireTrajectorySpec.from_tire_physics(
+            TireCompound.SOFT,
+            compute_tire_physics_factors(TireCompound.SOFT, 0.0),
+        )
+
+        _VEHICLE_TRACK_PHYSICS_CACHE.clear()
+        profile = build_vehicle_track_physics_profile(circuit, vehicle, tire)
+        diagnostics = profile.optimization_diagnostics
+        self.assertIsNotNone(diagnostics)
+        assert diagnostics is not None
+        coarse_centers = (
+            len(profile.racing_line_samples) + LIVE_TRAJECTORY_CENTER_STRIDE - 1
+        ) // LIVE_TRAJECTORY_CENTER_STRIDE
+        self.assertGreater(
+            diagnostics.attempted_candidates,
+            coarse_centers * 2 * 2,
+        )
 
     def test_live_budget_preserves_vehicle_specific_performance_differences(self) -> None:
         circuit = next(circuit for circuit in load_circuits() if circuit.id == 3)

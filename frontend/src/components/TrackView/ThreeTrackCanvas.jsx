@@ -14,6 +14,10 @@ import {
   appendPoseTickToBuffers,
   bufferedWorldPoseAtTime,
 } from './posePlayback';
+import {
+  advanceSafetyCarRenderProgress,
+  safetyCarProgressAtRenderTime,
+} from './safetyCarPlayback';
 import './TrackCanvas.css';
 import './ThreeTrackCanvas.css';
 
@@ -26,6 +30,41 @@ const CAMERA_TRAILING_M = 430;
 const KERB_PATTERN_LENGTH_M = 16;
 const TRACK_EDGE_LINE_WIDTH_M = 0.22;
 const TRACK_EDGE_LINE_HEIGHT_M = 0.045;
+const MEMORY_SAMPLE_RETENTION_MS = 5 * 60 * 1000;
+const MAX_MEMORY_SAMPLES = 300;
+const MATERIAL_TEXTURE_SLOTS = [
+  'map',
+  'normalMap',
+  'roughnessMap',
+  'metalnessMap',
+  'aoMap',
+  'alphaMap',
+  'emissiveMap',
+  'bumpMap',
+  'displacementMap',
+  'environmentMap',
+];
+
+function disposeMaterial(material, disposedTextures) {
+  if (!material) return;
+  MATERIAL_TEXTURE_SLOTS.forEach((slot) => {
+    const texture = material[slot];
+    if (texture && !disposedTextures.has(texture)) {
+      disposedTextures.add(texture);
+      texture.dispose?.();
+    }
+  });
+  material.dispose?.();
+}
+
+function disposeObject3D(root) {
+  const disposedTextures = new Set();
+  root?.traverse?.((object) => {
+    object.geometry?.dispose?.();
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    materials.forEach((material) => disposeMaterial(material, disposedTextures));
+  });
+}
 
 function useStableStructuredValue(value) {
   const stableRef = useRef(null);
@@ -441,29 +480,26 @@ function buildSegmentPoints(metrics, start, end, stepM = 4) {
   });
 }
 
-function buildOffsetSegmentPoints(metrics, start, end, offsetAt, stepM = 2) {
-  let range = Number(end) - Number(start);
-  if (range < 0) range += 1;
-  const steps = Math.max(2, Math.ceil(range * metrics.totalLength / stepM));
-  return Array.from({ length: steps + 1 }, (_, index) => {
-    const progress = (Number(start) + range * index / steps) % 1;
-    const pose = pathPoseAtProgress(metrics, progress);
-    const offsetM = Number(offsetAt(progress) || 0);
-    return [
-      pose.x - Math.sin(pose.heading) * offsetM,
-      pose.y + Math.cos(pose.heading) * offsetM,
-    ];
-  });
-}
-
-function offsetOpenPath(points, offsetM) {
+function offsetOpenPath(points, offsetM, { taperEndM = 0 } = {}) {
+  const remainingLengthsM = Array(points.length).fill(0);
+  for (let index = points.length - 2; index >= 0; index -= 1) {
+    remainingLengthsM[index] = remainingLengthsM[index + 1]
+      + Math.hypot(
+        points[index + 1][0] - points[index][0],
+        points[index + 1][1] - points[index][1],
+      );
+  }
   return points.map((point, index) => {
     const previous = points[Math.max(0, index - 1)];
     const next = points[Math.min(points.length - 1, index + 1)];
     const heading = Math.atan2(next[1] - previous[1], next[0] - previous[0]);
+    const taperScale = taperEndM > 0
+      ? Math.min(1, remainingLengthsM[index] / taperEndM)
+      : 1;
+    const taperedOffsetM = offsetM * taperScale;
     return [
-      point[0] - Math.sin(heading) * offsetM,
-      point[1] + Math.cos(heading) * offsetM,
+      point[0] - Math.sin(heading) * taperedOffsetM,
+      point[1] + Math.cos(heading) * taperedOffsetM,
     ];
   });
 }
@@ -705,6 +741,8 @@ function createSafetyCarModel(carWidthM, carLengthM) {
   group.add(shadow, body, cabin, nose, lightBar);
   group.userData.lightMaterial = lightMaterial;
   group.userData.poseInitialized = false;
+  group.userData.renderProgress = null;
+  group.userData.renderRoute = null;
   group.visible = false;
   return group;
 }
@@ -1085,6 +1123,7 @@ export default function ThreeTrackCanvas({
   surfaceZones = [],
   racingLineCoords = [],
   pitLaneCoords = [],
+  pitExitLaneCoords = [],
   pitBoxOffset = 11,
   pitLaneWidthM = 4,
   pitSideEntryProgress = 0.02,
@@ -1108,6 +1147,10 @@ export default function ThreeTrackCanvas({
   safetyCarProgress = 0,
   safetyCarProgressRate = 0,
   safetyCarPitLaneProgress = 0,
+  websocketState = 'closed',
+  onPerformanceStats = null,
+  onRendererDisposed = null,
+  performanceResetToken = 0,
 }) {
   const containerRef = useRef(null);
   const rendererRef = useRef(null);
@@ -1150,6 +1193,14 @@ export default function ThreeTrackCanvas({
   const zoomRef = useRef(DEFAULT_ZOOM_PERCENT);
   const cameraFocusRef = useRef(new THREE.Vector3());
   const cameraProjectionRef = useRef(() => {});
+  const memorySamplesRef = useRef([]);
+  const sceneBuildCountRef = useRef(0);
+  const garageBuildCountRef = useRef(0);
+  const carModelBuildCountRef = useRef(0);
+  const rendererLifecycleIdRef = useRef(
+    `renderer-${globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)}`,
+  );
+  const websocketStateRef = useRef(websocketState);
   const [sceneReady, setSceneReady] = useState(false);
   const [zoomPercent, setZoomPercent] = useState(DEFAULT_ZOOM_PERCENT);
   const [followDriverId, setFollowDriverId] = useState(null);
@@ -1163,8 +1214,15 @@ export default function ThreeTrackCanvas({
     geometries: 0,
     textures: 0,
     jsHeapMb: null,
+    jsHeapPeakMb: null,
+    jsHeapTrendMbPerMin: null,
+    domNodes: 0,
     poseSamples: 0,
+    sceneBuilds: 0,
+    garageBuilds: 0,
+    carModelsBuilt: 0,
   });
+  const performanceStatsRef = useRef(performanceStats);
 
   // Socket updates replace the race payload several times per second. Keep
   // circuit data referentially stable so a pose update cannot rebuild WebGL.
@@ -1175,10 +1233,57 @@ export default function ThreeTrackCanvas({
   const stableSurfaceZones = useStableStructuredValue(surfaceZones);
   const stableRacingLineCoords = useStableStructuredValue(racingLineCoords);
   const stablePitLaneCoords = useStableStructuredValue(pitLaneCoords);
+  const stablePitExitLaneCoords = useStableStructuredValue(pitExitLaneCoords);
   const stableDrsZones = useStableStructuredValue(drsZones);
   const stableSectors = useStableStructuredValue(sectors);
   const garageTeams = useMemo(() => buildGarageTeams(positions), [positions]);
   const stableGarageTeams = useStableStructuredValue(garageTeams);
+
+  useEffect(() => {
+    memorySamplesRef.current = [];
+  }, [performanceResetToken]);
+
+  useEffect(() => {
+    performanceStatsRef.current = performanceStats;
+  }, [performanceStats]);
+
+  useEffect(() => {
+    websocketStateRef.current = websocketState;
+  }, [websocketState]);
+
+  useEffect(() => {
+    const desktopApi = window.desktopDiagnostics;
+    if (!desktopApi) return undefined;
+    const recordSnapshot = () => {
+      const stats = performanceStatsRef.current || {};
+      desktopApi.recordRendererSnapshot({
+        renderer_lifecycle_id: rendererLifecycleIdRef.current,
+        renderer_active: true,
+        react_phase: 'race',
+        websocket_state: websocketStateRef.current,
+        websocket_count: websocketStateRef.current === 'open' ? 1 : 0,
+        js_heap_current_bytes: stats.jsHeapMb == null ? null : stats.jsHeapMb * 1024 * 1024,
+        js_heap_peak_bytes: stats.jsHeapPeakMb == null ? null : stats.jsHeapPeakMb * 1024 * 1024,
+        js_heap_trend_mb_per_min: stats.jsHeapTrendMbPerMin,
+        blink_allocated_bytes: null,
+        dom_nodes: Number(stats.domNodes || 0),
+        canvas_count: document.querySelectorAll('canvas').length,
+        active_webgl_contexts: 1,
+        geometries: Number(stats.geometries || 0),
+        textures: Number(stats.textures || 0),
+        render_calls: Number(stats.calls || 0),
+        triangles: Number(stats.triangles || 0),
+        scene_builds: Number(stats.sceneBuilds || 0),
+        garage_builds: Number(stats.garageBuilds || 0),
+        car_models_built: Number(stats.carModelsBuilt || 0),
+        pose_samples: Number(stats.poseSamples || 0),
+        race_end_overlay: false,
+      }).catch(() => {});
+    };
+    recordSnapshot();
+    const interval = window.setInterval(recordSnapshot, 5000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const normalizedTrackCoords = useMemo(
     () => normalizeCoordinatePath(stableTrackCoords),
@@ -1200,6 +1305,12 @@ export default function ThreeTrackCanvas({
     ),
     [stableCoordinateFrame, stablePitLaneCoords],
   );
+  const worldPitExitLanePoints = useMemo(
+    () => normalizeCoordinatePath(stablePitExitLaneCoords).map(
+      (coord) => renderCoordToWorld(coord, stableCoordinateFrame),
+    ),
+    [stableCoordinateFrame, stablePitExitLaneCoords],
+  );
   const denseRacingLineCoords = useMemo(() => sampleCatmullRomClosed(
     stripClosedPoint(normalizeCoordinatePath(stableRacingLineCoords)),
     TRACK_SAMPLE_SPACING,
@@ -1218,6 +1329,14 @@ export default function ThreeTrackCanvas({
     () => pathMetrics(worldPitPoints, false),
     [worldPitPoints],
   );
+  const renderedPitPoints = useMemo(
+    () => (
+      worldPitExitLanePoints.length >= 2 && pitMetrics.totalLength > 0
+        ? buildSegmentPoints(pitMetrics, 0, pitSideRejoinProgress, 2)
+        : worldPitPoints
+    ),
+    [pitMetrics, pitSideRejoinProgress, worldPitExitLanePoints.length, worldPitPoints],
+  );
   const displayRotation = normalizeDegrees(displayRotationDeg);
   const playerDrivers = useMemo(
     () => (positions || [])
@@ -1232,7 +1351,8 @@ export default function ThreeTrackCanvas({
   const miniMap = useMemo(() => {
     if (!worldTrackPoints.length) return null;
     const rotatedTrack = worldTrackPoints.map(([x, y]) => rotate2D(x, y, displayRotation));
-    const rotatedPit = worldPitPoints.map(([x, y]) => rotate2D(x, y, displayRotation));
+    const rotatedPit = [...renderedPitPoints, ...worldPitExitLanePoints]
+      .map(([x, y]) => rotate2D(x, y, displayRotation));
     const xs = rotatedTrack.map((point) => point[0]);
     const ys = rotatedTrack.map((point) => point[1]);
     const minX = Math.min(...xs);
@@ -1247,7 +1367,7 @@ export default function ThreeTrackCanvas({
       markerRadius: Math.max(maxX - minX, maxY - minY) * 0.009,
       strokeWidth: Math.max(maxX - minX, maxY - minY) * 0.012,
     };
-  }, [displayRotation, worldPitPoints, worldTrackPoints]);
+  }, [displayRotation, renderedPitPoints, worldPitExitLanePoints, worldTrackPoints]);
 
   useEffect(() => {
     positionsRef.current = positions || [];
@@ -1332,6 +1452,8 @@ export default function ThreeTrackCanvas({
     if (!container || worldTrackPoints.length < 4) return undefined;
 
     let destroyed = false;
+    const rendererLifecycleId = rendererLifecycleIdRef.current;
+    sceneBuildCountRef.current += 1;
     const cars = carsRef.current;
     const labels = labelsRef.current;
     const miniMapCircles = miniMapCirclesRef.current;
@@ -1499,13 +1621,13 @@ export default function ThreeTrackCanvas({
       ));
     });
 
-    if (worldPitPoints.length >= 2) {
+    if (renderedPitPoints.length >= 2) {
       const pitShoulder = new THREE.Mesh(
-        buildOpenRibbonGeometry(worldPitPoints, pitLaneWidthM + 3.2, -0.012),
+        buildOpenRibbonGeometry(renderedPitPoints, pitLaneWidthM + 3.2, -0.012),
         new THREE.MeshStandardMaterial({ color: 0x62666c, roughness: 0.96 }),
       );
       const pitRoad = new THREE.Mesh(
-        buildOpenRibbonGeometry(worldPitPoints, pitLaneWidthM, 0.02),
+        buildOpenRibbonGeometry(renderedPitPoints, pitLaneWidthM, 0.02),
         new THREE.MeshStandardMaterial({
           color: 0x747a82,
           map: roadTexture,
@@ -1514,14 +1636,13 @@ export default function ThreeTrackCanvas({
       );
       const pitLineMaterial = new THREE.MeshBasicMaterial({ color: 0xf4f5f7 });
       const leftBoundary = new THREE.Mesh(
-        buildOpenRibbonGeometry(offsetOpenPath(worldPitPoints, pitLaneWidthM / 2), 0.18, 0.07),
+        buildOpenRibbonGeometry(offsetOpenPath(renderedPitPoints, pitLaneWidthM / 2), 0.18, 0.07),
         pitLineMaterial,
       );
       const rightBoundary = new THREE.Mesh(
-        buildOpenRibbonGeometry(offsetOpenPath(worldPitPoints, -pitLaneWidthM / 2), 0.18, 0.07),
+        buildOpenRibbonGeometry(offsetOpenPath(renderedPitPoints, -pitLaneWidthM / 2), 0.18, 0.07),
         pitLineMaterial,
       );
-      const pitMetrics = pathMetrics(worldPitPoints, false);
       root.add(pitShoulder, pitRoad, leftBoundary, rightBoundary);
       root.add(
         createGate(pitMetrics, pitSideEntryProgress, pitLaneWidthM, 0xffffff, 0.08),
@@ -1531,6 +1652,68 @@ export default function ThreeTrackCanvas({
         createGate(pitMetrics, pitSideRejoinProgress, pitLaneWidthM, 0xffffff, 0.08),
       );
 
+    }
+
+    if (worldPitExitLanePoints.length >= 2) {
+      const mergeTaperM = Math.min(
+        55,
+        Math.max(24, pathMetrics(worldPitExitLanePoints, false).totalLength * 0.4),
+      );
+      const exitShoulder = new THREE.Mesh(
+        buildOpenRibbonGeometry(
+          worldPitExitLanePoints,
+          pitLaneWidthM + 1.8,
+          -0.010,
+          { taperEndM: mergeTaperM },
+        ),
+        new THREE.MeshStandardMaterial({ color: 0x62666c, roughness: 0.96 }),
+      );
+      const exitRoad = new THREE.Mesh(
+        buildOpenRibbonGeometry(
+          worldPitExitLanePoints,
+          pitLaneWidthM,
+          0.022,
+          { taperEndM: mergeTaperM },
+        ),
+        new THREE.MeshStandardMaterial({
+          color: 0x747a82,
+          map: roadTexture,
+          roughness: 0.94,
+        }),
+      );
+      const exitLineMaterial = new THREE.MeshBasicMaterial({ color: 0xf4f5f7 });
+      const exitLeftBoundary = new THREE.Mesh(
+        buildOpenRibbonGeometry(
+          offsetOpenPath(
+            worldPitExitLanePoints,
+            pitLaneWidthM / 2,
+            { taperEndM: mergeTaperM },
+          ),
+          0.18,
+          0.072,
+          { taperEndM: mergeTaperM },
+        ),
+        exitLineMaterial,
+      );
+      const exitRightBoundary = new THREE.Mesh(
+        buildOpenRibbonGeometry(
+          offsetOpenPath(
+            worldPitExitLanePoints,
+            -pitLaneWidthM / 2,
+            { taperEndM: mergeTaperM },
+          ),
+          0.18,
+          0.072,
+          { taperEndM: mergeTaperM },
+        ),
+        exitLineMaterial,
+      );
+      root.add(
+        exitShoulder,
+        exitRoad,
+        exitLeftBoundary,
+        exitRightBoundary,
+      );
     }
 
     if (worldRacingLinePoints.length >= 2) {
@@ -1747,18 +1930,38 @@ export default function ThreeTrackCanvas({
         const elapsedSinceTelemetryS = playback.paused
           ? 0
           : Math.min(0.25, Math.max(0, now - safetyTelemetry.receivedAtMs) / 1000);
-        const progressRate = routeIsPit
-          ? safetyTelemetry.pitLaneProgressRate
-          : safetyTelemetry.progressRate;
-        const rawProgress = (routeIsPit
-          ? safetyTelemetry.pitLaneProgress
-          : safetyTelemetry.progress) + progressRate * elapsedSinceTelemetryS;
-        const routeProgress = routeIsPit
-          ? Math.min(1, Math.max(0, rawProgress))
-          : ((rawProgress % 1) + 1) % 1;
-        const safetyPose = pathPoseAtProgress(routeMetrics, routeProgress);
+        const routeProgress = safetyCarProgressAtRenderTime({
+          route: routeIsPit ? 'pit' : 'track',
+          progress: safetyTelemetry.progress,
+          progressRate: safetyTelemetry.progressRate,
+          pitLaneProgress: safetyTelemetry.pitLaneProgress,
+          pitLaneProgressRate: safetyTelemetry.pitLaneProgressRate,
+          elapsedWallSeconds: elapsedSinceTelemetryS,
+          speedMultiplier: playback.speedMultiplier,
+        });
+        const routeKey = routeIsPit ? 'pit' : 'track';
+        const routeChanged = safetyCarMarker.userData.renderRoute !== null
+          && safetyCarMarker.userData.renderRoute !== routeKey;
+        const renderProgress = (
+          !safetyCarMarker.userData.poseInitialized
+          || routeChanged
+          || !Number.isFinite(Number(safetyCarMarker.userData.renderProgress))
+        )
+          ? routeProgress
+          : advanceSafetyCarRenderProgress({
+            currentProgress: safetyCarMarker.userData.renderProgress,
+            desiredProgress: routeProgress,
+            route: routeKey,
+            progressRate: safetyTelemetry.progressRate,
+            pitLaneProgressRate: safetyTelemetry.pitLaneProgressRate,
+            elapsedWallSeconds: deltaSeconds,
+            speedMultiplier: playback.speedMultiplier,
+          });
+        safetyCarMarker.userData.renderProgress = renderProgress;
+        safetyCarMarker.userData.renderRoute = routeKey;
+        const safetyPose = pathPoseAtProgress(routeMetrics, renderProgress);
         const poseBlend = safetyCarMarker.userData.poseInitialized
-          ? 1 - Math.exp(-14 * deltaSeconds)
+          ? Math.min(1, 18 * deltaSeconds)
           : 1;
         safetyCarMarker.position.x += (safetyPose.x - safetyCarMarker.position.x) * poseBlend;
         safetyCarMarker.position.y = 0.05;
@@ -1792,7 +1995,11 @@ export default function ThreeTrackCanvas({
         }
       } else {
         if (safetyCarLabelRef.current) safetyCarLabelRef.current.style.display = 'none';
-        if (safetyCarMarker) safetyCarMarker.userData.poseInitialized = false;
+        if (safetyCarMarker) {
+          safetyCarMarker.userData.poseInitialized = false;
+          safetyCarMarker.userData.renderProgress = null;
+          safetyCarMarker.userData.renderRoute = null;
+        }
       }
 
       const followed = carsRef.current.get(Number(followDriverIdRef.current));
@@ -1864,8 +2071,39 @@ export default function ThreeTrackCanvas({
         const frameP95Ms = orderedFrameSamples[p95Index] || 0;
         const slowFrames = frameSamples.filter((sample) => sample > (1000 / 30)).length;
         const usedJsHeapBytes = Number(performance.memory?.usedJSHeapSize);
+        const jsHeapMb = Number.isFinite(usedJsHeapBytes)
+          ? usedJsHeapBytes / (1024 * 1024)
+          : null;
+        let jsHeapPeakMb = null;
+        let jsHeapTrendMbPerMin = null;
+        if (jsHeapMb !== null) {
+          const memorySamples = memorySamplesRef.current;
+          memorySamples.push({ atMs: now, jsHeapMb });
+          while (
+            memorySamples.length > 1
+            && (
+              memorySamples.length > MAX_MEMORY_SAMPLES
+              || memorySamples[0].atMs < now - MEMORY_SAMPLE_RETENTION_MS
+            )
+          ) {
+            memorySamples.shift();
+          }
+          jsHeapPeakMb = memorySamples.reduce(
+            (peak, sample) => Math.max(peak, sample.jsHeapMb),
+            jsHeapMb,
+          );
+          const firstMemorySample = memorySamples[0];
+          const elapsedMinutes = (
+            now - firstMemorySample.atMs
+          ) / 60_000;
+          if (elapsedMinutes >= 0.5) {
+            jsHeapTrendMbPerMin = (
+              jsHeapMb - firstMemorySample.jsHeapMb
+            ) / elapsedMinutes;
+          }
+        }
         if (!destroyed) {
-          setPerformanceStats({
+          const nextPerformanceStats = {
             fps: Math.round(1000 / Math.max(1, averageFrameMs)),
             frameP95Ms,
             slowFrames,
@@ -1873,14 +2111,20 @@ export default function ThreeTrackCanvas({
             triangles: renderer.info.render.triangles,
             geometries: renderer.info.memory.geometries,
             textures: renderer.info.memory.textures,
-            jsHeapMb: Number.isFinite(usedJsHeapBytes)
-              ? usedJsHeapBytes / (1024 * 1024)
-              : null,
+            jsHeapMb,
+            jsHeapPeakMb,
+            jsHeapTrendMbPerMin,
+            domNodes: document.getElementsByTagName('*').length,
             poseSamples: [...poseBuffersRef.current.values()].reduce(
               (total, buffer) => total + buffer.count,
               0,
             ),
-          });
+            sceneBuilds: sceneBuildCountRef.current,
+            garageBuilds: garageBuildCountRef.current,
+            carModelsBuilt: carModelBuildCountRef.current,
+          };
+          setPerformanceStats(nextPerformanceStats);
+          onPerformanceStats?.(nextPerformanceStats);
         }
         lastStatsAt = now;
       }
@@ -1892,11 +2136,7 @@ export default function ThreeTrackCanvas({
       setSceneReady(false);
       resizeObserver.disconnect();
       renderer.setAnimationLoop(null);
-      scene.traverse((object) => {
-        object.geometry?.dispose?.();
-        const materials = Array.isArray(object.material) ? object.material : [object.material];
-        materials.filter(Boolean).forEach((material) => material.dispose?.());
-      });
+      disposeObject3D(scene);
       roadTexture.dispose();
       kerbTexture.dispose();
       scene.clear();
@@ -1911,12 +2151,25 @@ export default function ThreeTrackCanvas({
       labels.clear();
       miniMapCircles.clear();
       poseBuffers.clear();
+      memorySamplesRef.current = [];
       safetyCarRef.current = null;
       rendererRef.current = null;
       sceneRef.current = null;
       cameraRef.current = null;
       rootRef.current = null;
       cameraProjectionRef.current = () => {};
+      onPerformanceStats?.(null);
+      onRendererDisposed?.({
+        renderer_lifecycle_id: rendererLifecycleId,
+        animation_loop_stopped: true,
+        pose_buffers_cleared: true,
+        scene_refs_cleared: true,
+        renderer_ref_cleared: true,
+        websocket_state: 'closed',
+        websocket_count: 0,
+        canvas_count: document.querySelectorAll('canvas').length,
+        webgl_context_count: 'not_observable',
+      });
     };
   }, [
     carLengthM,
@@ -1925,6 +2178,8 @@ export default function ThreeTrackCanvas({
     stableDrsZones,
     stableGridSlots,
     normalizedTrackCoords.length,
+    onPerformanceStats,
+    onRendererDisposed,
     pitLaneWidthM,
     pitMetrics,
     pitBoxProgress,
@@ -1933,6 +2188,7 @@ export default function ThreeTrackCanvas({
     pitSpeedLimitEnd,
     pitSpeedLimitStart,
     poseTickRef,
+    renderedPitPoints,
     stableSectors,
     stableSurfaceZones,
     startFinishIndex,
@@ -1940,6 +2196,7 @@ export default function ThreeTrackCanvas({
     trackWidthM,
     stableTrackWidthProfile,
     worldPitPoints,
+    worldPitExitLanePoints,
     worldRacingLinePoints,
     worldTrackPoints,
   ]);
@@ -1956,6 +2213,7 @@ export default function ThreeTrackCanvas({
     }
 
     const garageGroup = new THREE.Group();
+    garageBuildCountRef.current += 1;
     const garageStart = Math.max(
       Number(pitSpeedLimitStart) + 0.045,
       Number(pitBoxProgress) - 0.24,
@@ -2012,16 +2270,7 @@ export default function ThreeTrackCanvas({
 
     return () => {
       garageGroup.parent?.remove(garageGroup);
-      garageGroup.traverse((object) => {
-        object.geometry?.dispose?.();
-        const materials = Array.isArray(object.material)
-          ? object.material
-          : [object.material];
-        materials.filter(Boolean).forEach((material) => {
-          material.map?.dispose?.();
-          material.dispose?.();
-        });
-      });
+      disposeObject3D(garageGroup);
       if (garageGroupRef.current === garageGroup) {
         garageGroupRef.current = null;
       }
@@ -2050,10 +2299,7 @@ export default function ThreeTrackCanvas({
     carsRef.current.forEach((car, driverId) => {
       if (activeIds.has(driverId)) return;
       rootRef.current.remove(car);
-      car.traverse((object) => {
-        object.geometry?.dispose?.();
-        object.material?.dispose?.();
-      });
+      disposeObject3D(car);
       carsRef.current.delete(driverId);
       poseBuffersRef.current.delete(driverId);
     });
@@ -2062,6 +2308,7 @@ export default function ThreeTrackCanvas({
       let car = carsRef.current.get(driverId);
       if (!car) {
         car = createCarModel(driver, carWidthM, carLengthM);
+        carModelBuildCountRef.current += 1;
         rootRef.current.add(car);
         carsRef.current.set(driverId, car);
       }
@@ -2132,14 +2379,26 @@ export default function ThreeTrackCanvas({
             data-geometries={performanceStats.geometries}
             data-textures={performanceStats.textures}
             data-js-heap-mb={performanceStats.jsHeapMb?.toFixed(1) || ''}
+            data-js-heap-peak-mb={performanceStats.jsHeapPeakMb?.toFixed(1) || ''}
+            data-js-heap-trend-mb-min={
+              performanceStats.jsHeapTrendMbPerMin?.toFixed(2) || ''
+            }
+            data-dom-nodes={performanceStats.domNodes}
             data-pose-samples={performanceStats.poseSamples}
+            data-scene-builds={performanceStats.sceneBuilds}
+            data-garage-builds={performanceStats.garageBuilds}
+            data-car-models-built={performanceStats.carModelsBuilt}
           >
             {performanceStats.fps} FPS · P95 {performanceStats.frameP95Ms.toFixed(1)}MS
             {' · '}{performanceStats.calls} CALLS · {performanceStats.triangles} TRI
             {' · '}BUF {performanceStats.poseSamples}
             {performanceStats.jsHeapMb !== null
-              ? ` · ${performanceStats.jsHeapMb.toFixed(0)}MB`
+              ? ` · HEAP ${performanceStats.jsHeapMb.toFixed(0)}MB`
               : ''}
+            {performanceStats.jsHeapTrendMbPerMin !== null
+              ? ` (${performanceStats.jsHeapTrendMbPerMin >= 0 ? '+' : ''}${performanceStats.jsHeapTrendMbPerMin.toFixed(1)}/MIN)`
+              : ''}
+            {' · '}DOM {performanceStats.domNodes}
           </span>
         </div>
       </div>

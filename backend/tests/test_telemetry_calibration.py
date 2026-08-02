@@ -165,11 +165,15 @@ class RedBullRingTelemetryCalibrationTests(unittest.TestCase):
             sample.left_width_m + sample.right_width_m
             for sample in circuit.track_width_profile
         ]
-        self.assertGreaterEqual(min(total_widths), 10.0)
-        self.assertLessEqual(max(total_widths), 13.5)
+        self.assertEqual(circuit.track_width_m, 12.5)
+        self.assertGreaterEqual(min(total_widths), 12.0)
+        self.assertLessEqual(max(total_widths), 13.0)
         self.assertEqual(len(calibration.reference_laps), 5)
         self.assertEqual(len(calibration.telemetry_reference), 128)
         self.assertEqual(calibration.telemetry_speed_reference_weight, 1.0)
+        self.assertEqual(calibration.telemetry_progress_offset, 0.019)
+        self.assertEqual(calibration.planner_braking_utilization, 0.4)
+        self.assertTrue(calibration.release_inward_recovery_speed_cap)
 
     def test_red_bull_ring_physical_profile_matches_qualifying_shape(self) -> None:
         circuit = next(item for item in load_circuits() if item.id == 4)
@@ -194,7 +198,7 @@ class RedBullRingTelemetryCalibrationTests(unittest.TestCase):
             physics.target_speed_mps(
                 track.line_distance_at_total_progress(
                     DRIVING_LINE_RACING,
-                    sample.progress,
+                    sample.progress - calibration.telemetry_progress_offset,
                 ),
                 modifiers,
             )
@@ -209,6 +213,41 @@ class RedBullRingTelemetryCalibrationTests(unittest.TestCase):
         self.assertLess(rmse, 9.0)
         self.assertLess(abs(statistics.fmean(errors)), 4.0)
         self.assertLess(max(abs(error) for error in errors), 35.0)
+
+    def test_red_bull_ring_t3_uses_aligned_telemetry_without_abrupt_rotation(
+        self,
+    ) -> None:
+        circuit = next(item for item in load_circuits() if item.id == 4)
+        circuit = circuit.model_copy(update={"total_laps": 3})
+        driver = load_drivers()[0]
+        engine = RaceEngine(
+            circuit=circuit,
+            drivers=[driver],
+            teams={team.id: team for team in load_teams()},
+            player_team_id=driver.team_id,
+            player_driver_ids=[driver.id],
+            seed=42,
+            start_sequence_enabled=False,
+        )
+        state = engine.driver_states[driver.id]
+        t3_speeds_kph: list[float] = []
+        t3_yaw_rates_rad_s: list[float] = []
+        unsafe_samples = 0
+
+        while not state.finished:
+            engine.tick(GAME_TICK_SECONDS)
+            if state.current_lap < 2 or not 0.285 <= state.progress <= 0.34:
+                continue
+            t3_speeds_kph.append(state.speed_kph)
+            t3_yaw_rates_rad_s.append(abs(state.yaw_rate_rad_s))
+            unsafe_samples += int(
+                state.off_track or state.handling_state == "run_wide"
+            )
+
+        self.assertTrue(t3_speeds_kph)
+        self.assertLessEqual(min(t3_speeds_kph), 85.0)
+        self.assertLessEqual(max(t3_yaw_rates_rad_s), 1.25)
+        self.assertEqual(unsafe_samples, 0)
 
 
 if __name__ == "__main__":

@@ -38,6 +38,7 @@ class GlobalTrajectoryOptimizerConfig:
     transition_radius_m: float = 220.0
     objective_epsilon: float = 1e-6
     center_stride: int = 1
+    center_indices: tuple[int, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -133,12 +134,28 @@ class GlobalTrajectoryOptimizer:
         evaluated_candidates = 0
         accepted_updates = 0
 
+        if self.config.center_indices is None:
+            center_indices = tuple(
+                range(
+                    0,
+                    len(initial_offsets),
+                    max(1, self.config.center_stride),
+                )
+            )
+        else:
+            center_indices = tuple(
+                sorted(
+                    {
+                        int(index) % len(initial_offsets)
+                        for index in self.config.center_indices
+                    }
+                )
+            )
+            if not center_indices:
+                center_indices = (0,)
+
         for step_m in self.config.optimization_steps_m:
-            for center_index in range(
-                0,
-                len(initial_offsets),
-                max(1, self.config.center_stride),
-            ):
+            for center_index in center_indices:
                 best_candidate: GlobalTrajectoryEvaluation | None = None
                 for direction in (-1.0, 1.0):
                     attempted_candidates += 1

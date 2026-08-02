@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import PerformanceDiagnosticsModal from './PerformanceDiagnosticsModal';
 import './EventFeed.css';
 
 const KEY_EVENT_TYPES = new Set([
@@ -30,10 +31,16 @@ function shouldShowFocusedEvent(evt, playerDriverCodes) {
   return KEY_EVENT_TYPES.has(evt.type);
 }
 
-export default function EventFeed({ events, playerDriverCodes = [] }) {
+export default function EventFeed({
+  events,
+  playerDriverCodes = [],
+  performanceStats = null,
+  onResetPerformanceWindow,
+}) {
   const listRef = useRef(null);
   const [language, setLanguage] = useState('en');
   const [feedMode, setFeedMode] = useState('all');
+  const [showPerformanceDiagnostics, setShowPerformanceDiagnostics] = useState(false);
   const playerDriverCodeSet = useMemo(
     () => new Set(playerDriverCodes || []),
     [playerDriverCodes],
@@ -54,6 +61,21 @@ export default function EventFeed({ events, playerDriverCodes = [] }) {
       <div className="event-feed__header">
         <span>RACE FEED</span>
         <div className="event-feed__controls">
+          <button
+            type="button"
+            className="event-feed__diagnostics"
+            onClick={() => setShowPerformanceDiagnostics(true)}
+            aria-label="Open memory and rendering diagnostics"
+          >
+            <span
+              className={`event-feed__diagnostics-dot ${
+                Number(performanceStats?.jsHeapTrendMbPerMin) > 2
+                  ? 'is-warning'
+                  : ''
+              }`}
+            />
+            DIAG
+          </button>
           <div className="event-feed__mode" aria-label="Race feed mode">
             <button
               type="button"
@@ -107,6 +129,13 @@ export default function EventFeed({ events, playerDriverCodes = [] }) {
           );
         })}
       </div>
+      {showPerformanceDiagnostics && (
+        <PerformanceDiagnosticsModal
+          stats={performanceStats}
+          onClose={() => setShowPerformanceDiagnostics(false)}
+          onReset={onResetPerformanceWindow}
+        />
+      )}
     </div>
   );
 }

@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from models.schemas import DriverRaceState, TireCompound
-from simulation.tire_model import COMPOUND_SPECS, compute_managed_tire_age, compute_wear
+from simulation.tire_model import (
+    compound_spec_for,
+    compute_managed_tire_age,
+    compute_wear,
+    physical_compound_for_state,
+)
 
 
 def choose_tire_for_remaining_laps(remaining_laps: int) -> TireCompound:
@@ -20,6 +25,7 @@ def should_pit(
     remaining_laps: int,
     is_player: bool,
     tire_management: float = 0.85,
+    next_lap_usage: float = 1.0,
 ) -> bool:
     """Decide if AI should request a pit stop."""
     if is_player or state.retired or state.in_pit or state.pit_request is not None:
@@ -27,9 +33,13 @@ def should_pit(
 
     raw_tire_age = state.tire_usage if state.tire_usage > 0 else float(state.tire_age)
     managed_tire_age = compute_managed_tire_age(raw_tire_age, tire_management)
-    managed_next_lap_age = compute_managed_tire_age(raw_tire_age + 1, tire_management)
-    wear = compute_wear(state.tire_compound, managed_tire_age)
-    spec = COMPOUND_SPECS[state.tire_compound]
+    managed_next_lap_age = compute_managed_tire_age(
+        raw_tire_age + max(0.0, next_lap_usage),
+        tire_management,
+    )
+    physical_compound = physical_compound_for_state(state)
+    wear = compute_wear(physical_compound, managed_tire_age)
+    spec = compound_spec_for(physical_compound)
     approaching_cliff = managed_next_lap_age >= spec.cliff_threshold
 
     if wear >= 0.7 or approaching_cliff:

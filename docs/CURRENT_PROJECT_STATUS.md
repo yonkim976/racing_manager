@@ -1,7 +1,7 @@
 # F1 2D 레이스 시뮬레이션 현재 상태와 로드맵
 
 상태: **현재 프로젝트 요약**
-기준일: **2026-07-25**
+기준일: **2026-07-31**
 우선 기준: 제품·물리 결정은 [`SIMULATION_FOUNDATION.md`](SIMULATION_FOUNDATION.md)를 따른다.
 
 이 문서는 지금까지 확정하고 구현한 내용을 빠르게 파악하기 위한 단일 현황 문서다. 완료된 작업의 과거 지시서와 단계별 계획서는 유지하지 않으며, 앞으로 상태가 바뀌면 이 문서와 기준 설계를 함께 갱신한다.
@@ -54,14 +54,136 @@
 - 750kW 출력, 구동계 효율, 질량, 구름저항, 속도별 항력과 다운포스
 - 구동력·제동력·횡력에 공통으로 적용되는 결합 마찰 한계
 - 전·후축 슬립각과 횡력, 조향각, 요 관성, 헤딩과 요레이트를 적분하는 평면 dynamic bicycle model
-- 타이어 컴파운드, 마모, 표면·코어 온도에 따른 종·횡 그립 변화
+- 타이어 컴파운드, 마모, 전·후축별 표면·코어 온도에 따른 종·횡 그립 변화. 기존 차량 전체 대표 온도 필드는 두 축 평균으로 호환 유지
 - 연료 소모에 따른 차량 질량 변화
+- 실제 종가속도, 0.30m 무게중심 높이와 3.40m 휠베이스를 사용한 준정적 전·후축 하중 이동
+- 전·후축 평균 회전속도와 제동 락업·후륜 구동 슬립률. 축별 슬립은 실제 힘 초과량에서 계산하며 독립된 네 바퀴 관성 모델은 아니다.
+- 전·후축 평균 브레이크 온도, 주행풍 냉각과 고온·저온 제동력 저하. Bahrain 반복 제동 입력의 52랩 평형값은 프런트 약 649°C·리어 약 480°C이며 정상 효율 구간을 유지
 - 물리 입력 한계 초과로 발생하는 락업, 휠스핀, 언더스티어, 오버스티어와 run-wide
 - 차체 회전 사각형 SAT와 swept collision을 이용한 접촉·고속 관통 방지
 - 접촉 심각도, 정지 차량 위험물, 회피 또는 정지 선택
 - 정적 차체 겹침은 위치만 분리하고 닫히는 속도가 없는 접촉에는 최소 횡충격·요충격을 만들지 않음
 
 최근 코너에서 차체 뒤가 과도하게 드리프트하는 것처럼 보이던 문제는 실제 차체 헤딩과 그래픽 회전을 같은 pose에서 사용하도록 정리하고, rear slip/yaw 응답을 F1 차량에 맞게 안정화하는 방향으로 보정했다. 그래픽은 별도의 slip-angle 회전 필터로 물리 헤딩보다 늦게 따라가지 않는다.
+
+### 4.1.1 타이어 열 모델 기반 수정 1~5단계
+
+2026-07-29 기준으로 타이어 열 모델의 구조적 1~5단계를 구현했다. 이 단계는 C1~C5 물성, 동적 날씨, 네 바퀴 독립 모델을 포함하지 않는다.
+
+- 차량 물리 결과는 후륜 구동 작업량, 전·후축 제동 작업량, 전·후축 슬라이드 에너지를 발생 지점에서 직접 제공한다. 기존 `tire_slide_energy_j`는 두 축 합계 파생 호환 필드로 유지하며 축별 합계 불변식을 테스트한다.
+- `advance_tire_thermal_state()`는 세션이 전달한 `TrackConditions(ambient_temperature_c, track_temperature_c)`를 필수 입력으로 받고, baseline/lateral/braking/traction/slide 발열과 표면 외부 냉각·표면→코어 전달·코어 냉각을 `TireThermalBudget`로 반환한다.
+- 160/140°C 수치 guard는 `TIRE_SURFACE_NUMERIC_GUARD_C`/`TIRE_CORE_NUMERIC_GUARD_C`로 유지한다. 적용 전 온도, hit, overshoot, 누적 횟수, 연속 시간, 최초 발생과 조건을 bounded 진단에 남긴다.
+- 진단 snapshot은 schema version 2이며 현재·최고·누적 열수지와 clamp evidence만 보존한다. 물리 이력 배열은 추가하지 않는다.
+- `RaceSetupRequest`의 환경 생략 시 회로별 `default_preset`을 사용하고, 명시값은 엔진·대시보드·데스크톱 진단에 동일하게 노출된다. Bahrain 기본값은 호환 기준 `30/40°C`다.
+- 회귀 보호는 `backend/tests/test_tire_thermal_foundation.py`에 있다. 순수 57랩 상당 surrogate 평형, 과열 후 회복, Cool/Normal/Hot, 0.02/0.05/0.10초 스텝별 누적 열수지 안정성, clamp 진단, Bahrain 20대 smoke와 1,700초 실제 엔진 통합을 포함한다.
+- 2026-07-29 Bahrain 30/40°C, seed 42의 20대 1,700초 직접 엔진 재현에서 lateral 발열 변환계수를 `18.0 → 6.0`으로 한 계수군만 보정했다. 보정 전 수동 표본은 후륜 표면/코어 `149.705/131.218°C`, 20대 과열, 최대 연속 `1,392.48초`였고, 보정 후 앱 로그 표본은 `116.681/103.853°C`였다. 전역 controller-scale cache 충돌 제거 뒤 2026-07-30 고정 기준은 `119.248/105.247°C`였으며, 2026-08-02 load-sensitive bicycle stiffness 적용 뒤 동일 직접 엔진 경로의 새 기준은 `117.321/107.975°C`다. 새 경로도 130°C 초과 차량 0대, 연속 과열 0초, surface/core guard hit 0회를 유지한다.
+- 보정 후 후륜 누적 열원은 lateral `37.6%`, slide `27.4%`, traction `19.2%`, baseline `13.7%`, braking `2.1%`이며, 표면 순열량과 코어 순열량은 각각 양수로 남아 있어 장기 입력·피트·환경별 실주행은 계속 승인해야 한다.
+- 축별 실제 제동 작업량은 물리 단계에서 이미 bias 분리된 권위값이므로 열 모델에서 brake bias를 재적용하지 않는다. 실제 `applied_brake_work_energy_j`는 변환계수만 적용하고, fallback 입력에서만 `brake_heat_share`를 사용하며, 축별 합계 회귀를 추가했다.
+- 리뷰 보강 전 전체 backend `472개` 테스트와 1,700초 실제 엔진 장기 회귀가 통과했다. desktop 진단 테스트 `12개`도 통과했다. 이후 장기 기준·누적 에너지·Race Setup 회귀를 보강했다.
+
+2026-07-30 새 macOS 패키지에서 Bahrain `HOT 36/52°C`, 57랩·20대 수동
+스트레스 표본을 완주했다. `RACING` 시작부터 `RESULTS`까지 벽시계 약 56분 41초였고
+결과 차량은 20대였다. 후륜 표면/코어 최고는 `132.867/121.450°C`, 최대 동시
+130°C 초과는 3대, 최대 연속 초과는 186.9초였으며 surface/core guard hit는 모두
+0회였다. 종료 시 과열 차량은 0대였고 후륜 표면/코어는 `106.014/91.438°C`까지
+회복했다. 이 결과는 Hot 내구 표본으로는 통과지만, 초기 제품 승인 계약의
+Bahrain `NORMAL 30/40°C`, 57랩·20대 표본을 대체하지 않는다.
+
+결과 화면에서 `New Race`를 실행한 뒤 즉시·10초·30초·60초 checkpoint 모두
+active session false, client 0, loop task false, WebSocket/canvas/geometry/texture/
+pose 0을 유지했다. 경기 중 앱 합산 메모리 최고는 약 781.6MB, Electron working
+set 최고는 약 656.2MB, Python RSS 최고는 약 125.4MB였다. Electron CPU는 계속
+관측 불가이므로 전체 CPU 승인은 별도 과제로 남는다.
+
+### 4.1.2 회로 정적 열환경 1단계
+
+2026-07-29 기준으로 등록된 9개 회로에 `COOL/NORMAL/HOT` 정적 열환경 프로필을
+추가했다. 지형 샘플인 `Circuit.track_conditions`와 열환경인
+`Circuit.thermal_profile`은 별도 필드로 유지한다. 앱 시작 시
+`backend/data/circuit_thermal_profiles.json`을 회로 ID로 한 번 결합하고, 누락·중복·
+미등록 ID·프리셋 누락·온도 순서 오류를 즉시 실패시킨다.
+
+- Race Setup은 API가 제공한 회로 프로필에서 프리셋과 대기·노면 온도를 표시하고,
+  예선과 레이스 요청에 같은 `thermal_preset`을 보낸다. 회로 또는 프리셋 변경 시
+  기존 예선 결과를 폐기한다.
+- 세션 생성 시 우선순위는 명시적 `track_conditions` override, 요청 프리셋,
+  회로 기본 프리셋 순이며, override와 preset을 동시에 보낸 요청은 거부한다.
+  해석된 `TrackConditions`, `thermal_preset`, `track_conditions_source`는 세션 동안
+  불변이다.
+- 해석값은 Race Setup 응답, WebSocket `race_info`, `RaceTickState`, dashboard,
+  타이어 열 진단과 데스크톱 진단에 동일하게 노출된다. 브레이크 열 모델도 고정
+  30°C 대신 세션 대기 온도를 냉각 기준으로 사용한다.
+- Bahrain `NORMAL`은 기존 회귀 기준인 대기 30°C·노면 40°C를 유지한다. Bahrain
+  `COOL 24/32`, `HOT 36/52`와 나머지 회로의 값은 후속 공식 세션 자료 대조 전까지
+  정적 시나리오 `provisional`로 기록한다. 근거표는
+  [`CIRCUIT_THERMAL_PRESET_SOURCES.md`](CIRCUIT_THERMAL_PRESET_SOURCES.md)다.
+- 회로 프로필 무결성, 세션 해석·전파, 타이어 환경 순서, 브레이크 냉각 환경 민감도
+  회귀는 `backend/tests/test_circuit_thermal_profiles.py`에 있다.
+
+### 4.1.3 C1~C5 물리 컴파운드 2단계 현재 상태
+
+2026-07-30부터 물리 컴파운드와 주말 역할을 분리하는 migration을 적용했다.
+`PhysicalTireCompound(C1~C5/INTER/WET)`와 `DryTireRole(HARD/MEDIUM/SOFT)`는
+서로 다른 타입이며, 차량 물리·마모·열 모델은 session snapshot의 물리 C 코드를
+사용한다. 기존 `TireCompound`는 API·전략 호환 adapter로만 남긴다.
+
+- `backend/data/tire_compound_nominations.json`에 9개 회로의 세 건식 지명을
+  등록하고 중복·누락·미등록 ID·역순 C 코드를 loader에서 즉시 거부한다. 모든
+  값은 현재 `provisional`이며 공식 시즌별 지명을 확정한 값이 아니다.
+- Bahrain은 `HARD=C1`, `MEDIUM=C2`, `SOFT=C3`로 session resolver가 한 번
+  해석한다. `race_info`, setup/qualifying 응답, dashboard/history, desktop
+  diagnostics에 역할·물리 C 코드·ruleset을 함께 보낸다.
+- C1~C5의 초기 grip, degradation, cliff, 축별 grip, 최적 표면 온도, 작동창,
+  hot 진단값은 지시서의 `game_calibration_provisional` 표를 사용한다. C4/C5는
+  초기 seed이며 제품 승인 전 보정값으로 취급하지 않는다.
+- 예선은 해당 회로의 Soft 지명을 사용하고, 출발·피트·AI 전략은 주말 역할을
+  같은 resolver로 물리 C 코드에 변환한다. UI는 `HARD · C1` 같은 역할·C 코드
+  표기를 사용하며 회로 변경 시 예선·출발 선택·온도 preset을 함께 무효화한다.
+- 피트 랩 이력은 교체 전 컴파운드와 교체 후 상태를 분리해 기록하고, blanket
+  초기화는 새 물리 C 코드의 사양을 사용한다. 진단은 C1~C5별 bounded aggregate와
+  기존 `legacy_130` 지표를 동시에 유지한다.
+
+현재 C1~C5 구현은 데이터·세션·물리·예선·전략·피트·UI migration까지 완료했고,
+Bahrain `NORMAL 30/40°C` 57랩·20대 수동 완주도 확인했다. 다만 C4/C5 대표 회로
+단축 제품 승인은 아직 남아 있으므로 전체 컴파운드 물성을 최종 calibrated 값으로
+간주하지 않는다.
+
+직접 `RaceEngine`을 생성하는 도구·테스트도 회로 nomination을 우회하지 않는다.
+nomination이 있는 회로는 항상 회로 resolver를 사용하고, `physical_tire_compound`가
+존재하는 차량 상태에서는 legacy `tire_compound`/`tire_role`이 물리값을 덮어쓰지
+않는다. 타이어 교체는 role·physical·legacy 필드를 하나의 helper로 갱신한다.
+컴파운드 진단은 현재값과 별도로 C1~C5의 peak surface/core, hot threshold 기준
+연속 과열 시간과 최대 드라이버를 bounded하게 보존한다.
+
+### 4.1.3 Red Bull Ring 최적화 1차 상태
+
+2026-07-31 Red Bull Ring `circuit_id=4`의 0~2단계 기준선 작업을 시작했다.
+변경 전 입력의 해시와 실행 결과는
+`backend/data/calibration/red_bull_ring_runtime_baseline_v1.json`에 보존하고,
+sector timing 보강 후 결과는 `red_bull_ring_runtime_baseline_v2.json`에 저장했다.
+
+- FIA 2025 Austrian Grand Prix 공식 회로도의 섹터 거리 `1,215/1,697/1,414m`와
+  중심선 `4,326m`를 출처로 기록하고, 현재 컴파일 길이 `4,318m`에 진행률로
+  정규화했다. Red Bull Ring의 대섹터는 `0.0–0.280860`,
+  `0.280860–0.673139`, `0.673139–1.0`이며 `9+12+6=27` timing loop를 사용한다.
+- `audit_tier_a --circuit-id 4`의 `sectors_have_timing_ranges`가 기존 `false`에서
+  `true`로 바뀌었고, 형상·피트·DRS 검사는 무회귀다.
+- 정적 telemetry 비교는 평균 `MAE 5.257km/h`, `RMSE 7.529km/h`,
+  `Bias -3.038km/h`, 최대 절대 오차 `32.719km/h`로 기존 기준 안에 있다.
+  sector 범위 변경은 이 정적 지표를 바꾸지 않았다.
+- 실제 `RaceEngine` 0.02초 고정 스텝 단독 5랩은 5랩 완료·유효 2~5랩 4개를
+  달성했지만, fastest valid lap `70.149초`가 예선 median `64.472초`보다
+  `8.805%` 느리고 `T4` 4회·`T10` 7회의 run-wide 표본이 있어 동적 5랩 승인은
+  아직 실패 상태다. contact/off-track/numeric guard는 0이다.
+- 입력 조건을 예선 비교에 맞춰 `SOFT=C4 + ATTACK`으로 별도 실행한
+  `red_bull_ring_runtime_baseline_v3_qualifying_input.json`도 fastest valid lap
+  `69.568초`로 median 대비 `7.904%` 느렸고 T4/T10 run-wide가 각각 16/10회였다.
+  따라서 단순히 Medium/Standard 입력을 예선 기준과 섞은 문제만으로 설명되지
+  않으며, controller/실행 경로의 후속 보정 대상으로 분류한다.
+- 재사용 진단 CLI는
+  `backend/tools/run_circuit_baseline.py`이며, 단독 동적 결과는 traffic·pit·SC
+  제품 승인을 대신하지 않는다. 현재 결과만으로 전역 물리·타이어 계수는 변경하지
+  않고, 다음 단계에서 T4/T10 controller 병목을 한 계수군씩 분석한다.
 
 ### 4.2 트랙과 레이싱라인
 
@@ -109,6 +231,22 @@
 
 바레인 제한 시작·종료 landmark는 `0.30 → 0.70`으로 적용했다. 제한 구간은 약 311.6m이고 기준 차량의 피트 진입 anchor부터 본선 측면 합류까지 전체 경과는 약 28.78초다. 첫 팀 박스 전에는 약 83.8m의 제동거리, 마지막 팀 박스 뒤에는 약 83.8m의 재가속거리가 남아 10개 팀의 16m 간격 고유 박스와 연속적인 감속·재가속을 여유 있게 유지한다. 비교했던 `0.40 → 0.60`은 양 끝 여유가 약 5.9m뿐이라 팀 박스가 8개 고유 위치로 겹치고 마지막 차량의 제한 해제 속도가 불연속이 되어 사용하지 않는다.
 
+### 4.3.1 콜드 피트 아웃랩 설계 상태
+
+건식 출발 타이어는 포메이션 랩을 생략한 현재 제품의 추상화로 90°C를 유지하고,
+피트에서 교체한 건식 타이어만 70°C로 분리하는 방향을 확정했다. 다만 현재
+C1~C5 `blanket_temperature_c`와 출발·피트 초기화는 모두 90°C를 사용하므로 아직
+구현된 기능이 아니다.
+
+피트 70°C 적용 전에 실제 thermal grip 즉시 초기화, 콜드 상태의
+`fresh_after_stop → ATTACK` 차단, 목표속도·스로틀·제동의 연속적 회복, 피트 합류
+gap 확대가 함께 구현돼야 한다. 물리 그립은 이미 온도에 따라 감소하므로 콜드
+제어에서 그립을 다시 곱하지 않는다. 자세한 계약과 테스트 행렬은
+[`COLD_OUTLAP_CONTROL_DESIGN.md`](COLD_OUTLAP_CONTROL_DESIGN.md)에 기록했다.
+
+이 기능은 다른 회로의 현재 90°C 기준선을 먼저 확보한 뒤 구현한다. 회로 보정과
+콜드 아웃랩을 동시에 바꾸지 않아 사고·열·랩타임 변화의 원인을 분리한다.
+
 ## 5. AI와 레이스크래프트
 
 현재 AI는 다음 계층으로 나뉜다.
@@ -145,7 +283,7 @@
 - GAP은 선두, INT는 바로 앞 차량과의 차이이며 최신 공통 타이밍 루프를 공식 기준점으로 사용한다. 루프 사이에서는 현재 트랙 진행 거리·속도 추정을 기준점과 혼합해 매 상태 갱신마다 자연스럽게 움직인다.
 - 공통 기록이 아직 없거나 추월 직후 최신 루프 통과 순서가 현재 순위와 반대이면 해당 기준점을 무효화하고 진행률 기반 `~`·`EST`로 전환한다. 음수 기록을 `0.000`으로 잘라 전체 열이 0이 되는 현상을 방지한다.
 - 랩 기록에 3개 sector time과 27개 mini-sector time을 보존하고 각 조각을 세션 최고·개인 최고·그 외 기록으로 비교
-- 좌측 Live Timing의 모든 드라이버 이름은 데이터 센터 모달을 열며, 선택한 차량의 27개 조각·GAP/INT·타이어·랩별 S1/S2/S3 기록을 표시한다. 상시 섹터 패널은 제거해 트랙 캔버스 높이를 유지한다.
+- 좌측 Live Timing의 모든 드라이버 이름은 데이터 센터 모달을 열며, 선택한 차량의 27개 조각·GAP/INT·랩별 S1/S2/S3 기록과 타이어 마모·전후축 표면/코어 온도·열그립, 연료, 차량 질량, 전후 브레이크 온도·효율, 축 하중·슬립을 표시한다. 상시 섹터 패널은 제거해 트랙 캔버스 높이를 유지한다.
 - Three.js 트랙에는 물리 타이밍과 같은 대·미니섹터 경계선을 그린다.
 - 라이브 전송은 5개 pose 값과 화면에서 실제 사용하는 순위·속도·타이어·피트·배틀 상태만 포함한다. 상세 물리 텔레메트리는 엔진 내부 권위 상태와 테스트용 전체 tick에서 유지한다.
 - 내부 AI 상태용 maneuver-group 생성·해제 이벤트는 화면 피드에 노출하지 않는다. 락업·트랙션·접촉·일상 배틀 메시지는 차량별 cooldown을 적용하고, 공격·방어·철회 메시지는 전체 화면 기준 최소 1.5초 간격을 둔다. 이는 물리나 AI 판단을 삭제하지 않고 공개 피드만 정리한다.
@@ -156,7 +294,7 @@
 현재 트랙 화면은 Three.js WebGL 렌더러만 활성화한다. PixiJS 소스와 의존성은 롤백을 위해 남겨 두었지만 앱에서 import하지 않으며 프로덕션 번들에도 포함되지 않는다.
 
 - Three.js animation loop 최대 60FPS, device pixel ratio 최대 1.5
-- 화면 헤더에 1초 단위 FPS, 프레임타임 P95, 30FPS보다 느린 프레임 수, draw call·triangle, WebGL geometry·texture, 지원 브라우저의 JS heap 사용량을 노출한다.
+- 레이스 피드의 `DIAG` 버튼은 우측 상단의 소형 Runtime Diagnostics 모달을 연다. 모달에는 1초 단위 FPS, 프레임타임 P95, 30FPS보다 느린 프레임 수, draw call·triangle, WebGL geometry·texture, pose 버퍼, 장면·개러지·차량 모델 생성 횟수, 지원 브라우저의 JS heap과 DOM 노드 수를 표시한다. JS heap은 최대 300개·최근 5분의 고정 길이 표본만 사용해 MB/분 추세와 최고값을 계산하며 사용자가 계측 창을 초기화할 수 있다. 트랙 헤더의 긴 인라인 성능 문자열은 공간 확보를 위해 숨긴다.
 - 50Hz pose 열을 약 120ms 늦춰 재생해 패킷 사이를 cubic Hermite 곡선으로 보간
 - 차량별 pose는 JS 객체 배열과 `shift()`가 아니라 160칸 typed-array 링 버퍼에 기록한다. 보간 결과 객체도 차량별 1개를 재사용해 30Hz 수신·60FPS 보간의 단기 객체 생성을 억제한다.
 - 최대 120ms·45m의 제한적 dead reckoning은 패킷이 늦을 때만 사용
@@ -211,7 +349,17 @@ Three.js 렌더러는 30Hz pose와 50Hz pose 열을 사용하며 패킷 주기�
 - 바레인 2/3/4-wide 고정 스텝 분할 결정성 golden 통과
 - 피트 진입부터 측면 합류까지 단일 50Hz 종단 golden 통과
 - 직선 tow와 T1 dirty-air 수치 golden 통과
-- 최근 전체 회귀 기록은 Backend 380개 테스트, frontend lint/build 통과
+- 2026-07-27 과거 회귀 기록은 Backend 433개 테스트와 27개 subtest, frontend lint/build 통과로 별도 보존한다.
+- 2026-07-30 최종 Backend discovery는 장기 열 기준, 동시 과열 peak, 누적 에너지, Race Setup 계약과 controller-scale cache 회귀를 포함해 474개 테스트와 30개 subtest, 1,089.495초, `OK`로 통과했다.
+- 2026-07-30 최종 strict 1,700초 직접 엔진 열 회귀도 `OK`다.
+- 같은 날 새 macOS 패키지의 Bahrain `HOT 36/52°C` 57랩·20대 수동 스트레스
+  표본도 완주했다. 결과 차량 20대, 후륜 표면/코어 최고
+  `132.867/121.450°C`, 최대 동시 130°C 초과 3대, 최대 연속 186.9초,
+  surface/core guard hit 0회였고 종료 시 과열 차량은 0대였다.
+- 위 Hot 표본은 수치 포화와 장기 열 폭주가 재발하지 않았음을 확인했다.
+- 이후 Bahrain `NORMAL 30/40°C`, C1/C2/C3, 57랩·20대 수동 완주도 완료했다.
+  다음 회로와 직접 비교할 수 있도록 해당 실행의 최종 진단 JSON과 패키지 버전은
+  calibration 산출물로 계속 보존해야 한다.
 - T1 비대칭 폭·연석 허용·접촉 응답 변경 후 관련 Backend 290개 테스트를 867.509초 동안 재실행해 통과
 - 10개 seed·70개 시나리오의 2초 바레인 racecraft benchmark 통과: 판단·이유 일치율 100%, 접촉 0, off-track 0
 - Three.js T1 경계 보간 변경 후 frontend lint와 production build 통과
@@ -239,32 +387,160 @@ Three.js 렌더러는 30Hz pose와 50Hz pose 열을 사용하며 패킷 주기�
 - 2026-07-25 문제 상태를 실측했을 때 `race_state` 한 건은 50.8KB였고 10Hz로 반복됐으며, 한 차량이 랩을 마칠 때마다 20대 전체 누적 기록도 다시 전송했다. 이는 약 25분에 760MB 이상의 dashboard JSON 파싱을 만들 수 있어 Chrome renderer 1GB대 증가와 규모가 일치했다.
 - 최종 스트림은 20대 기준 pose 약 1.7KB, dashboard 약 8.5KB, timing 약 8.0KB이며 기본 계산량은 약 90.5KiB/s다. 실제 브라우저에서는 2배속에서 약 51~56KB/s를 확인했다. 랩 기록은 드라이버별 `start_index` 이후 새 항목만 전송한다.
 - 격리된 새 renderer의 20대 2배속 검증에서 10랩 동안 60FPS, P95 16.7~17.9ms, pose 버퍼 최대 2,540개, JS heap 26~50MB를 유지했다. renderer RSS는 초기 장면 로딩 뒤 약 366.6MB에서 474.1MB까지 증가했지만 종전 8랩 1.9GB와 같은 증가율은 재현되지 않았다. typed-array 링 버퍼 적용 뒤 별도 5랩은 약 326.5→395.5MB였으므로 남은 수치는 live JS pose 개수보다 Chromium/V8·WebGL 네이티브 예약량의 영향이 크다.
+- 2026-07-27 재검증에서는 진단창을 `document.body` portal로 옮겨 Race Feed의 `backdrop-filter` containing block 때문에 하단이 잘리던 문제를 제거하고, 폭 540px의 우측 상단 패널로 축소했다. 20대 2배속 8랩 표본에서 JS heap은 24.7→41.5→29.6MB처럼 GC 회수됐고, 첫 바퀴 뒤 WebGL geometry 491·texture 13, pose 2,540, scene/garage/car build 2/1/20이 고정됐다. 개발 모드의 scene 2회는 React StrictMode 초기 검증이며 레이스 중 재생성은 없었다.
 - typed-array pose 버퍼에 20대·10만 패킷을 연속 입력한 스트레스 테스트에서 차량당 127개, 총 2,540개가 유지됐고 최신 시각 보간도 정상 완료됐다.
 - 백엔드의 매 50Hz 프레임 ID·step 간격 진단 기록과 모든 과거 timing crossing도 무한히 커지던 결함을 발견했다. 진단은 최근 256개, 원본 timing anchor는 최근 4개 완료 랩 범위로 제한하고 완료 랩 요약은 별도로 유지한다. `vmmap`에서 Python 프로세스의 시스템 malloc 실할당은 3~10랩 표본에서 약 20.5~25.7MB였고 추가 RSS 상당수는 재사용을 위해 보존된 `VM_ALLOCATE` 영역이었다.
+- 차량별 예측 속도 캐시는 거리·연료 질량·타이어·브레이크 상태 조합을 키로 사용해 랩마다 늘어날 수 있었으므로 물리 인스턴스당 최근 256개 LRU 항목으로 제한했다. 고정 트랙 기하 표본 캐시는 트랙의 10m 구간 수만 유지하고, 전역 controller scale 캐시는 최근 128개 설정으로 제한한다.
+- 20대 Bahrain 300초 격리 대조에서 speed 캐시 상한 2,048는 독립 항목 24,768개·RSS 증가 20.9MB·계산 61.36초였고, 상한 256은 8,237개·RSS 증가 11.6MB·계산 61.74초였다. RSS 증가를 9.3MB(약 45%) 줄이는 동안 계산 시간 증가는 약 0.6%였다.
 
-성능과 보정 상세 자료는 `backend/data/calibration/`에 저장한다. 380개 전체 회귀 기록은 직전 전체 검증 결과이고, 이번 변경에서는 영향 범위의 290개 회귀와 별도 70개 racecraft 시나리오를 재실행했다.
+성능과 보정 상세 자료는 `backend/data/calibration/`에 저장한다. 2026-07-27
+전후축 타이어 열·브레이크 재보정 및 장기 캐시 제한 변경의 과거 결과는 Backend
+433개 테스트와 27개 subtest, frontend lint와 production build였다. C1~C5
+migration 직전인 2026-07-30 기준선은 Backend 474개 전체 discovery와 30개
+subtest, desktop 12개 테스트였다. 현재 C1~C5 보강 후 Backend 전체 discovery는
+489개 테스트 `OK`, frontend 12개·lint·production build, desktop 12개 테스트와
+`git diff --check`가 통과했다. Bahrain Normal 수동 완주는 완료했고, C4/C5 대표
+회로 수동 검증은 별도 완료 조건으로 남아 있다.
+
+## 8.1 레이싱라인 보정 Phase 1 상태 — 부분 완료 (2026-08-02)
+
+`RACE_RACING_LINE_CALIBRATION_PHASE_1_DIRECTIVE.md`의 Bahrain(circuit 3)·Red Bull
+Ring(circuit 4) race/NORMAL/Medium/Standard/50Hz 범위를 기준으로 단독 baseline,
+좌표 계측, 제한된 controller A/B와 회귀 검증을 진행했다. 기존 사용자 변경은
+보존했고, qualifying line·전역 타이어/차량 물리·pit/SC/render 폭은 이번 작업에서
+승인 대상으로 포함하지 않았다.
+
+- `backend/tools/run_circuit_baseline.py`에 source/hash·branch, compiled-centerline와
+  active-line path progress, telemetry progress 보정, centerline-relative/line-relative
+  offset, pose·curvature·lateral speed·slip/lock 계측과 코너별 signed error 보고를
+  추가했다. 반복 baseline은 동일 입력 3회 결과와 compact trace를 함께 보존한다.
+- 기본 5랩 baseline 3회는 결정적이었다. Bahrain은 fastest `92.907s`, lateral
+  p95/max `4.785/6.141m`, heading p95 `0.105rad`, over-2m `53.46s`; RBR은
+  `66.990s`, `5.759/7.918m`, `0.105rad`, `54.40s`였다. 두 트랙 모두
+  contact/off-track/track-limit/run-wide/planner-fallback/numeric guard는 0이었다.
+- reference smoothing, max lateral slope, reference lateral-speed feed-forward와
+  clean-line lateral response cap 후보를 A/B했다. 가장 나은 단독 수치도 Bahrain
+  `p95 4.169m`, RBR `p95 4.374m`으로 승인 기준 `p95 ≤ 2m`, `max ≤ 4m`을 넘었고,
+  RBR slope 후보에는 planner fallback 150~200샘플이 생겼다. feed-forward는
+  Bahrain correction reversal 1, RBR 1~3으로 늘었고, 2.5m/s response cap은
+  Bahrain p95 `6.632m`, RBR p95 `6.560m` 및 off-track 15샘플로 거부했다.
+- 기본값은 유지했다. `CircuitPhysicsCalibration.racing_line_max_lateral_slope`와
+  RaceEngine의 optional diagnostic knobs는 기본 동작을 바꾸지 않으며,
+  `data/circuits.json`에 승인된 per-circuit 보정값은 아직 기록하지 않았다.
+- 15랩 단독 stint는 두 트랙 모두 완주했지만 RBR에서 planner-fallback 300샘플과
+  correction reversal 8이 발생해 승인하지 않았다. Bahrain peak rear surface/core는
+  `112.266/102.414°C`, RBR은 `102.702/94.295°C`; 두 결과 모두 clamp와 연속 과열은
+  0이었다.
+- 기존 20-car session harness를 circuit 3/4로 일반화했다. 1x/2x는 Bahrain
+  effective `0.987/1.955x`, RBR `0.983/1.919x`로 PASS했고, 각 실행의 contact,
+  track-limit, planner-fallback은 0이었다. 최소 10랩 direct traffic harness도
+  추가했지만 계산 비용 때문에 이번 실행에서는 중단했으므로 10랩 traffic approval은
+  미완료로 남긴다.
+- coordinate contract 단위 테스트 8개와 지시문 지정 회귀 86개가 통과했다.
+  track validation/audit는 두 트랙 모두 통과했고, `git diff --check`는 최종 보고
+  전에 다시 실행한다.
+
+상세 표와 실패 후보는 [`RACE_RACING_LINE_CALIBRATION_PHASE_1_REPORT.md`](RACE_RACING_LINE_CALIBRATION_PHASE_1_REPORT.md)에,
+원본 JSON은 `backend/data/calibration/`의 `*_race_line_baseline_v1.json`,
+`*_race_line_stint15_v1.json`, `*_race_line_traffic_1x2_v1.json`에 보존한다.
+현재 결론은 “계측·baseline·부분 회귀 완료, 승인 가능한 레이싱라인 보정값 없음”이며,
+다음 단계는 reference path/pose 정렬을 더 좁은 fixture로 분리한 뒤에만 회로별
+calibration을 재시도하는 것이다.
+
+2026-08-02 실패 리뷰 뒤 foundation 보정을 추가했다. 첫 A/B가 reference 횡속도만
+전달하고 target 횡속도를 0으로 둬 상대 프레임에서 의도한 transport를 상쇄하던
+계약을 수정하고, 진단에서는 두 속도에 같은 active-line offset 미분값을 전달한다.
+다만 이 후보를 20대 제품 기본값으로 활성화했을 때 기존 SC 대열 회귀 두 건이
+발생했으므로 제품 기본값은 `0`으로 되돌리고 진단 CLI에서만 `1`을 사용한다.
+
+진단 랩 수와 연료 기준도 분리했다. 새 5랩 3회 결과는 Bahrain 57랩 기준
+`108.031kg`, RBR 71랩 기준 `107.364kg`으로 시작하며, 각각 lateral p95/max
+`4.410/6.057m`, `5.652/7.942m`다. Bahrain은 이전 저연료 기준 p95 `4.785m`보다
+개선됐지만 두 회로 모두 승인 기준에 미달하고, heading 0.105rad 상한 누적은
+각각 `64.46s`, `57.54s`다. RBR은 실행당 planner fallback 250샘플도 남았다.
+따라서 코드 계약·연료·reversal·heading/fallback 진단은 보완됐지만 제품
+레이싱라인은 여전히 미승인이다. 새 산출물은
+`bahrain_race_line_foundation_v2.json`과
+`red_bull_ring_race_line_foundation_v2.json`이다. 관련 회귀 90개와 새 계약 때문에
+영향받았던 SC 테스트 2개는 통과했다.
+
+### 8.2 동적 레이싱라인 추종 기반 보정 — 부분 승인 (2026-08-02)
+
+일정 곡률 fixture에서 고속·고다운포스 상태의 총 횡력 여유와 무관하게 전·후축
+cornering stiffness가 정적 하중값으로 고정되는 원인을 재현했다. 이 때문에 실제
+그립 상한에 도달하기 전에도 큰 slip/body angle이 필요했고 heading 0.105rad guard에
+걸려 경로 복귀가 제한됐다.
+
+- `vehicle_dynamics.py`에 수직하중 용량 대비 정적하중 용량의 0.65승(최대 2.5배)을
+  사용하는 load-sensitive cornering stiffness를 추가했다. 총 타이어 횡력 상한은
+  변경하지 않았다.
+- 제동·구동 후 남은 combined-slip 횡력과 명목 타이어 하중 용량을 분리해, 제동
+  순간에 수직하중 기반 stiffness까지 사라지지 않도록 했다.
+- 55m/s·곡률 0.014/m·10초 일정 곡률 회귀를 추가했다.
+- 새 하중 응답을 적용한 뒤 기존 SC 대열 형성과 6대 물리 순위 역전 복구를 포함한
+  계약 테스트 14개가 통과해 paired target/reference line transport 기본값을 `1`로
+  승인했다. 명시적 `0` legacy replay는 유지한다.
+- 5랩×3회 full-race-fuel 산출물을 갱신했다. Bahrain은 p95/max
+  `4.410/6.057 → 3.733/4.883m`, RBR은 `5.652/7.942 → 5.488/7.582m`다.
+  두 회로 모두 contact/off-track/track-limit/run-wide/numeric guard/열 clamp는 0이고
+  반복 결과는 동일하다. rear surface/core peak는 Bahrain `107.917/94.423°C`,
+  RBR `103.170/91.666°C`다.
+
+전역 차량 모델 수정은 승인하지만 회로별 레이싱라인 승인은 아직 아니다. Bahrain도
+`p95 ≤ 2m, max ≤ 4m`에 미달하고, RBR은 T6–T7·T9–T10의 급격한 측정 기준선과
+실행당 planner fallback 250샘플이 남는다. RBR reference 25% 축소, clean-line 횡속도
+상한 증가, 전역 downforce grip 증가, 전체 목표속도 감속, yaw relaxation 감소 후보는
+오프 트랙·fallback·전역 물리 왜곡·랩타임 손실 중 하나가 있어 적용하지 않았다.
+`data/circuits.json`에는 새 회로별 보정값을 쓰지 않았다.
+
+최종 검증은 경로/트랙/trajectory/vehicle/telemetry와 SC 순위 복구 2건을 포함한
+96개 테스트 `OK`(105.836초), Bahrain 20대·1,700초 장기 열 통합 `OK`
+(513.766초), 회로별 5랩×3 결정성 `pass`, Python compile과 `git diff --check`
+`OK`다. 장기 열 golden은 새 하중 응답에 맞춰 후륜 표면/코어
+`117.321/107.975°C`로 갱신했으며 과열·연속 과열·clamp는 모두 0이다.
 
 ## 9. 남아 있는 핵심 한계
 
 - 실제 F1 리플레이 분포에 맞춘 공격 시도·성공·철회·접촉·forced-wide 빈도 보정이 필요하다.
 - Bahrain T1/T2 코너 최저속도 오차와 세션별 노면·기온·바람 차이가 남아 있다.
-- 타이어 압력, 하중 이동, 브레이크 열과 바퀴별 상세 slip ratio는 아직 없다.
+- 타이어 압력, 네 바퀴별 수직하중·회전 관성·독립 열/마모, 서스펜션·롤·피치는 아직 없다. 타이어 열·하중·슬립·브레이크 열은 전·후축 평균 모델이며 네 바퀴 독립 모델은 아니다.
+- 등록된 9개 서킷은 모두 수작업 `surface_zones`가 비어 있다. 곡률로 생성한 양쪽 연석만 전부 `low`로 사용하므로 실제 높은 연석 위치 검증과 명시적 표면 데이터 입력이 필요하다.
 - Silverstone·Spa·Hungaroring은 실제 좌우 경계·연석·표면 데이터가 부족하다.
 - 팀별 직선·저속·고속·제동 특성과 컴파운드별 스틴트 길이 벤치마크가 부족하다.
-- 사용자가 확인한 기존 전체 snapshot 스트림의 Chrome renderer private footprint 약 1.9GB 증가는 실제 현재 점유량이었다. 반복 대형 JSON·전체 랩 기록·고빈도 포즈 객체 생성을 제거한 5랩 검증에서는 같은 증가율이 재현되지 않았지만, 개선 후 전체 18랩 Chrome 작업 관리자 재측정은 장시간 승인 기준으로 남긴다.
+- 사용자가 확인한 기존 전체 snapshot 스트림의 Chrome renderer private footprint 약 1.9GB와 이후 52랩 탭 표시 2.7GB는 정상 목표보다 높다. 반복 대형 JSON·전체 랩 기록·고빈도 포즈 객체 생성을 제거한 5~10랩 검증에서는 같은 증가율이 재현되지 않았고, 52랩 직후 별도 renderer 표본은 physical footprint 354MB·peak 473MB였으므로 단일 숫자만으로 지속 누수를 확정하지 않는다. 새 5분 JS heap 추세·DOM·WebGL 자원 계측으로 전체 레이스 증가 기울기를 다시 승인해야 한다.
 - 화면에 표시하는 JS heap은 페이지의 JavaScript 객체만 포함한다. Chrome 탭 hover나 Chrome 작업 관리자의 memory footprint는 DOM, 렌더러 네이티브 메모리와 일부 그래픽 자원까지 포함하는 현재 OS 점유량이며 누적 사용량이 아니다. 두 숫자는 직접 비교하지 않는다.
 - Three.js 차량과 피트 개러지는 기능 검증용 low-poly 모델이며 장벽·관중석·피트 크루·고품질 재질은 아직 추가 구현이 필요하다.
 - 2026 하이브리드 파워유닛, 에너지 관리, 액티브 에어로, 날씨와 젖은 노면은 범위 밖이다.
 
 ## 10. 다음 권장 순서
 
-1. 현재 연석·런오프·피트 개러지 다음으로 장벽·관중석과 트랙 주변 정적 배치를 단계적으로 추가한다.
-2. 실제 Bahrain 리플레이로 코너별 공격·철회·성공·접촉 분포를 라벨링하고 AI 벤치마크 v2를 만든다.
-3. Bahrain T1/T2 속도·제동·스로틀 오차를 재검증한다.
-4. 타이어 압력, 하중 이동과 브레이크 열을 독립 회귀 테스트와 함께 추가한다.
-5. Silverstone·Spa·Hungaroring의 실제 경계·연석·표면을 순차 적용한다.
-6. 새 트랙 가져오기, 전역 라인 생성, 단독 안전 랩과 실제 데이터 비교를 하나의 승인 명령으로 묶는다.
-7. 2026 파워유닛·에너지·액티브 에어로는 별도 ruleset과 문서로 시작한다.
+1. Bahrain에서 승인한 전역 물리·타이어 계수를 고정하고 다른 회로의 문제를
+   회로 데이터 또는 controller profile 문제로 먼저 분류한다.
+2. **Red Bull Ring을 첫 확장 대상으로 삼는다.** 이 회로는 TUM 기반 좌·우 폭과
+   2025 예선 텔레메트리 prior가 있고 C2/C3/C4 지명이라 C4 검증까지 한 번에 할
+   수 있다. 먼저 단독 5랩, 20대 단축 레이스, 피트 1회와 강제 SC 1회만 승인한다.
+   세부 작업 계약은
+   [`RED_BULL_RING_OPTIMIZATION_PHASE_1_DIRECTIVE.md`](RED_BULL_RING_OPTIMIZATION_PHASE_1_DIRECTIVE.md)를
+   따른다.
+3. Red Bull Ring에서는 `NORMAL 18/30°C`를 기준선으로 사용하고 COOL/HOT은
+   기준선 통과 뒤 환경 민감도 시험으로 분리한다. 처음부터 세 환경을 동시에
+   보정하지 않는다.
+4. 다음은 Silverstone에서 C1/C2/C3 고속 횡하중·타이어 열을, Hungaroring에서
+   C2/C3/C4 저속 연속 코너·HOT 열평형을 확인한다. 실제 경계가 부족한 구간은
+   랩타임 보정보다 데이터 한계로 먼저 기록한다.
+5. C5 첫 승인은 Monza C3/C4/C5로 진행하되, 현재 hand-tuned planner만 있으므로
+   공식/재현 가능한 랩 속도·제동 기준을 추가한 뒤 보정한다.
+6. Zandvoort·Barcelona·Suzuka·Spa는 경계·뱅킹·표면 또는 텔레메트리 품질을
+   보강한 뒤 같은 수직 승인 절차를 반복한다. 현재 `planar_2d` 한계를 숨기기
+   위해 회로별 속도계수를 과도하게 맞추지 않는다.
+7. 각 회로는 `형상 무결성 → 단독 안정 랩 → 실제 랩/속도 비교 → 20대 교통 →
+   피트/SC → 타이어·컴파운드 → 메모리/결정성` 순서로 조금씩 완료하고, 다음
+   회로로 넘어가기 전에 기준 산출물을 `backend/data/calibration/`에 남긴다.
+8. Red Bull Ring 기준선 이후
+   [`COLD_OUTLAP_CONTROL_DESIGN.md`](COLD_OUTLAP_CONTROL_DESIGN.md)에 따라
+   출발 90°C/피트 70°C 분리와 콜드 아웃랩 제어를 구현한다.
+9. 장벽·관중석·고품질 그래픽과 2026 파워유닛·에너지·액티브 에어로는 물리
+   승인과 분리된 후속 작업으로 유지한다.
 
 ## 11. 주요 코드 위치
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import isfinite
 from enum import Enum
 from typing import Optional
 
@@ -12,12 +13,37 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 
 class TireCompound(str, Enum):
-    """Available tire compounds."""
+    """Legacy tire/role values kept for the migration adapter.
+
+    New session-owned physics state uses ``PhysicalTireCompound`` and exposes
+    the weekend role separately as ``DryTireRole``.  This enum remains at the
+    API boundary until existing clients and tests have migrated.
+    """
     SOFT = "SOFT"
     MEDIUM = "MEDIUM"
     HARD = "HARD"
     INTER = "INTER"
     WET = "WET"
+
+
+class PhysicalTireCompound(str, Enum):
+    """Season physical compound code used by tire physics and wear."""
+
+    C1 = "C1"
+    C2 = "C2"
+    C3 = "C3"
+    C4 = "C4"
+    C5 = "C5"
+    INTER = "INTER"
+    WET = "WET"
+
+
+class DryTireRole(str, Enum):
+    """Weekend role shown to the user and resolved to a physical compound."""
+
+    HARD = "HARD"
+    MEDIUM = "MEDIUM"
+    SOFT = "SOFT"
 
 
 class StrategyStyle(str, Enum):
@@ -32,6 +58,142 @@ class Weather(str, Enum):
     DRY = "dry"
     LIGHT_RAIN = "light_rain"
     HEAVY_RAIN = "heavy_rain"
+
+
+class ThermalPresetName(str, Enum):
+    """Static circuit thermal scenarios exposed by race setup."""
+
+    COOL = "COOL"
+    NORMAL = "NORMAL"
+    HOT = "HOT"
+
+
+# Session-owned environmental defaults.  The tire model has no implicit
+# fallback; API/session boundaries may use this single compatibility preset.
+DEFAULT_AMBIENT_TEMPERATURE_C = 30.0
+DEFAULT_TRACK_TEMPERATURE_C = 40.0
+MIN_TRACK_CONDITION_TEMPERATURE_C = -50.0
+MAX_TRACK_CONDITION_TEMPERATURE_C = 100.0
+
+
+class TrackConditions(BaseModel):
+    """Immutable thermal boundary conditions owned by a race session."""
+
+    model_config = ConfigDict(frozen=True)
+
+    ambient_temperature_c: float = Field(
+        default=DEFAULT_AMBIENT_TEMPERATURE_C,
+        ge=MIN_TRACK_CONDITION_TEMPERATURE_C,
+        le=MAX_TRACK_CONDITION_TEMPERATURE_C,
+    )
+    track_temperature_c: float = Field(
+        default=DEFAULT_TRACK_TEMPERATURE_C,
+        ge=MIN_TRACK_CONDITION_TEMPERATURE_C,
+        le=MAX_TRACK_CONDITION_TEMPERATURE_C,
+    )
+
+    @model_validator(mode="after")
+    def validate_finite_temperatures(self) -> "TrackConditions":
+        if not isfinite(self.ambient_temperature_c) or not isfinite(
+            self.track_temperature_c
+        ):
+            raise ValueError("track condition temperatures must be finite")
+        return self
+
+
+class CircuitThermalProfile(BaseModel):
+    """Validated COOL/NORMAL/HOT boundary conditions for one circuit."""
+
+    model_config = ConfigDict(frozen=True)
+
+    default_preset: ThermalPresetName = ThermalPresetName.NORMAL
+    presets: dict[ThermalPresetName, TrackConditions]
+
+    @model_validator(mode="after")
+    def validate_presets(self) -> "CircuitThermalProfile":
+        expected = set(ThermalPresetName)
+        actual = set(self.presets)
+        if actual != expected:
+            missing = ", ".join(item.value for item in sorted(expected - actual, key=lambda x: x.value))
+            extra = ", ".join(str(item) for item in sorted(actual - expected, key=str))
+            details = []
+            if missing:
+                details.append(f"missing={missing}")
+            if extra:
+                details.append(f"unexpected={extra}")
+            raise ValueError(
+                "thermal profile must contain exactly COOL, NORMAL and HOT "
+                f"({'; '.join(details)})"
+            )
+        if self.default_preset not in self.presets:
+            raise ValueError("thermal profile default_preset must be present in presets")
+
+        ordered = [self.presets[preset] for preset in ThermalPresetName]
+        ambient = [condition.ambient_temperature_c for condition in ordered]
+        track = [condition.track_temperature_c for condition in ordered]
+        if ambient != sorted(ambient):
+            raise ValueError("thermal profile ambient temperatures must be COOL <= NORMAL <= HOT")
+        if track != sorted(track):
+            raise ValueError("thermal profile track temperatures must be COOL <= NORMAL <= HOT")
+        return self
+
+
+class CircuitTireWearProfile(BaseModel):
+    """Circuit-owned mechanical tyre-wear calibration.
+
+    Compound durability is calibrated in Bahrain-equivalent laps.  The
+    abrasion multiplier lets other circuits adjust that distance-normalized
+    usage without changing the global C1-C5 compound specifications.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    circuit_id: int | str
+    abrasion_multiplier: float = Field(ge=0.65, le=1.35)
+    source_class: str = Field(min_length=1)
+    note: str = ""
+
+
+class TireCompoundNomination(BaseModel):
+    """Immutable three-compound dry nomination for one circuit weekend."""
+
+    model_config = ConfigDict(frozen=True)
+
+    circuit_id: int | str
+    ruleset: str = Field(min_length=1)
+    hard: PhysicalTireCompound
+    medium: PhysicalTireCompound
+    soft: PhysicalTireCompound
+    source_class: str = Field(min_length=1)
+    source_url: str = Field(min_length=1)
+    status: str = Field(min_length=1)
+    note: str = ""
+
+    @model_validator(mode="after")
+    def validate_dry_nomination(self) -> "TireCompoundNomination":
+        dry_codes = (self.hard, self.medium, self.soft)
+        if any(code in (PhysicalTireCompound.INTER, PhysicalTireCompound.WET) for code in dry_codes):
+            raise ValueError("dry tire nomination cannot contain INTER or WET")
+        if len(set(dry_codes)) != 3:
+            raise ValueError("hard, medium and soft nominations must be distinct")
+        ranks = {code: index for index, code in enumerate(PhysicalTireCompound.__members__)
+                 if code.startswith("C")}
+        if not (ranks[self.hard.value] < ranks[self.medium.value] < ranks[self.soft.value]):
+            raise ValueError("dry nomination must be ordered HARD < MEDIUM < SOFT")
+        return self
+
+    def physical_for_role(self, role: DryTireRole) -> PhysicalTireCompound:
+        return {
+            DryTireRole.HARD: self.hard,
+            DryTireRole.MEDIUM: self.medium,
+            DryTireRole.SOFT: self.soft,
+        }[role]
+
+    def role_for_physical(self, compound: PhysicalTireCompound) -> DryTireRole | None:
+        for role in DryTireRole:
+            if self.physical_for_role(role) == compound:
+                return role
+        return None
 
 
 class PaceMode(str, Enum):
@@ -145,6 +307,27 @@ class Sector(BaseModel):
         return self
 
 
+class SectorTimingSource(BaseModel):
+    """Lineage for official major-sector timing distances."""
+
+    source: str = Field(min_length=1)
+    source_url: str = Field(min_length=1)
+    acquired_at: str = Field(min_length=1)
+    source_centerline_length_m: float = Field(gt=0.0)
+    sector_lengths_m: list[float] = Field(min_length=3, max_length=3)
+    method: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_sector_lengths(self) -> "SectorTimingSource":
+        if not all(isfinite(value) and value > 0.0 for value in self.sector_lengths_m):
+            raise ValueError("sector timing source lengths must be finite and positive")
+        if abs(sum(self.sector_lengths_m) - self.source_centerline_length_m) > 0.01:
+            raise ValueError(
+                "sector timing source lengths must sum to the source centerline length"
+            )
+        return self
+
+
 class DRSZone(BaseModel):
     """A DRS zone as a normalized progress range."""
     name: str
@@ -230,6 +413,17 @@ class PitLaneConfig(BaseModel):
         ge=0.0,
         le=1.0,
     )
+    exit_lane_rejoin_progress: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Absolute circuit progress where a dedicated pit-exit lane finishes "
+            "blending into the racing line. None preserves the direct rejoin."
+        ),
+    )
+    exit_lane_merge_start: float = Field(default=0.60, ge=0.0, le=0.95)
+    exit_lane_speed_limit_kph: float = Field(default=130.0, ge=60.0, le=200.0)
     entry_blend: float = Field(default=0.015, ge=0.0, le=0.25)
     exit_blend: float = Field(default=0.015, ge=0.0, le=0.25)
     samples: int = Field(default=44, ge=8, le=180)
@@ -628,6 +822,19 @@ class CircuitPhysicsCalibration(BaseModel):
             "telemetrySpeedReferenceWeight",
         ),
     )
+    telemetry_progress_offset: float = Field(
+        default=0.0,
+        ge=-0.05,
+        le=0.05,
+        validation_alias=AliasChoices(
+            "telemetry_progress_offset",
+            "telemetryProgressOffset",
+        ),
+        description=(
+            "Progress added while sampling telemetry so measured speed and "
+            "braking align with compiled centerline curvature."
+        ),
+    )
     telemetry_braking_curvature_threshold: float = Field(
         default=0.5,
         ge=0.0,
@@ -682,6 +889,13 @@ class CircuitPhysicsCalibration(BaseModel):
             "brakeControlErrorFraction",
         ),
     )
+    release_inward_recovery_speed_cap: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "release_inward_recovery_speed_cap",
+            "releaseInwardRecoverySpeedCap",
+        ),
+    )
     controller_sample_distance_m: float = Field(
         default=50.0,
         ge=5.0,
@@ -718,6 +932,19 @@ class CircuitPhysicsCalibration(BaseModel):
             "racingLineInitialSmoothingPasses",
         ),
     )
+    racing_line_max_lateral_slope: float = Field(
+        default=0.05,
+        ge=0.01,
+        le=0.07,
+        validation_alias=AliasChoices(
+            "racing_line_max_lateral_slope",
+            "racingLineMaxLateralSlope",
+        ),
+        description=(
+            "Race-line lateral travel per metre of path; used to keep the "
+            "reference path driveable without changing vehicle control limits."
+        ),
+    )
 
 
 class Circuit(BaseModel):
@@ -742,6 +969,16 @@ class Circuit(BaseModel):
     track_width_m: float = Field(default=12.0, ge=8.0, le=24.0)
     track_width_profile: list[TrackWidthSample] = Field(default_factory=list)
     track_conditions: list[TrackConditionSample] = Field(default_factory=list)
+    thermal_profile: CircuitThermalProfile
+    tire_wear_profile: CircuitTireWearProfile = Field(
+        default_factory=lambda: CircuitTireWearProfile(
+            circuit_id="default",
+            abrasion_multiplier=1.0,
+            source_class="compatibility_default",
+            note="Neutral fallback for isolated test and editor-created circuits.",
+        )
+    )
+    tire_compound_nomination: TireCompoundNomination | None = None
     overtaking_difficulty: float = Field(default=0.5, ge=0.0, le=1.0)
     allows_self_intersection: bool = Field(
         default=False,
@@ -752,6 +989,7 @@ class Circuit(BaseModel):
         description="True for figure-eight layouts (e.g. Suzuka) with an intentional bridge crossing.",
     )
     sectors: list[Sector] = Field(default_factory=list)
+    sector_timing_source: Optional[SectorTimingSource] = None
     layout_segments: list[TrackLayoutSegment] = Field(default_factory=list)
     track_coords: list[TrackCoord] = Field(default_factory=list)
     track_points: list[TrackPoint] = Field(default_factory=list)
@@ -785,6 +1023,8 @@ class DriverRaceState(BaseModel):
     current_lap: int = 0
     total_progress: float = 0.0  # total laps completed + fractional progress
     tire_compound: TireCompound = TireCompound.MEDIUM
+    tire_role: DryTireRole = DryTireRole.MEDIUM
+    physical_tire_compound: PhysicalTireCompound | None = None
     tire_age: int = 0  # laps since last tire change
     tire_usage: float = 0.0  # tire load accumulated since last tire change
     tire_wear: float = 0.0  # 0.0 = fresh, higher = more worn
@@ -794,6 +1034,12 @@ class DriverRaceState(BaseModel):
     tire_surface_temperature_c: float = 90.0
     tire_core_temperature_c: float = 90.0
     tire_thermal_grip: float = 1.0
+    front_tire_surface_temperature_c: float = 90.0
+    front_tire_core_temperature_c: float = 90.0
+    front_tire_thermal_grip: float = 1.0
+    rear_tire_surface_temperature_c: float = 90.0
+    rear_tire_core_temperature_c: float = 90.0
+    rear_tire_thermal_grip: float = 1.0
     fuel_mass_kg: float = 0.0
     fuel_burned_kg: float = 0.0
     fuel_laps_remaining: float = 0.0
@@ -845,7 +1091,24 @@ class DriverRaceState(BaseModel):
     slip_angle_rad: float = 0.0
     wheel_lock_ratio: float = 0.0
     traction_slip_ratio: float = 0.0
+    front_tire_slide_energy_j: float = 0.0
+    rear_tire_slide_energy_j: float = 0.0
     tire_slide_energy_j: float = 0.0
+    rear_applied_drive_energy_j: float = 0.0
+    front_applied_brake_energy_j: float = 0.0
+    rear_applied_brake_energy_j: float = 0.0
+    vehicle_mass_kg: float = 768.0
+    front_normal_load_n: float = 0.0
+    rear_normal_load_n: float = 0.0
+    longitudinal_load_transfer_n: float = 0.0
+    front_wheel_speed_rad_s: float = 0.0
+    rear_wheel_speed_rad_s: float = 0.0
+    front_axle_slip_ratio: float = 0.0
+    rear_axle_slip_ratio: float = 0.0
+    applied_brake_force_n: float = 0.0
+    front_brake_temperature_c: float = 400.0
+    rear_brake_temperature_c: float = 400.0
+    brake_fade_factor: float = 1.0
     car_width_m: float = 1.9
     car_length_m: float = 5.0
     wheelbase_m: float = 3.4
@@ -909,6 +1172,8 @@ class LapTimeInfo(BaseModel):
     lap_time: float
     tire_compound: str
     stint: int
+    tire_role: str | None = None
+    physical_tire_compound: str | None = None
     pit_stop: bool = False
     sector_times: list[float] = Field(default_factory=list)
     mini_sector_times: list[float] = Field(default_factory=list)
@@ -981,6 +1246,9 @@ class RaceTickState(BaseModel):
     lap: int
     total_laps: int
     weather: str = "dry"
+    track_conditions: TrackConditions = Field(default_factory=TrackConditions)
+    thermal_preset: ThermalPresetName | None = None
+    track_conditions_source: str = "explicit_override"
     safety_car: bool = False
     race_phase: str = "green"  # green | vsc | sc
     race_phase_remaining_seconds: float = 0.0
@@ -1036,7 +1304,24 @@ class DriverPositionInfo(BaseModel):
     slip_angle_rad: float = 0.0
     wheel_lock_ratio: float = 0.0
     traction_slip_ratio: float = 0.0
+    front_tire_slide_energy_j: float = 0.0
+    rear_tire_slide_energy_j: float = 0.0
     tire_slide_energy_j: float = 0.0
+    rear_applied_drive_energy_j: float = 0.0
+    front_applied_brake_energy_j: float = 0.0
+    rear_applied_brake_energy_j: float = 0.0
+    vehicle_mass_kg: float = 768.0
+    front_normal_load_n: float = 0.0
+    rear_normal_load_n: float = 0.0
+    longitudinal_load_transfer_n: float = 0.0
+    front_wheel_speed_rad_s: float = 0.0
+    rear_wheel_speed_rad_s: float = 0.0
+    front_axle_slip_ratio: float = 0.0
+    rear_axle_slip_ratio: float = 0.0
+    applied_brake_force_n: float = 0.0
+    front_brake_temperature_c: float = 400.0
+    rear_brake_temperature_c: float = 400.0
+    brake_fade_factor: float = 1.0
     car_width_m: float = 1.9
     car_length_m: float = 5.0
     wheelbase_m: float = 3.4
@@ -1057,14 +1342,25 @@ class DriverPositionInfo(BaseModel):
     mini_sector_splits: list[Optional[float]] = Field(default_factory=list)
     mini_sector_statuses: list[str] = Field(default_factory=list)
     tire_compound: str
+    tire_role: str = DryTireRole.MEDIUM.value
+    physical_tire_compound: str | None = None
     tire_age: int
     tire_wear: float
     tire_lateral_grip: float = 1.0
     tire_traction_grip: float = 1.0
     tire_braking_grip: float = 1.0
+    tire_lateral_grip_index: float = 1.0
+    tire_traction_grip_index: float = 1.0
+    tire_braking_grip_index: float = 1.0
     tire_surface_temperature_c: float = 90.0
     tire_core_temperature_c: float = 90.0
     tire_thermal_grip: float = 1.0
+    front_tire_surface_temperature_c: float = 90.0
+    front_tire_core_temperature_c: float = 90.0
+    front_tire_thermal_grip: float = 1.0
+    rear_tire_surface_temperature_c: float = 90.0
+    rear_tire_core_temperature_c: float = 90.0
+    rear_tire_thermal_grip: float = 1.0
     fuel_mass_kg: float = 0.0
     fuel_burned_kg: float = 0.0
     fuel_laps_remaining: float = 0.0
@@ -1082,7 +1378,7 @@ class DriverPositionInfo(BaseModel):
     best_lap_time: float
     in_pit: bool
     pit_count: int
-    pit_phase: Optional[str] = None  # in | stop | out
+    pit_phase: Optional[str] = None  # in | stop | out | exit_lane
     pit_merge_state: Optional[str] = None  # approach | limited | stop | yield | hold | merge
     pit_merge_conflict_driver_id: Optional[int] = None
     pit_merge_conflict_group_id: Optional[str] = None
@@ -1189,6 +1485,8 @@ class RaceSetupRequest(BaseModel):
     total_laps: int = Field(default=30, ge=5, le=100)
     starting_tires: dict[int, TireCompound] = Field(default_factory=dict)
     grid_order: list[int] = Field(default_factory=list)
+    thermal_preset: ThermalPresetName | None = None
+    track_conditions: TrackConditions | None = None
 
 
 class RaceSetupResponse(BaseModel):
@@ -1198,6 +1496,10 @@ class RaceSetupResponse(BaseModel):
     player_team: Team
     player_drivers: list[Driver]
     grid_order: list[dict]  # list of {driver_id, name, team, position}
+    track_conditions: TrackConditions = Field(default_factory=TrackConditions)
+    thermal_preset: ThermalPresetName | None = None
+    track_conditions_source: str = "explicit_override"
+    tire_compound_nomination: TireCompoundNomination | None = None
 
 
 class StartingGridSlot(BaseModel):
@@ -1213,6 +1515,7 @@ class QualifyingRequest(BaseModel):
     circuit_id: int
     player_team_id: int
     attempt_laps: int = Field(default=3, ge=1, le=6)
+    thermal_preset: ThermalPresetName | None = None
 
 
 class QualifyingResult(BaseModel):
@@ -1223,6 +1526,8 @@ class QualifyingResult(BaseModel):
     full_name: str
     team: str
     team_color: str
+    tire_role: str = DryTireRole.SOFT.value
+    physical_tire_compound: str | None = None
     best_lap_time: float
     gap: str
     laps: list[float]
@@ -1238,6 +1543,10 @@ class QualifyingResponse(BaseModel):
     player_team: Team
     results: list[QualifyingResult]
     grid_order: list[int]
+    track_conditions: TrackConditions = Field(default_factory=TrackConditions)
+    thermal_preset: ThermalPresetName | None = None
+    track_conditions_source: str = "circuit_preset"
+    tire_compound_nomination: TireCompoundNomination | None = None
 
 
 class RaceInfoMessage(BaseModel):
@@ -1261,6 +1570,10 @@ class RaceInfoMessage(BaseModel):
     track_width_profile: list[list[float]] = Field(default_factory=list)
     surface_zones: list[TrackSurfaceZone] = Field(default_factory=list)
     track_conditions: list[TrackConditionSample] = Field(default_factory=list)
+    environment_conditions: TrackConditions = Field(default_factory=TrackConditions)
+    thermal_preset: ThermalPresetName | None = None
+    track_conditions_source: str = "explicit_override"
+    tire_compound_nomination: TireCompoundNomination | None = None
     racing_line_coords: list[list[float]] = Field(default_factory=list)
     racing_line_length_m: float = 0.0
     predicted_racing_lap_time: float = 0.0
@@ -1270,6 +1583,7 @@ class RaceInfoMessage(BaseModel):
     track_coords: list[list[float]]
     start_finish_index: int = 0
     pit_lane_coords: list[list[float]] = []
+    pit_exit_lane_coords: list[list[float]] = []
     pit_wall_coords: list[list[float]] = []
     pit_box_offset: float = 11.0
     pit_lane_width_m: float = 4.0

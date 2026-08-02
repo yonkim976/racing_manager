@@ -6,6 +6,10 @@ import unittest
 
 from data_loader import load_circuits, load_drivers, load_teams
 from models.schemas import PaceMode, TireCompound
+from simulation.brake_model import (
+    advance_brake_thermal_state,
+    brake_temperature_force_factor,
+)
 from simulation.race_engine import RaceEngine
 from simulation.tire_model import (
     advance_tire_thermal_state,
@@ -59,6 +63,8 @@ class FuelAndTireStrategyTests(unittest.TestCase):
             lateral_acceleration_mps2=8.0,
             throttle=0.8,
             brake=0.0,
+            ambient_temperature_c=30.0,
+            track_temperature_c=40.0,
         )
         clean = advance_tire_thermal_state(**common, slide_energy_j=0.0)
         sliding = advance_tire_thermal_state(**common, slide_energy_j=20000.0)
@@ -67,6 +73,88 @@ class FuelAndTireStrategyTests(unittest.TestCase):
             sliding.surface_temperature_c,
             clean.surface_temperature_c,
         )
+
+    def test_heavy_braking_heats_discs_more_than_coasting(self) -> None:
+        common = dict(
+            front_temperature_c=400.0,
+            rear_temperature_c=400.0,
+            delta_seconds=1.0,
+            speed_mps=70.0,
+            front_brake_bias=0.58,
+            ambient_temperature_c=30.0,
+        )
+        coasting = advance_brake_thermal_state(
+            **common,
+            applied_brake_force_n=0.0,
+        )
+        braking = advance_brake_thermal_state(
+            **common,
+            applied_brake_force_n=40_000.0,
+        )
+
+        self.assertGreater(
+            braking.front_temperature_c,
+            coasting.front_temperature_c,
+        )
+        self.assertGreater(
+            braking.rear_temperature_c,
+            coasting.rear_temperature_c,
+        )
+        self.assertGreater(
+            braking.front_temperature_c,
+            braking.rear_temperature_c,
+        )
+
+    def test_extreme_brake_temperature_reduces_available_force(self) -> None:
+        optimal = brake_temperature_force_factor(500.0, 450.0)
+        overheated = brake_temperature_force_factor(1100.0, 1000.0)
+
+        self.assertEqual(optimal, 1.0)
+        self.assertLess(overheated, optimal)
+
+    def test_repeated_race_braking_keeps_both_axles_in_operating_range(
+        self,
+    ) -> None:
+        front = 400.0
+        rear = 400.0
+        thermal = None
+        # Deterministic 90-second lap surrogate: eight braking zones followed
+        # by airflow cooling. It protects the long-run equilibrium calibration
+        # without tying the unit test to a particular circuit trajectory.
+        for _ in range(52):
+            for _ in range(8):
+                for _ in range(15):
+                    thermal = advance_brake_thermal_state(
+                        front_temperature_c=front,
+                        rear_temperature_c=rear,
+                        delta_seconds=0.1,
+                        speed_mps=55.0,
+                        applied_brake_force_n=16_000.0,
+                        front_brake_bias=0.58,
+                        ambient_temperature_c=30.0,
+                    )
+                    front = thermal.front_temperature_c
+                    rear = thermal.rear_temperature_c
+                for _ in range(95):
+                    thermal = advance_brake_thermal_state(
+                        front_temperature_c=front,
+                        rear_temperature_c=rear,
+                        delta_seconds=0.1,
+                        speed_mps=48.0,
+                        applied_brake_force_n=0.0,
+                        front_brake_bias=0.58,
+                        ambient_temperature_c=30.0,
+                    )
+                    front = thermal.front_temperature_c
+                    rear = thermal.rear_temperature_c
+
+        self.assertIsNotNone(thermal)
+        self.assertGreater(front, 250.0)
+        self.assertGreater(rear, 250.0)
+        self.assertLess(front, 950.0)
+        self.assertLess(rear, 950.0)
+        self.assertGreater(front, rear)
+        self.assertEqual(thermal.fade_factor, 1.0)
 
     def test_fuel_load_changes_mass_and_is_consumed_by_physics(self) -> None:
         engine = self._engine()
@@ -83,6 +171,64 @@ class FuelAndTireStrategyTests(unittest.TestCase):
 
         self.assertLess(state.fuel_mass_kg, starting_fuel_kg)
         self.assertGreater(state.fuel_burned_kg, 0.0)
+        self.assertGreater(state.front_normal_load_n, 0.0)
+        self.assertGreater(state.rear_normal_load_n, 0.0)
+        self.assertGreaterEqual(state.front_brake_temperature_c, 30.0)
+        self.assertGreaterEqual(state.rear_brake_temperature_c, 30.0)
+
+    def test_live_dashboard_exposes_and_refreshes_vehicle_condition(self) -> None:
+        engine = self._engine()
+        driver_id = next(iter(engine.driver_states))
+
+        engine.tick(0.1)
+        first_position = next(
+            position
+            for position in engine.build_dashboard_payload()["positions"]
+            if position["driver_id"] == driver_id
+        )
+        for _ in range(10):
+            engine.tick(0.1)
+        second_position = next(
+            position
+            for position in engine.build_dashboard_payload()["positions"]
+            if position["driver_id"] == driver_id
+        )
+
+        required_fields = {
+            "tire_surface_temperature_c",
+            "tire_core_temperature_c",
+            "tire_thermal_grip",
+            "front_tire_surface_temperature_c",
+            "front_tire_core_temperature_c",
+            "front_tire_thermal_grip",
+            "rear_tire_surface_temperature_c",
+            "rear_tire_core_temperature_c",
+            "rear_tire_thermal_grip",
+            "fuel_mass_kg",
+            "fuel_burned_kg",
+            "fuel_laps_remaining",
+            "vehicle_mass_kg",
+            "front_normal_load_n",
+            "rear_normal_load_n",
+            "front_axle_slip_ratio",
+            "rear_axle_slip_ratio",
+            "front_brake_temperature_c",
+            "rear_brake_temperature_c",
+            "brake_fade_factor",
+        }
+        self.assertTrue(required_fields.issubset(first_position))
+        self.assertLess(
+            second_position["fuel_mass_kg"],
+            first_position["fuel_mass_kg"],
+        )
+        self.assertNotEqual(
+            second_position["tire_surface_temperature_c"],
+            first_position["tire_surface_temperature_c"],
+        )
+        self.assertNotEqual(
+            second_position["front_tire_surface_temperature_c"],
+            second_position["rear_tire_surface_temperature_c"],
+        )
 
     def test_ai_conserves_when_projected_fuel_margin_is_critical(self) -> None:
         engine = self._engine()

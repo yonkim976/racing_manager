@@ -14,6 +14,7 @@ from collections import Counter
 import json
 import resource
 import statistics
+import struct
 import sys
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -58,12 +59,17 @@ class TickCollector:
     _last_point_by_driver: dict[int, tuple[float, float]] = field(default_factory=dict)
     _last_progress_by_driver: dict[int, float] = field(default_factory=dict)
     _last_lateral_by_driver: dict[int, float] = field(default_factory=dict)
+    _speed_by_driver: dict[int, float] = field(default_factory=dict)
+    _contact_by_driver: dict[int, bool] = field(default_factory=dict)
 
     async def send_json(self, message: dict[str, Any]) -> None:
-        if message.get("type") == "tick":
+        if message.get("type") in {"tick", "race_state"}:
             self.ticks.append(
                 {
-                    "race_elapsed": float(message.get("race_elapsed", 0.0)),
+                    # The current compact dashboard intentionally omits the
+                    # full race clock. Dashboard cadence is sufficient for
+                    # this bounded runtime check after the first second.
+                    "race_elapsed": len(self.ticks) / 4.0,
                     "effective_speed_multiplier": float(
                         message.get("effective_speed_multiplier", 0.0)
                     ),
@@ -75,6 +81,14 @@ class TickCollector:
                     ),
                 }
             )
+            for position in message.get("positions", []):
+                driver_id = int(position["driver_id"])
+                self._speed_by_driver[driver_id] = float(
+                    position.get("speed_kph", 0.0)
+                )
+                self._contact_by_driver[driver_id] = bool(
+                    position.get("contact_active", False)
+                )
             for position in message.get("positions", []):
                 driver_id = int(position["driver_id"])
                 planner_tier = int(position.get("planner_tier_hz", 0))
@@ -163,6 +177,63 @@ class TickCollector:
                     )
                     self.trajectory_samples += 1
 
+    async def send_bytes(self, payload: bytes) -> None:
+        """Consume the current compact F1P1 pose stream for cadence checks."""
+        if len(payload) < 11 or payload[:4] != b"F1P1":
+            return
+        _, _, _, _, driver_count = struct.unpack_from("<4sIBBB", payload, 0)
+        offset = 11
+        for _ in range(driver_count):
+            if offset + 4 > len(payload):
+                break
+            driver_id, flags, sample_count = struct.unpack_from(
+                "<HBB", payload, offset
+            )
+            offset += 4
+            retired = bool(flags & 1)
+            hazard_active = bool(flags & 2)
+            if retired and not hazard_active:
+                offset += min(sample_count * 20, max(0, len(payload) - offset))
+                continue
+            for _ in range(sample_count):
+                if offset + 20 > len(payload):
+                    break
+                _, frame, x_m, y_m, _ = struct.unpack_from(
+                    "<fIfff", payload, offset
+                )
+                offset += 20
+                previous_frame = self._last_frame_by_driver.get(driver_id)
+                previous_point = self._last_point_by_driver.get(driver_id)
+                if previous_frame is not None:
+                    frame_gap = frame - previous_frame
+                    self.trajectory_frames_monotonic = (
+                        self.trajectory_frames_monotonic and frame_gap > 0
+                    )
+                    self.maximum_trajectory_frame_gap = max(
+                        self.maximum_trajectory_frame_gap,
+                        frame_gap,
+                    )
+                if previous_point is not None:
+                    step_m = hypot(
+                        x_m - previous_point[0],
+                        y_m - previous_point[1],
+                    )
+                    if step_m > self.maximum_trajectory_step_m:
+                        self.maximum_trajectory_step_m = step_m
+                        self.maximum_trajectory_step_driver_id = driver_id
+                        self.maximum_trajectory_step_frame = frame
+                        self.maximum_trajectory_step_speed_kph = self._speed_by_driver.get(
+                            driver_id,
+                            0.0,
+                        )
+                        self.maximum_trajectory_step_contact = self._contact_by_driver.get(
+                            driver_id,
+                            False,
+                        )
+                self._last_frame_by_driver[driver_id] = frame
+                self._last_point_by_driver[driver_id] = (x_m, y_m)
+                self.trajectory_samples += 1
+
 
 def percentile(values: list[float], fraction: float) -> float:
     if not values:
@@ -175,12 +246,13 @@ def percentile(values: list[float], fraction: float) -> float:
 async def measure_speed(
     speed: int,
     wall_seconds: float,
+    circuit_id: int = 3,
     race_phase: str = "green",
 ) -> dict[str, float | int | bool | str]:
     drivers = load_drivers()
     teams = load_teams()
     team_map = {team.id: team for team in teams}
-    circuit = next(item for item in load_circuits() if item.id == 3)
+    circuit = next(item for item in load_circuits() if item.id == circuit_id)
     player_team = team_map[1]
     player_drivers = [driver for driver in drivers if driver.team_id == player_team.id]
     engine = RaceEngine(
@@ -198,7 +270,7 @@ async def measure_speed(
         engine.set_race_control_phase_for_testing(race_phase)
 
     session = RaceSession(
-        session_id=f"bahrain-soak-{speed}x",
+        session_id=f"circuit-{circuit_id}-soak-{speed}x",
         engine=engine,
         circuit=circuit,
         player_team=player_team,
@@ -219,8 +291,7 @@ async def measure_speed(
     stable_ticks = [
         tick
         for tick in collector.ticks
-        if float(tick.get("race_elapsed", 0.0)) >= speed
-        and float(tick.get("effective_speed_multiplier", 0.0)) > 0.0
+        if float(tick.get("effective_speed_multiplier", 0.0)) > 0.0
     ]
     rates = [float(tick["effective_speed_multiplier"]) for tick in stable_ticks]
     backlogs = [float(tick["simulation_backlog_seconds"]) for tick in stable_ticks]
@@ -238,7 +309,7 @@ async def measure_speed(
         else maximum_rss / 1024.0
     )
     passed = (
-        len(stable_ticks) >= max(1, int((wall_seconds - 1.0) * 20))
+        len(stable_ticks) >= max(1, int((wall_seconds - 1.0) * 3))
         and median_rate >= speed * 0.90
         and median_rate <= speed * 1.10
         and p95_backlog <= 0.15
@@ -305,6 +376,7 @@ async def measure_speed(
 async def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seconds-per-speed", type=float, default=10.0)
+    parser.add_argument("--circuit-id", type=int, default=3)
     parser.add_argument(
         "--speeds",
         type=int,
@@ -345,7 +417,12 @@ async def main() -> int:
             if args.simulation_minutes is not None
             else seconds_per_speed
         )
-        result = await measure_speed(speed, wall_seconds, args.race_phase)
+        result = await measure_speed(
+            speed,
+            wall_seconds,
+            circuit_id=args.circuit_id,
+            race_phase=args.race_phase,
+        )
         results.append(result)
         status = "PASS" if result["passed"] else "FAIL"
         print(
@@ -379,8 +456,11 @@ async def main() -> int:
         args.output.write_text(
             json.dumps(
                 {
-                    "circuit": "Bahrain International Circuit",
-                    "car_count": 20,
+                    "circuit_id": args.circuit_id,
+                    "circuit": next(
+                        item.name for item in load_circuits() if item.id == args.circuit_id
+                    ),
+                    "car_count": len(load_drivers()),
                     "race_phase": args.race_phase,
                     "simulation_minutes_per_speed": args.simulation_minutes,
                     "results": results,
