@@ -1,6 +1,6 @@
 # AI 레이스크래프트 벤치마크
 
-상태: **Bahrain v1 결정·이유·피트 우선권 게이트 구현 완료**
+상태: **Bahrain v2 결정·이유·피트 우선권 게이트 구현 완료**
 현재 런타임 기준: `planar_2d`
 
 ## 목적
@@ -9,7 +9,7 @@ AI가 추월 성공 여부를 직접 선택하는 대신, 현재 공간·속도�
 근거로 `attack`, `hold`, `abort`를 선택하고 물리가 결과를 확정하는지 반복 검증한다.
 각 판단은 결과뿐 아니라 동일한 물리 게이트가 반환한 `reason_code`를 함께 기록한다.
 
-## Bahrain v1 시나리오
+## Bahrain v2 시나리오
 
 | 시나리오 | 기대 판단 | 기대 이유 |
 |---|---|---|
@@ -18,7 +18,7 @@ AI가 추월 성공 여부를 직접 선택하는 대신, 현재 공간·속도�
 | 중간 테크니컬 구간 | hold | `segment_disallows_attack` |
 | T10 먼 제동 공격 | hold | `braking_gap_too_large` |
 | T11–T12 다음 직선 준비 | hold | `segment_disallows_attack` |
-| T13–T14 직선 | attack | `straight_window_open` |
+| T13–T14 직선 | hold | `insufficient_closing_distance` — 현재 간격·접근속도로 차체를 안전하게 완전히 지울 거리가 부족 |
 | 최종 제동 구간 | attack | `heavy_braking_window_open` |
 | 피트 출구와 본선 그룹 | yield → hold → merge | 본선 그룹 우선권 |
 | T1 racing line 점유 | outside | 안쪽 고정값이 아닌 280m 물리 시간·clearance 우선 |
@@ -36,7 +36,7 @@ cd backend
 
 기준 실행은 7개 시나리오 × 10 seed = 70회에서 판단 일치율과 이유 일치율 `100%`,
 접촉 `0`, 트랙 이탈 `0`, 피트 `yield → hold → merge` 일치율 `100%`를 기록했다.
-요약은 `backend/data/calibration/bahrain_racecraft_benchmark_v1.json`에 보존한다.
+요약은 `backend/data/calibration/bahrain_racecraft_benchmark_v2.json`에 보존한다.
 
 ## 현재 한계와 다음 게이트
 
