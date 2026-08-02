@@ -724,7 +724,10 @@ class SimulationFoundationBaselineTests(unittest.TestCase):
             ),
             2.0,
         )
-        self.assertLess(state.progress, exit_)
+        rejoin = circuit.pit_lane.exit_lane_rejoin_progress
+        assert rejoin is not None
+        self.assertAlmostEqual(state.progress, rejoin, places=6)
+        self.assertGreater(state.progress, exit_)
         self.assertAlmostEqual(pit_exit.payload["world_x_m"], state.world_x_m)
         self.assertAlmostEqual(pit_exit.payload["world_y_m"], state.world_y_m)
 
@@ -780,6 +783,12 @@ class SimulationFoundationBaselineTests(unittest.TestCase):
                     {
                         "frame": engine._physics_frame,
                         "route_progress": engine._pit_lane_progress(state.driver_id),
+                        "main_route_progress": engine._pit_main_route_progress(
+                            state.driver_id
+                        ),
+                        "exit_lane_progress": engine._pit_exit_lane_progress_value(
+                            state.driver_id
+                        ),
                         "phase": engine._pit_phase[state.driver_id],
                         "merge_state": engine._pit_merge_state[state.driver_id],
                         "speed_kph": state.speed_kph,
@@ -807,14 +816,24 @@ class SimulationFoundationBaselineTests(unittest.TestCase):
             ["pit_entry", "pit_exit"],
         )
 
-        route_progress = [float(sample["route_progress"]) for sample in samples]
-        self.assertEqual(route_progress, sorted(route_progress))
-        self.assertLess(route_progress[0], pit_lane.speed_limit_start)
-        self.assertGreaterEqual(route_progress[-1], pit_lane.speed_limit_end)
+        main_samples = [sample for sample in samples if sample["phase"] != "exit_lane"]
+        exit_lane_samples = [sample for sample in samples if sample["phase"] == "exit_lane"]
+        main_route_progress = [
+            float(sample["main_route_progress"]) for sample in main_samples
+        ]
+        exit_lane_progress = [
+            float(sample["exit_lane_progress"]) for sample in exit_lane_samples
+        ]
+        self.assertEqual(main_route_progress, sorted(main_route_progress))
+        self.assertEqual(exit_lane_progress, sorted(exit_lane_progress))
+        self.assertLess(main_route_progress[0], pit_lane.speed_limit_start)
+        self.assertGreaterEqual(main_route_progress[-1], pit_lane.speed_limit_end)
+        self.assertLessEqual(exit_lane_progress[0], 0.01)
+        self.assertGreater(exit_lane_progress[-1], 0.9)
 
         limit_entry = next(
             sample
-            for sample in samples
+            for sample in main_samples
             if abs(
                 float(sample["route_progress"]) - pit_lane.speed_limit_start
             ) <= 1e-12
@@ -826,7 +845,7 @@ class SimulationFoundationBaselineTests(unittest.TestCase):
         )
         pre_limit_speeds = [
             float(sample["speed_kph"])
-            for sample in samples
+            for sample in main_samples
             if float(sample["route_progress"]) < pit_lane.speed_limit_start
         ]
         self.assertGreater(pre_limit_speeds[0], PIT_LANE_SPEED_LIMIT_KPH)
@@ -843,7 +862,7 @@ class SimulationFoundationBaselineTests(unittest.TestCase):
 
         limited_samples = [
             sample
-            for sample in samples
+            for sample in main_samples
             if pit_lane.speed_limit_start
             <= float(sample["route_progress"])
             <= pit_lane.speed_limit_end
@@ -862,7 +881,7 @@ class SimulationFoundationBaselineTests(unittest.TestCase):
 
         limit_exit = next(
             sample
-            for sample in samples
+            for sample in main_samples
             if sample["phase"] == "out"
             and abs(float(sample["route_progress"]) - pit_lane.speed_limit_end)
             <= 1e-12
@@ -885,8 +904,8 @@ class SimulationFoundationBaselineTests(unittest.TestCase):
         self.assertIn("merge", {sample["merge_state"] for sample in released_samples})
 
         middle = min(
-            samples,
-            key=lambda sample: abs(float(sample["route_progress"]) - 0.5),
+            main_samples,
+            key=lambda sample: abs(float(sample["main_route_progress"]) - 0.5),
         )
         middle_track_pose = engine._track_physics_for_driver(
             state
@@ -907,7 +926,12 @@ class SimulationFoundationBaselineTests(unittest.TestCase):
         self.assertFalse(state.in_pit)
         self.assertEqual(state.pit_count, 1)
         self.assertGreater(state.speed_kph, PIT_LANE_SPEED_LIMIT_KPH)
-        self.assertLess(state.progress, pit_lane.exit_progress)
+        assert pit_lane.exit_lane_rejoin_progress is not None
+        self.assertAlmostEqual(
+            state.progress,
+            pit_lane.exit_lane_rejoin_progress,
+            places=6,
+        )
         self.assertAlmostEqual(exit_event.payload["world_x_m"], state.world_x_m)
         self.assertAlmostEqual(exit_event.payload["world_y_m"], state.world_y_m)
 

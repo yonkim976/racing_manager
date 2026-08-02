@@ -139,18 +139,18 @@ class TireThermalFoundationTests(unittest.TestCase):
 
         snapshot = engine.diagnostic_counts()["tire_temperature"]
         # This is the deterministic direct-engine baseline for the current
-        # physics revision. Load-sensitive bicycle stiffness removes excess
-        # slip heat without changing the thermal coefficients. The earlier
-        # 119.248 surface value used fixed static-load cornering stiffness;
-        # keep this gate tied to the exact setup above so it is reproducible.
+        # physics revision. Load-sensitive bicycle stiffness and the approved
+        # Bahrain lateral-slope continuity guard reduce excess slip heat
+        # without changing the thermal coefficients. Keep this gate tied to
+        # the exact setup above so it is reproducible.
         self.assertAlmostEqual(
             snapshot["peak"]["rear_surface_max_c"],
-            117.321,
+            110.834,
             delta=1.0,
         )
         self.assertAlmostEqual(
             snapshot["peak"]["rear_core_max_c"],
-            107.975,
+            97.999,
             delta=1.0,
         )
         self.assertEqual(snapshot["current"]["rear_overheat_driver_count"], 0)

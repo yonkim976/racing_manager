@@ -28,10 +28,7 @@ from simulation.incidents import (
 )
 from simulation.racecraft_ops import MANEUVER_CLEARANCE_MARGIN_M
 from simulation.state_contract import CollisionFact, TickPhase
-from simulation.track_physics import (
-    PHYSICAL_CAR_WIDTH_M,
-    TRACK_EDGE_MARGIN_M,
-)
+from simulation.track_physics import PHYSICAL_CAR_WIDTH_M, TRACK_EDGE_MARGIN_M
 from simulation.vehicle_physics import (
     PHYSICS_STEP_SECONDS,
     VehicleFollowingConstraint,
@@ -1183,6 +1180,12 @@ class IncidentOpsMixin:
                         f"{first_meta['full_name']}와 {second_meta['full_name']}가"
                         f" 상대속도 {fact.impact_speed_mps:.1f}m/s로 실제 접촉합니다"
                     ),
+                    payload={
+                        "first_driver_id": first.driver_id,
+                        "second_driver_id": second.driver_id,
+                        "impact_speed_mps": round(fact.impact_speed_mps, 6),
+                        "contact_type": fact.contact_type,
+                    },
                 )
             )
             battle = self._side_by_side_battles.get(

@@ -13,6 +13,7 @@ from models.schemas import (
     PaceMode,
     RaceEvent,
     TireCompound,
+    TrackSegmentType,
 )
 from simulation.car_performance import car_performance_factors
 from simulation.physics import driver_pace_multiplier
@@ -212,6 +213,32 @@ class StartOpsMixin:
             return float("inf")
         return max(0.0, (state.total_progress - start_progress) * self.track_length_m)
 
+    def _grid_launch_lane_hold_distance_m(self) -> float:
+        first_corner = next(
+            (
+                segment
+                for segment in sorted(
+                    self.circuit.segments,
+                    key=lambda item: item.start,
+                )
+                if segment.type != TrackSegmentType.STRAIGHT
+                and segment.end > 0.0
+            ),
+            None,
+        )
+        if first_corner is None:
+            return GRID_LAUNCH_LANE_HOLD_M
+        return max(
+            GRID_LAUNCH_LANE_HOLD_M,
+            min(700.0, first_corner.end * self.track_length_m + 30.0),
+        )
+
+    def _grid_launch_merge_distance_m(self) -> float:
+        return max(
+            GRID_LAUNCH_MERGE_DISTANCE_M,
+            self._grid_launch_lane_hold_distance_m() + 120.0,
+        )
+
     def _grid_launch_target_lateral_offset(
         self,
         state: DriverRaceState,
@@ -220,20 +247,22 @@ class StartOpsMixin:
         if not self.start_sequence_enabled or not self.race_started:
             return None
         launch_distance_m = self._grid_launch_distance_m(state)
-        if launch_distance_m >= GRID_LAUNCH_MERGE_DISTANCE_M:
+        merge_distance_m = self._grid_launch_merge_distance_m()
+        hold_distance_m = self._grid_launch_lane_hold_distance_m()
+        if launch_distance_m >= merge_distance_m:
             return None
         grid_offset_m = self._grid_lateral_offsets.get(state.driver_id)
         if grid_offset_m is None:
             return None
-        if launch_distance_m <= GRID_LAUNCH_LANE_HOLD_M:
+        if launch_distance_m <= hold_distance_m:
             return grid_offset_m
         merge_span_m = max(
             1.0,
-            GRID_LAUNCH_MERGE_DISTANCE_M - GRID_LAUNCH_LANE_HOLD_M,
+            merge_distance_m - hold_distance_m,
         )
         ratio = min(
             1.0,
-            max(0.0, (launch_distance_m - GRID_LAUNCH_LANE_HOLD_M) / merge_span_m),
+            max(0.0, (launch_distance_m - hold_distance_m) / merge_span_m),
         )
         smooth_ratio = ratio * ratio * (3.0 - 2.0 * ratio)
         return grid_offset_m + (racing_line_offset_m - grid_offset_m) * smooth_ratio
@@ -246,8 +275,8 @@ class StartOpsMixin:
         if not self.start_sequence_enabled or not self.race_started:
             return False
         if (
-            self._grid_launch_distance_m(first) >= GRID_LAUNCH_MERGE_DISTANCE_M
-            or self._grid_launch_distance_m(second) >= GRID_LAUNCH_MERGE_DISTANCE_M
+            self._grid_launch_distance_m(first) >= self._grid_launch_merge_distance_m()
+            or self._grid_launch_distance_m(second) >= self._grid_launch_merge_distance_m()
         ):
             return False
         return abs(first.lateral_offset_m - second.lateral_offset_m) >= (

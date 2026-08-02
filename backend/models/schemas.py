@@ -945,6 +945,19 @@ class CircuitPhysicsCalibration(BaseModel):
             "reference path driveable without changing vehicle control limits."
         ),
     )
+    nominal_line_edge_buffer_m: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.5,
+        validation_alias=AliasChoices(
+            "nominal_line_edge_buffer_m",
+            "nominalLineEdgeBufferM",
+        ),
+        description=(
+            "Additional body-safe track-edge margin for ordinary racing-line "
+            "driving. Incident and avoidance paths may still use the full surface."
+        ),
+    )
 
 
 class Circuit(BaseModel):
@@ -1383,8 +1396,10 @@ class DriverPositionInfo(BaseModel):
     pit_merge_conflict_driver_id: Optional[int] = None
     pit_merge_conflict_group_id: Optional[str] = None
     pit_merge_conflict_group_member_ids: list[int] = Field(default_factory=list)
-    pit_lane_progress: float = 0.0  # 0=pit entry, 1=pit exit
-    pit_lane_progress_rate: float = 0.0  # pit-lane progress per game second
+    pit_lane_progress: float = 0.0  # phase-local active route progress (0..1)
+    pit_lane_progress_rate: float = 0.0  # active-route progress per game second
+    pit_main_route_progress: float = 0.0  # stable main pit route progress (0..1)
+    pit_exit_lane_progress: float = 0.0  # dedicated exit continuation progress (0..1)
     pit_box_progress: float = 0.5  # assigned team stop position on the pit route
     pit_elapsed: float = 0.0  # total time spent in this pit stop (grows)
     pit_stop_elapsed: float = 0.0  # stationary tire-change time so far (grows)

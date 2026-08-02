@@ -72,13 +72,13 @@ BAHRAIN_RACECRAFT_SCENARIOS: tuple[BahrainRacecraftScenario, ...] = (
         "segment_disallows_attack",
     ),
     BahrainRacecraftScenario(
-        "t13_t14_straight_attack",
+        "t13_t14_straight_hold",
         0.830,
         12.0,
         304.0,
         296.0,
-        "attack",
-        "straight_window_open",
+        "hold",
+        "insufficient_closing_distance",
     ),
     BahrainRacecraftScenario(
         "final_braking_attack",
@@ -350,7 +350,7 @@ def run_bahrain_racecraft_benchmark(
         and summary["pit_merge_sequence_match_rate"] == 1.0
     )
     return {
-        "benchmark_version": "bahrain-racecraft-v1",
+        "benchmark_version": "bahrain-racecraft-v2",
         "track_geometry_mode": TRACK_GEOMETRY_MODE,
         "circuit": "Bahrain International Circuit",
         "duration_seconds_per_scenario": duration_seconds,

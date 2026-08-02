@@ -14,7 +14,6 @@ from typing import Any
 from models.schemas import DriverRaceState, PaceMode, RaceEvent, TrackSegmentType
 from simulation.collision import BodyPose, oriented_body_overlap, oriented_body_separation_m
 from simulation.local_trajectory_planner import LOCAL_TRAJECTORY_PLAN_INTERVAL_SECONDS
-from simulation.runtime_constants import GRID_LAUNCH_MERGE_DISTANCE_M
 from simulation.track_geometry import segment_at_progress
 from simulation.track_physics import (
     DRIVING_LINE_DEFENSIVE,
@@ -31,7 +30,6 @@ PROGRESS_EPSILON = 1e-9
 
 ATTACK_LINE_CHOICE_INTERVAL_SECONDS = 0.20
 MANEUVER_PULL_OUT_MIN_CLEARANCE_M = 0.15
-MANEUVER_MIN_PREDICTED_COLLISION_TIME_SECONDS = 0.75
 MANEUVER_REAR_PLANNING_CLEARANCE_M = 20.0
 TRAFFIC_GAP_SECONDS = 1.0
 DIRTY_AIR_MAX_PENALTY = 0.32
@@ -71,6 +69,7 @@ MANEUVER_CLEARANCE_MARGIN_M = 0.25
 MANEUVER_CONTACT_BUFFER_M = 0.25
 MANEUVER_LIVE_CLEARANCE_BUFFER_M = 0.85
 MANEUVER_PASS_CLEARANCE_MARGIN_M = 0.10
+MANEUVER_RESERVATION_DISTANCE_M = 160.0
 MANEUVER_MIN_STRAIGHT_DISTANCE_M = 70.0
 MANEUVER_PULL_OUT_CORNER_PREVIEW_SECONDS = 1.8
 MANEUVER_PULL_OUT_MIN_CORNER_PREVIEW_M = 55.0
@@ -417,13 +416,17 @@ class RacecraftMixin:
         ):
             return False
         lateral_clearance = abs(state.lateral_offset_m - car_ahead.lateral_offset_m)
+        required_lateral_clearance = self._physical_lateral_clearance_required_m(
+            state,
+            car_ahead,
+        )
         if (
             self.start_sequence_enabled
             and self.race_started
-            and self._grid_launch_distance_m(state) < GRID_LAUNCH_MERGE_DISTANCE_M
-            and self._grid_launch_distance_m(car_ahead) < GRID_LAUNCH_MERGE_DISTANCE_M
+            and self._grid_launch_distance_m(state) < self._grid_launch_merge_distance_m()
+            and self._grid_launch_distance_m(car_ahead) < self._grid_launch_merge_distance_m()
             and lateral_clearance
-            >= PHYSICAL_CAR_WIDTH_M + MANEUVER_CLEARANCE_MARGIN_M
+            >= required_lateral_clearance
         ):
             return True
         battle = self._pair_maneuver(state, car_ahead)
@@ -431,7 +434,7 @@ class RacecraftMixin:
             battle is not None
             and battle.phase == "overlap"
             and lateral_clearance
-            >= PHYSICAL_CAR_WIDTH_M + MANEUVER_CLEARANCE_MARGIN_M
+            >= required_lateral_clearance
         ):
             # Corner corridors intentionally use the racing-line longitudinal
             # physics for both cars. Their distinct lateral targets still make
@@ -444,7 +447,43 @@ class RacecraftMixin:
             == self._physics_v2_virtual_line(car_ahead)
         ):
             return False
-        return lateral_clearance >= PHYSICAL_CAR_WIDTH_M + MANEUVER_CLEARANCE_MARGIN_M
+        return lateral_clearance >= required_lateral_clearance
+
+    def _physical_lateral_clearance_required_m(
+        self,
+        first: DriverRaceState,
+        second: DriverRaceState,
+    ) -> float:
+        """Return body-safe lateral clearance including each car's yaw."""
+
+        def lateral_half_extent(state: DriverRaceState) -> float:
+            heading = abs(float(state.slip_angle_rad))
+            return (
+                0.5 * state.car_width_m * abs(cos(heading))
+                + 0.5 * state.car_length_m * abs(sin(heading))
+            )
+
+        return (
+            lateral_half_extent(first)
+            + lateral_half_extent(second)
+            + MANEUVER_CLEARANCE_MARGIN_M
+        )
+
+    def _physical_longitudinal_half_extents_m(
+        self,
+        first: DriverRaceState,
+        second: DriverRaceState,
+    ) -> float:
+        """Return summed longitudinal body extents including yaw."""
+
+        def longitudinal_half_extent(state: DriverRaceState) -> float:
+            heading = abs(float(state.slip_angle_rad))
+            return (
+                0.5 * state.car_length_m * abs(cos(heading))
+                + 0.5 * state.car_width_m * abs(sin(heading))
+            )
+
+        return longitudinal_half_extent(first) + longitudinal_half_extent(second)
 
     def _battle_lap_time_delta(
         self,
@@ -513,7 +552,7 @@ class RacecraftMixin:
             return 0.0
         if (
             self.start_sequence_enabled
-            and self._grid_launch_distance_m(state) < GRID_LAUNCH_MERGE_DISTANCE_M
+            and self._grid_launch_distance_m(state) < self._grid_launch_merge_distance_m()
             and car_ahead is not None
             and not self._grid_launch_pair_is_physically_separate(state, car_ahead)
         ):
@@ -1239,23 +1278,11 @@ class RacecraftMixin:
         )
         viable_candidates = []
         for candidate in plan.candidates:
-            managed_defender_conflict = (
-                candidate.body_boundary_violations == 0
-                and candidate.predicted_collision_count > 0
-                and set(candidate.conflicting_driver_ids)
-                <= {defender_state.driver_id}
-                and candidate.first_collision_time_seconds is not None
-                and candidate.first_collision_time_seconds
-                >= MANEUVER_MIN_PREDICTED_COLLISION_TIME_SECONDS
-            )
             if (
-                (not candidate.viable and not managed_defender_conflict)
+                not candidate.viable
                 or abs(candidate.lateral_bias_m) <= 1e-9
-                or (
-                    not managed_defender_conflict
-                    and candidate.minimum_opponent_clearance_m
-                    < MANEUVER_PULL_OUT_MIN_CLEARANCE_M
-                )
+                or candidate.minimum_opponent_clearance_m
+                < MANEUVER_PULL_OUT_MIN_CLEARANCE_M
             ):
                 continue
             lateral_separation_m = abs(
@@ -1417,6 +1444,42 @@ class RacecraftMixin:
         if phase in {"yield", "abort"}:
             self._capture_maneuver_transition_offsets(battle, phase)
 
+    def _maneuver_neighborhood_available(
+        self,
+        attacker: DriverRaceState,
+        defender: DriverRaceState,
+    ) -> bool:
+        """Reserve one predictive maneuver per local traffic cluster."""
+        pair_progress = (attacker.total_progress, defender.total_progress)
+        pair_driver_ids = {attacker.driver_id, defender.driver_id}
+        for other in self.driver_states.values():
+            if (
+                other.driver_id in pair_driver_ids
+                or other.in_pit
+                or other.retired
+                or other.finished
+            ):
+                continue
+            if any(
+                abs(other.total_progress - progress) * self.track_length_m
+                < 35.0
+                for progress in pair_progress
+            ):
+                return False
+        for battle in self._side_by_side_battles.values():
+            for driver_id in (battle.attacker_id, battle.defender_id):
+                participant = self.driver_states.get(driver_id)
+                if participant is None:
+                    continue
+                if any(
+                    abs(participant.total_progress - progress)
+                    * self.track_length_m
+                    < MANEUVER_RESERVATION_DISTANCE_M
+                    for progress in pair_progress
+                ):
+                    return False
+        return True
+
     def _capture_maneuver_transition_offsets(
         self,
         battle: SideBySideBattle,
@@ -1512,10 +1575,14 @@ class RacecraftMixin:
             return
         normalized_direction = 1 if turn_direction > 0 else -1
         if battle.corner_inside_driver_id is None:
-            battle.corner_inside_driver_id = (
-                battle.attacker_id
-                if battle.attacker_line == ATTACK_LINE_INSIDE
-                else battle.defender_id
+            # The pull-out lattice decides which *physical* side each car
+            # occupies.  Tactical labels must never make the pair swap sides
+            # under braking, so the car already nearest the apex owns the
+            # initial inside corridor.
+            battle.corner_inside_driver_id = max(
+                (battle.attacker_id, battle.defender_id),
+                key=lambda driver_id: normalized_direction
+                * self.driver_states[driver_id].lateral_offset_m,
             )
         elif (
             battle.corner_turn_direction != 0
@@ -2857,6 +2924,10 @@ class RacecraftMixin:
             or car_ahead is None
             or not self._overtaking_candidate_allowed(state, car_ahead)
             or not self._can_add_maneuver_edge(state.driver_id, car_ahead.driver_id)
+            or (
+                intent.event_kind not in {"grid_attack", "grid_defend", "lockup"}
+                and not self._maneuver_neighborhood_available(state, car_ahead)
+            )
         ):
             return None
         self._battle_event_cooldown[state.driver_id] = BATTLE_EVENT_COOLDOWN_SECONDS
@@ -3025,7 +3096,31 @@ class RacecraftMixin:
                     and pending_overtake.defender_id == car_ahead.driver_id
                     else self._local_pull_out_decision(state, car_ahead)
                 )
-        if segment.type == TrackSegmentType.STRAIGHT and trajectory_decision is None:
+        else:
+            # A new maneuver must be committed and validated on the preceding
+            # straight.  Once braking has begun, existing side-by-side battles
+            # may continue but no fresh tactical lane change is created. A
+            # pressure-induced braking mistake may still occur without
+            # granting an unvalidated side-by-side corridor.
+            if self.rng.random() >= probability:
+                return None
+            mistake_probability = self._probability_for_elapsed_time(
+                self._battle_mistake_probability(state, gap_seconds),
+                delta_seconds,
+            )
+            if (
+                mistake_probability > 0.0
+                and self.rng.random() < mistake_probability
+            ):
+                intent = BattleIntent(
+                    state.driver_id,
+                    car_ahead.driver_id,
+                    "lockup",
+                    segment.name,
+                )
+                return self._commit_battle_intent(intent) if commit else intent
+            return None
+        if trajectory_decision is None:
             return None
         command_stage_attack = bool(
             pending_overtake is not None
@@ -3070,6 +3165,14 @@ class RacecraftMixin:
             else self._choose_attack_line(state, car_ahead)
         )
         defender_line = self._choose_defender_line(car_ahead, state, attacker_line)
+        if trajectory_decision is not None:
+            # The lattice approved the pull-out against the defender's current
+            # predicted corridor.  Letting the defender choose a new blocking
+            # line in the same commit invalidates that proof and can make both
+            # cars cross the track together.  Once a physical pull-out is
+            # reserved, the defender must hold the racing corridor until the
+            # battle controller allocates explicit side-by-side corridors.
+            defender_line = DEFENDER_LINE_RACING
         if (
             trajectory_decision is not None
             and trajectory_decision.candidate_id == "grid_launch_lane"

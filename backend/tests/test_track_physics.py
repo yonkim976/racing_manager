@@ -224,8 +224,8 @@ class TrackPhysicsProfileTests(unittest.TestCase):
 
     def test_optimizer_interface_preserves_frozen_circuit_outputs(self) -> None:
         expected_signatures = {
-            3: "f48559f4a4953ad82175d6287c7390c72290e9e731a9a5a6a37357852aece329",
-            4: "ef7eb1ec20b2b387a485c4dc5ee13e888f0870e85f5ab5ee234ee1e6536e5f29",
+            3: "73b7e20d6763b8c67e5026aecc1044117cce112cd686a300c1989a62e41561ca",
+            4: "6bd6563979f3a68822765b20c953630284b59d5f6318608966b769c9978a1169",
             5: "a0d3264ce93e1857d7487494dda657a8bd3cebe4c27ee89f58e096814a3ec6c5",
             6: "c896ed514c7aa4f826fd81c84d809aa51bb0313735f56dc86626630fb35d7b78",
             7: "45fb6d773f2bd58e2d4e3179622715192e2c55474dfb38f2c6b86c8f4c61d7f6",

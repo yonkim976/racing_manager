@@ -1,5 +1,5 @@
 {
-  "benchmark_version": "bahrain-racecraft-v1",
+  "benchmark_version": "bahrain-racecraft-v2",
   "track_geometry_mode": "planar_2d",
   "circuit": "Bahrain International Circuit",
   "command": ".venv/bin/python tools/run_bahrain_racecraft_benchmark.py --seeds 10 --seconds 2",
@@ -20,7 +20,7 @@
     "middle_technical_hold": "segment_disallows_attack",
     "t10_distant_braking_hold": "braking_gap_too_large",
     "t11_t12_prepare_next_straight": "segment_disallows_attack",
-    "t13_t14_straight_attack": "straight_window_open",
+    "t13_t14_straight_hold": "insufficient_closing_distance",
     "final_braking_attack": "heavy_braking_window_open"
   },
   "pit_merge_expected_sequence": [
@@ -28,5 +28,5 @@
     "hold",
     "merge"
   ],
-  "interpretation": "This v1 gate validates deterministic attack/hold reasons and physical safety. Pass-rate calibration against real race replays remains a later benchmark layer."
+  "interpretation": "The v2 gate treats an unsafe T13-T14 pull-out as hold. It validates deterministic decisions, reasons, pit priority and short-window physical safety."
 }

@@ -24,6 +24,7 @@ from simulation.vehicle_dynamics import (
 )
 
 PHYSICS_STEP_SECONDS = 0.02  # 50 Hz
+DYNAMIC_BICYCLE_STEERING_LOOKAHEAD_SECONDS = 0.15
 PHYSICS_MIN_SPEED_MPS = 18.0
 PHYSICS_LATERAL_ACCELERATION_MPS2 = 4.5
 PHYSICS_HANDLING_LATERAL_ACCELERATION_MPS2 = 7.0
@@ -652,21 +653,27 @@ class LongitudinalVehiclePhysics:
                 float(maximum_lateral_speed_mps),
             ),
         )
-        target_lateral_speed = max(
-            -lateral_speed_limit,
-            min(lateral_speed_limit, float(target_lateral_speed_mps)),
-        )
         reference_lateral_offset = (
             float(reference_lateral_offset_m)
             if reference_lateral_offset_m is not None
             else 0.0
         )
         reference_lateral_speed = max(
+            -PHYSICS_MAX_LATERAL_SPEED_MPS,
+            min(
+                PHYSICS_MAX_LATERAL_SPEED_MPS,
+                float(reference_lateral_speed_mps),
+            ),
+        )
+        target_relative_lateral_speed = max(
             -lateral_speed_limit,
             min(
                 lateral_speed_limit,
-                float(reference_lateral_speed_mps),
+                float(target_lateral_speed_mps) - reference_lateral_speed,
             ),
+        )
+        target_lateral_speed = (
+            reference_lateral_speed + target_relative_lateral_speed
         )
         lateral_acceleration = 0.0
         applied_drive_force_n = 0.0
@@ -1097,6 +1104,20 @@ class LongitudinalVehiclePhysics:
                 if self.profile is not None
                 else 0.0
             )
+            steering_curvature = (
+                self.profile.signed_curvature_at_progress(
+                    (
+                        (
+                            distance
+                            + speed * DYNAMIC_BICYCLE_STEERING_LOOKAHEAD_SECONDS
+                        )
+                        / self.track_length_m
+                    )
+                    % 1.0
+                )
+                if self.profile is not None
+                else signed_curvature
+            )
             turn_direction = (
                 1.0 if signed_curvature > 0.0
                 else -1.0 if signed_curvature < 0.0
@@ -1114,10 +1135,22 @@ class LongitudinalVehiclePhysics:
 
             next_speed = max(0.0, speed + acceleration * step)
             next_distance = distance + 0.5 * (speed + next_speed) * step
-            # Do not snap distance or copy the leader's speed when a physically
-            # impossible initial gap cannot be recovered in one 20 ms step.
-            # Predictive braking above remains tyre-force limited; the race
-            # engine's swept-body solver owns any real contact that remains.
+            if following is not None and leader_distance is not None:
+                current_gap_m = leader_distance - distance
+                maximum_follower_distance_m = (
+                    leader_distance - following.minimum_gap_m
+                )
+                if (
+                    current_gap_m >= following.minimum_gap_m - 1e-9
+                    and next_distance > maximum_follower_distance_m
+                ):
+                    # Preserve a collision-free following invariant when the
+                    # step began from a legal gap. Predictive braking remains
+                    # force-limited, but numerical integration may not spend
+                    # the final centimetres of body clearance. An already
+                    # overlapping pair is deliberately not separated here;
+                    # swept-body collision resolution still owns that case.
+                    next_distance = maximum_follower_distance_m
             distance = next_distance
             speed = next_speed
 
@@ -1156,6 +1189,7 @@ class LongitudinalVehiclePhysics:
                 front_force_share=modifiers.front_aero_share,
                 grip_factor=modifiers.grip * modifiers.mechanical_grip,
                 nominal_tire_force_n=maximum_tire_force_n,
+                steering_curvature_1pm=steering_curvature,
                 # Tyre-force saturation in the bicycle model already creates
                 # the physical run-wide motion.  The former point-mass model's
                 # extra scripted drift would count the same loss twice.
@@ -1165,12 +1199,18 @@ class LongitudinalVehiclePhysics:
             next_reference_lateral_offset = (
                 reference_lateral_offset + reference_lateral_speed * step
             )
-            next_lateral_speed = max(
+            # ``bicycle.lateral_speed_mps`` is motion relative to the active
+            # driving line and is therefore subject to the manoeuvre limit.
+            # The reference term only transports that local coordinate frame
+            # across the centerline; clamping their sum made a legal racing
+            # line physically unreachable whenever its offset changed faster
+            # than the clean-car correction limit.
+            next_relative_lateral_speed = max(
                 -lateral_speed_limit,
-                min(
-                    lateral_speed_limit,
-                    bicycle.lateral_speed_mps + reference_lateral_speed,
-                ),
+                min(lateral_speed_limit, bicycle.lateral_speed_mps),
+            )
+            next_lateral_speed = (
+                next_relative_lateral_speed + reference_lateral_speed
             )
             next_lateral_offset = (
                 bicycle.lateral_offset_m + next_reference_lateral_offset

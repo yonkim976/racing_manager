@@ -1287,13 +1287,21 @@ class PitOpsMixin:
             store.pop(driver_id, None)
 
     def _pit_lane_progress(self, driver_id: int) -> float:
-        """Position along the active pit route for an in-pit car."""
+        """Phase-local position along the active pit route for an in-pit car."""
         if self._pit_phase.get(driver_id) == "exit_lane":
-            return min(
-                1.0,
-                max(0.0, self._pit_exit_lane_progress.get(driver_id, 0.0)),
-            )
+            return self._pit_exit_lane_progress_value(driver_id)
+        return self._pit_main_route_progress(driver_id)
+
+    def _pit_main_route_progress(self, driver_id: int) -> float:
+        """Stable progress on the entry/box/main-exit pit route."""
         return min(1.0, max(0.0, self._pit_route_progress.get(driver_id, 0.0)))
+
+    def _pit_exit_lane_progress_value(self, driver_id: int) -> float:
+        """Stable progress on the dedicated post-pit exit continuation."""
+        return min(
+            1.0,
+            max(0.0, self._pit_exit_lane_progress.get(driver_id, 0.0)),
+        )
 
     def _sync_pit_race_progress(
         self,
@@ -1331,9 +1339,15 @@ class PitOpsMixin:
         state.total_distance_m = state.total_progress * self.track_length_m
 
     def _pit_lane_progress_rate(self, driver_id: int) -> float:
-        """Pit-lane progress rate per game second for front-end prediction."""
-        if self._pit_phase.get(driver_id) in {None, "stop", "exit_lane"}:
+        """Active-route progress rate per game second for front-end prediction."""
+        phase = self._pit_phase.get(driver_id)
+        if phase in {None, "stop"}:
             return 0.0
+        if phase == "exit_lane":
+            route_length_m = self._pit_exit_lane_length_m()
+            if route_length_m <= 1e-9:
+                return 0.0
+            return self._pit_route_speed_mps.get(driver_id, 0.0) / route_length_m
         route_length_m = self._pit_route_length_m()
         if route_length_m <= 1e-9:
             return 0.0

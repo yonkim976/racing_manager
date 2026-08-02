@@ -13,6 +13,8 @@ from simulation.collision import (
 from simulation.track_physics import DRIVING_LINE_RACING, TrackPhysicsProfile
 from simulation.track_surface import TrackSurfaceProfile
 from simulation.vehicle_physics import (
+    FOLLOWING_CONTROL_REACTION_SECONDS,
+    FOLLOWING_PREDICTIVE_DECELERATION_MPS2,
     LongitudinalVehiclePhysics,
     VehiclePhysicsModifiers,
 )
@@ -119,6 +121,9 @@ class LocalTrajectoryPlanningRequest:
     modifiers: VehiclePhysicsModifiers
     line_name: str = DRIVING_LINE_RACING
     nearby_vehicles: tuple[NearbyVehiclePredictionInput, ...] = ()
+    following_driver_id: int | None = None
+    following_desired_gap_m: float = 0.0
+    following_minimum_gap_m: float = 0.0
     tire_wear: float = 0.0
     tire_lateral_grip: float = 1.0
     tire_braking_grip: float = 1.0
@@ -369,6 +374,27 @@ class LocalTrajectoryPlanner:
             request.total_progress,
         )
         speed_mps = max(0.0, request.speed_mps)
+        following_vehicle = next(
+            (
+                nearby
+                for nearby in request.nearby_vehicles
+                if nearby.driver_id == request.following_driver_id
+            ),
+            None,
+        )
+        following_initial_distance_m = (
+            self.track_profile.line_distance_at_total_progress(
+                line_name,
+                following_vehicle.total_progress,
+            )
+            if following_vehicle is not None
+            else 0.0
+        )
+        following_acceleration_mps2 = (
+            max(-20.0, min(10.0, following_vehicle.acceleration_mps2))
+            if following_vehicle is not None
+            else 0.0
+        )
         samples = [
             _LongitudinalSample(
                 time_seconds=0.0,
@@ -395,6 +421,64 @@ class LocalTrajectoryPlanner:
                 target_speed_mps = physics.target_speed_mps(
                     distance_m,
                     request.modifiers,
+                )
+            next_elapsed_seconds = elapsed_seconds + step_seconds
+            leader_next_distance_m: float | None = None
+            if following_vehicle is not None:
+                acceleration_time = min(0.75, elapsed_seconds)
+                leader_speed_mps = max(
+                    0.0,
+                    following_vehicle.speed_mps
+                    + following_acceleration_mps2 * acceleration_time,
+                )
+                leader_distance_m = (
+                    following_initial_distance_m
+                    + following_vehicle.speed_mps * elapsed_seconds
+                    + 0.5
+                    * following_acceleration_mps2
+                    * acceleration_time**2
+                    + following_acceleration_mps2
+                    * acceleration_time
+                    * max(0.0, elapsed_seconds - acceleration_time)
+                )
+                gap_m = leader_distance_m - distance_m
+                minimum_gap_m = max(0.0, request.following_minimum_gap_m)
+                usable_gap_m = max(0.0, gap_m - minimum_gap_m)
+                reaction_distance_m = max(
+                    0.0,
+                    speed_mps - leader_speed_mps,
+                ) * FOLLOWING_CONTROL_REACTION_SECONDS
+                braking_gap_m = max(0.0, usable_gap_m - reaction_distance_m)
+                kinematic_safe_speed_mps = (
+                    leader_speed_mps**2
+                    + 2.0
+                    * FOLLOWING_PREDICTIVE_DECELERATION_MPS2
+                    * braking_gap_m
+                ) ** 0.5
+                target_speed_mps = min(
+                    target_speed_mps,
+                    kinematic_safe_speed_mps,
+                )
+                if gap_m < request.following_desired_gap_m:
+                    target_speed_mps = min(
+                        target_speed_mps,
+                        max(
+                            0.0,
+                            leader_speed_mps
+                            + 0.85
+                            * (gap_m - request.following_desired_gap_m),
+                        ),
+                    )
+                next_acceleration_time = min(0.75, next_elapsed_seconds)
+                leader_next_distance_m = (
+                    following_initial_distance_m
+                    + following_vehicle.speed_mps * next_elapsed_seconds
+                    + 0.5
+                    * following_acceleration_mps2
+                    * next_acceleration_time**2
+                    + following_acceleration_mps2
+                    * next_acceleration_time
+                    * max(0.0, next_elapsed_seconds - next_acceleration_time)
                 )
             speed_error_mps = target_speed_mps - speed_mps
             if speed_error_mps >= 0.0:
@@ -427,9 +511,31 @@ class LocalTrajectoryPlanner:
                 0.0,
                 speed_mps + acceleration_mps2 * step_seconds,
             )
-            distance_m += (
+            next_distance_m = distance_m + (
                 speed_mps + next_speed_mps
             ) * 0.5 * step_seconds
+            if leader_next_distance_m is not None:
+                maximum_distance_m = (
+                    leader_next_distance_m
+                    - max(0.0, request.following_minimum_gap_m)
+                )
+                if next_distance_m > maximum_distance_m:
+                    next_distance_m = max(distance_m, maximum_distance_m)
+                    next_speed_mps = max(
+                        0.0,
+                        2.0 * (next_distance_m - distance_m) / step_seconds
+                        - speed_mps,
+                    )
+                    acceleration_mps2 = (
+                        next_speed_mps - speed_mps
+                    ) / step_seconds
+                    throttle = 0.0
+                    brake = min(
+                        1.0,
+                        max(0.0, -acceleration_mps2)
+                        / max(1e-9, MAX_BRAKING_MPS2),
+                    )
+            distance_m = next_distance_m
             elapsed_seconds += step_seconds
             step_index += 1
             speed_mps = next_speed_mps
@@ -726,6 +832,23 @@ class LocalTrajectoryPlanner:
         minimum_opponent_clearance_m = float("inf")
         for occupancy in opponent_occupancies:
             opponent_conflict = False
+            initial_opponent_pose = occupancy.samples[0].body_pose
+            initial_ego_longitudinal_m = (
+                request.total_progress * self.track_length_m
+            )
+            opponent_started_safely_behind_same_corridor = (
+                initial_opponent_pose.longitudinal_m
+                + 0.5 * (request.body_length_m + initial_opponent_pose.length_m)
+                + self.config.minimum_traffic_clearance_m
+                < initial_ego_longitudinal_m
+                and abs(
+                    initial_opponent_pose.lateral_m
+                    - request.lateral_offset_m
+                )
+                <= 0.5
+                * (request.body_width_m + initial_opponent_pose.width_m)
+                + self.config.minimum_traffic_clearance_m
+            )
             for index, opponent_sample in enumerate(occupancy.samples):
                 prediction = longitudinal[index]
                 ego_pose = BodyPose(
@@ -766,6 +889,17 @@ class LocalTrajectoryPlanner:
                 # doubled geometry work for every candidate/sample pair, even
                 # though the planner only needs a conflict boolean.
                 if separation_m > 1e-7:
+                    continue
+                if (
+                    opponent_started_safely_behind_same_corridor
+                    and abs(lateral_bias_m) <= 1e-9
+                ):
+                    # A car holding its corridor is not responsible for a
+                    # predicted rear-end impact from a faster follower. The
+                    # follower's longitudinal controller owns that closing
+                    # gap. A car changing corridor remains responsible for
+                    # checking that follower, otherwise a pull-out can cut
+                    # directly across a faster car's nose.
                     continue
                 opponent_conflict = True
                 collision_time = opponent_sample.time_seconds

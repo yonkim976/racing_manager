@@ -1040,6 +1040,7 @@
       ],
       "racing_line_reference_weight": 0.65,
       "racing_line_initial_smoothing_passes": 1,
+      "racing_line_max_lateral_slope": 0.022,
       "telemetry_reference": [
         {
           "progress": 0.0,
@@ -2161,7 +2162,7 @@
       "speed_limit_start": 0.30,
       "box_progress": 0.5,
       "speed_limit_end": 0.70,
-      "side_rejoin_progress": 0.94,
+      "side_rejoin_progress": 0.92,
       "safety_car_line_2_progress": 0.119,
       "exit_lane_rejoin_progress": 0.15,
       "exit_lane_merge_start": 0.55,
@@ -2837,7 +2838,9 @@
         }
       ],
       "racing_line_reference_weight": 0.65,
-      "racing_line_initial_smoothing_passes": 1
+      "racing_line_initial_smoothing_passes": 1,
+      "racing_line_max_lateral_slope": 0.02,
+      "nominal_line_edge_buffer_m": 0.55
     }
   },
   {

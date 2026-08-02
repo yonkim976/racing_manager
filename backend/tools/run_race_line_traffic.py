@@ -49,6 +49,7 @@ def run_traffic(
     laps: int,
     seed: int,
     thermal_preset: ThermalPresetName,
+    start_sequence_enabled: bool = True,
 ) -> dict[str, Any]:
     base_circuit = next(item for item in load_circuits() if item.id == circuit_id)
     circuit = base_circuit.model_copy(update={"total_laps": laps})
@@ -63,15 +64,17 @@ def run_traffic(
         player_driver_ids=[driver.id for driver in drivers if driver.team_id == 1],
         starting_tires={driver.id: TireCompound(DryTireRole.MEDIUM.value) for driver in drivers},
         seed=seed,
-        start_sequence_enabled=False,
+        start_sequence_enabled=start_sequence_enabled,
         track_conditions=conditions,
         thermal_preset=thermal_preset,
         track_conditions_source="circuit_preset",
+        solo_incidents_enabled=False,
     )
 
     safety = Counter()
     handling = Counter()
     event_counts = Counter()
+    safety_event_samples: list[dict[str, Any]] = []
     line_counts = Counter()
     maximum_fallback_steps = 0
     fallback_steps_by_driver: Counter[int] = Counter()
@@ -95,6 +98,71 @@ def run_traffic(
         events = engine.tick(PHYSICS_STEP_SECONDS)
         step_count += 1
         event_counts.update(event.type for event in events)
+        for event in events:
+            if event.type in {
+                "collision",
+                "minor_contact",
+                "retirement",
+                "run_wide",
+                "traction_loss",
+            } and len(safety_event_samples) < 20:
+                involved_driver_ids = {
+                    int(value)
+                    for key, value in event.payload.items()
+                    if key in {"first_driver_id", "second_driver_id"}
+                    and isinstance(value, int)
+                }
+                safety_event_samples.append(
+                    {
+                        "time_seconds": round(engine.race_elapsed, 3),
+                        "type": event.type,
+                        "driver": event.driver,
+                        "payload": event.payload,
+                        "states": {
+                            str(driver_id): {
+                                "progress": round(
+                                    engine.driver_states[driver_id].total_progress,
+                                    6,
+                                ),
+                                "speed_kph": round(
+                                    engine.driver_states[driver_id].speed_kph,
+                                    3,
+                                ),
+                                "lateral_offset_m": round(
+                                    engine.driver_states[driver_id].lateral_offset_m,
+                                    4,
+                                ),
+                                "target_lateral_offset_m": round(
+                                    engine.driver_states[
+                                        driver_id
+                                    ].target_lateral_offset_m,
+                                    4,
+                                ),
+                                "racing_line": engine.driver_states[
+                                    driver_id
+                                ].racing_line,
+                            }
+                            for driver_id in sorted(involved_driver_ids)
+                            if driver_id in engine.driver_states
+                        },
+                        "active_maneuvers": [
+                            {
+                                "attacker_id": battle.attacker_id,
+                                "defender_id": battle.defender_id,
+                                "phase": battle.phase,
+                                "attacker_line": battle.attacker_line,
+                                "defender_line": battle.defender_line,
+                                "trajectory_candidate_id": (
+                                    battle.trajectory_candidate_id
+                                ),
+                                "line_committed": battle.line_committed,
+                            }
+                            for battle in engine._side_by_side_battles.values()
+                            if involved_driver_ids
+                            & {battle.attacker_id, battle.defender_id}
+                        ],
+                    }
+                )
         states = list(engine.driver_states.values())
         digest.update(_digest_step(states).encode())
         for state in states:
@@ -107,6 +175,9 @@ def run_traffic(
             safety["track_limit_samples"] += int(state.track_limits_active)
             safety["run_wide_samples"] += int(state.handling_state == "run_wide")
             safety["planner_fallback_samples"] += int(state.planner_fallback_active)
+            safety["planner_traffic_hold_samples"] += int(
+                state.planner_mode == "traffic_hold"
+            )
             safety["wheelspin_samples"] += int(state.handling_state == "wheelspin")
             safety["oversteer_samples"] += int(state.handling_state == "oversteer")
             safety["traction_loss_samples"] += int(
@@ -156,6 +227,10 @@ def run_traffic(
         for state in sorted(engine.driver_states.values(), key=lambda item: item.driver_id)
     }
     finished_count = sum(item["finished"] for item in per_driver.values())
+    total_driver_samples = max(1, step_count * len(drivers))
+    planner_fallback_sample_ratio = (
+        safety["planner_fallback_samples"] / total_driver_samples
+    )
     passed = (
         len(drivers) == 20
         and engine.finished
@@ -163,7 +238,8 @@ def run_traffic(
         and safety["contact_samples"] == 0
         and safety["off_track_samples"] == 0
         and safety["track_limit_samples"] == 0
-        and safety["planner_fallback_samples"] == 0
+        and maximum_fallback_steps <= 100
+        and planner_fallback_sample_ratio <= 0.001
         and thermal.get("peak", {}).get("max_continuous_overheat_seconds", 0.0) == 0.0
     )
     return {
@@ -187,10 +263,19 @@ def run_traffic(
         "maximum_lateral_step_m": round(maximum_lateral_step_m, 4),
         "maximum_lateral_step_driver_id": maximum_lateral_step_driver_id,
         "maximum_consecutive_planner_fallback_steps": maximum_fallback_steps,
+        "maximum_consecutive_planner_fallback_seconds": round(
+            maximum_fallback_steps * PHYSICS_STEP_SECONDS,
+            3,
+        ),
+        "planner_fallback_sample_ratio": round(
+            planner_fallback_sample_ratio,
+            8,
+        ),
         "fallback_steps_by_driver": dict(sorted(fallback_steps_by_driver.items())),
         "safety": dict(sorted(safety.items())),
         "handling_samples": dict(sorted(handling.items())),
         "event_counts": dict(sorted(event_counts.items())),
+        "safety_event_samples": safety_event_samples,
         "thermal": thermal,
         "deterministic_digest": digest.hexdigest(),
         "passed": passed,

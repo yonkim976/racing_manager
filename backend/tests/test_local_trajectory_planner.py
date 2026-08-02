@@ -309,6 +309,61 @@ class LocalTrajectoryPlannerTests(unittest.TestCase):
         self.assertFalse(any(candidate.viable for candidate in plan.candidates))
         self.assertFalse(plan.selected.viable)
 
+    def test_following_prediction_keeps_a_safe_hold_candidate_viable(self) -> None:
+        nearby = self._nearby_vehicle(gap_m=20.0)
+        plan = self._planner().plan(
+            replace(
+                self._request(
+                    total_progress=0.12,
+                    speed_mps=70.0,
+                    nearby_vehicles=(nearby,),
+                ),
+                following_driver_id=nearby.driver_id,
+                following_desired_gap_m=18.0,
+                following_minimum_gap_m=7.0,
+            )
+        )
+
+        self.assertTrue(any(candidate.viable for candidate in plan.candidates))
+        self.assertTrue(plan.selected.viable)
+        self.assertNotIn(
+            nearby.driver_id,
+            plan.selected.conflicting_driver_ids,
+        )
+        final_gap_m = (
+            plan.opponent_occupancies[0].samples[-1].body_pose.longitudinal_m
+            - plan.selected.samples[-1].body_pose.longitudinal_m
+        )
+        self.assertGreaterEqual(final_gap_m, 7.0 - 1e-6)
+
+    def test_faster_same_corridor_follower_does_not_force_leader_to_evade(self) -> None:
+        trailing = self._nearby_vehicle(gap_m=-20.0, speed_mps=70.0)
+        plan = self._planner().plan(
+            self._request(
+                total_progress=0.12,
+                speed_mps=35.0,
+                nearby_vehicles=(trailing,),
+            )
+        )
+
+        self.assertEqual(plan.selected_candidate_id, "center")
+        self.assertTrue(plan.selected.viable)
+        self.assertNotIn(
+            trailing.driver_id,
+            plan.selected.conflicting_driver_ids,
+        )
+        moving_candidates = [
+            candidate
+            for candidate in plan.candidates
+            if abs(candidate.lateral_bias_m) > 1e-9
+        ]
+        self.assertTrue(
+            any(
+                trailing.driver_id in candidate.conflicting_driver_ids
+                for candidate in moving_candidates
+            )
+        )
+
     def test_distant_traffic_keeps_the_racing_line(self) -> None:
         nearby = self._nearby_vehicle(gap_m=60.0, speed_mps=70.0)
         plan = self._planner().plan(

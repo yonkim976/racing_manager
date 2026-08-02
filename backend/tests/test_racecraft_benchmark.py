@@ -15,6 +15,7 @@ class BahrainRacecraftBenchmarkTests(unittest.TestCase):
         report = run_bahrain_racecraft_benchmark([99], duration_seconds=0.0)
 
         self.assertEqual(report["status"], "pass")
+        self.assertEqual(report["benchmark_version"], "bahrain-racecraft-v2")
         self.assertEqual(report["track_geometry_mode"], "planar_2d")
         self.assertEqual(
             report["summary"]["scenario_runs"],

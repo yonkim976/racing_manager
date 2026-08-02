@@ -550,6 +550,7 @@ class SafetyCarMixin:
 
     def _trigger_vsc(self, events: list[RaceEvent]) -> None:
         """Deploy a virtual safety car (skipped if a full SC is already out)."""
+        self._clear_drs_eligibility()
         if self.race_phase == "sc":
             self._cancel_maneuvers_for_neutralization()
             return
@@ -572,6 +573,7 @@ class SafetyCarMixin:
     def _trigger_safety_car(self, events: list[RaceEvent]) -> None:
         """Deploy a full safety car (upgrades an active VSC)."""
         already_sc = self.race_phase == "sc"
+        self._clear_drs_eligibility()
         self._cancel_maneuvers_for_neutralization()
         self.race_phase = "sc"
         self.safety_car = True
@@ -1936,6 +1938,8 @@ class SafetyCarMixin:
 
     def _finish_race_phase(self, ended: str, events: list[RaceEvent]) -> None:
         """Reset phase state and publish the matching green-flag event."""
+        if ended == "sc":
+            self._set_drs_restart_lockout()
         self.race_phase = "green"
         self.safety_car = False
         self._phase_until = 0.0

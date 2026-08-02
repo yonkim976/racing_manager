@@ -70,6 +70,7 @@ from simulation.track_physics import (
 )
 from simulation.track_surface import TrackSurfaceProfile, VehicleSurfaceState
 from simulation.vehicle_physics import (
+    FOLLOWING_PREDICTIVE_DECELERATION_MPS2,
     LOCKUP_SLIP_RATIO_THRESHOLD,
     PHYSICS_MAX_LATERAL_SPEED_MPS,
     PHYSICS_STEP_SECONDS,
@@ -274,10 +275,12 @@ LOCAL_TRAJECTORY_OPPONENT_RADIUS_M = 150.0
 LOCAL_TRAJECTORY_DENSE_TRAFFIC_RADIUS_M = 30.0
 LOCAL_TRAJECTORY_MAX_OPPONENTS = 4
 LOCAL_TRAJECTORY_MIN_SELECTED_CLEARANCE_M = 0.35
-RED_BULL_RING_NOMINAL_LINE_EDGE_BUFFER_M = 0.55
 PROGRESS_EPSILON = 1e-9
 DRS_DRAG_MULTIPLIER = 0.82
 DRS_DOWNFORCE_MULTIPLIER = 0.92
+DRS_DETECTION_FALLBACK_DISTANCE_M = 200.0
+DRS_INITIAL_ENABLE_AFTER_LEADER_LAPS = 1.0
+DRS_SC_RESTART_DISABLED_LAPS = 1.0
 
 
 def empty_tire_temperature_diagnostic_snapshot(
@@ -628,6 +631,7 @@ class RaceEngine(
         track_conditions_source: str = "explicit_override",
         clean_line_lateral_speed_feedforward: float = 1.0,
         clean_line_lateral_speed_limit_mps: float = 1.25,
+        solo_incidents_enabled: bool = True,
     ):
         self.circuit = circuit
         self.drivers = {d.id: d for d in drivers}
@@ -641,12 +645,13 @@ class RaceEngine(
         self.track_conditions = track_conditions or TrackConditions()
         self.thermal_preset = thermal_preset
         self.track_conditions_source = track_conditions_source
+        self.solo_incidents_enabled = bool(solo_incidents_enabled)
         # ``DriverRaceState.lateral_*`` is expressed from the compiled
         # centerline while the bicycle model integrates error from the active
         # path.  A clean car therefore needs the path offset derivative on
-        # both sides of that frame conversion.  The scalar remains injectable
-        # only for controlled calibration.  Production remains at zero until
-        # the single-car line gates and the multi-car SC regressions both pass.
+        # both sides of that frame conversion. The scalar remains injectable
+        # for controlled calibration while production uses the complete paired
+        # transport contract.
         self.clean_line_lateral_speed_feedforward = max(
             0.0,
             min(1.0, float(clean_line_lateral_speed_feedforward)),
@@ -738,6 +743,10 @@ class RaceEngine(
         self._init_pit_ops_state()
         self._driver_meta: dict[int, dict] = {}
         self._finish_order: list[int] = []
+        self._drs_eligibility: dict[tuple[int, int], bool] = {}
+        self._drs_enable_after_leader_total_progress = (
+            DRS_INITIAL_ENABLE_AFTER_LEADER_LAPS
+        )
         self._attack_line_choice_cache_bucket = -1
         self._attack_line_choice_cache: dict[tuple[int, int], str] = {}
         self._forced_wide_by_driver: dict[int, int] = {}
@@ -1400,6 +1409,23 @@ class RaceEngine(
             slip_angle_rad=state.slip_angle_rad,
         )
         self._apply_surface_state(state, surface)
+        physical_car_ahead = car_ahead
+        if (
+            self.race_phase == "green"
+            and not self._active_stopped_hazards()
+        ):
+            physical_car_ahead = self._nearest_physical_following_leader(
+                state,
+                start_snapshot,
+                car_ahead,
+            )
+        following = self._physics_v2_following_constraint(
+            state,
+            physical_car_ahead,
+            start_snapshot,
+            active_line,
+            delta,
+        )
         if self._local_trajectory_basic_planning_allowed(state, active_line):
             self._update_local_trajectory_plan(
                 state,
@@ -1407,6 +1433,12 @@ class RaceEngine(
                 None,
                 delta,
                 surface=surface,
+                following=following,
+                following_driver_id=(
+                    physical_car_ahead.driver_id
+                    if physical_car_ahead is not None
+                    else None
+                ),
             )
         else:
             nearby_states = self._local_trajectory_nearby_states(state)
@@ -1449,6 +1481,13 @@ class RaceEngine(
             car_ahead,
             car_behind,
         )
+        if self.race_phase == "green":
+            state.target_lateral_offset_m = (
+                self._guard_tactical_target_against_third_party(
+                    state,
+                    state.target_lateral_offset_m,
+                )
+            )
         target_lateral_speed_mps = self._physics_v2_target_lateral_speed(
             state,
             active_line,
@@ -1468,7 +1507,10 @@ class RaceEngine(
             state.progress
         )
         nominal_lateral_bounds = self._physics_v2_nominal_lateral_bounds(state)
-        if nominal_lateral_bounds is not None and self.circuit.id == 4:
+        if (
+            nominal_lateral_bounds is not None
+            and self._nominal_line_edge_buffer_m() > 0.0
+        ):
             state.target_lateral_offset_m = max(
                 nominal_lateral_bounds[0],
                 min(
@@ -1476,13 +1518,6 @@ class RaceEngine(
                     state.target_lateral_offset_m,
                 ),
             )
-        following = self._physics_v2_following_constraint(
-            state,
-            car_ahead,
-            start_snapshot,
-            active_line,
-            delta,
-        )
         previous_wheel_lock_ratio = state.wheel_lock_ratio
         previous_traction_slip_ratio = state.traction_slip_ratio
         physics_modifiers = self._physics_v2_modifiers(state, surface)
@@ -1683,6 +1718,10 @@ class RaceEngine(
                 state.handling_state = "off_track"
         return max(0.0, end_total_progress - state.total_progress)
 
+    def _nominal_line_edge_buffer_m(self) -> float:
+        calibration = self.circuit.physics_calibration
+        return calibration.nominal_line_edge_buffer_m if calibration else 0.0
+
     def _physics_v2_nominal_lateral_bounds(
         self,
         state: DriverRaceState,
@@ -1697,11 +1736,7 @@ class RaceEngine(
 
         half_length_m = state.car_length_m / 2.0
         half_length_progress = half_length_m / self.track_length_m
-        nominal_edge_buffer_m = (
-            RED_BULL_RING_NOMINAL_LINE_EDGE_BUFFER_M
-            if self.circuit.id == 4
-            else 0.0
-        )
+        nominal_edge_buffer_m = self._nominal_line_edge_buffer_m()
         rear_minimum, rear_maximum = (
             self._track_surface.trajectory_body_lateral_bounds(
                 state.progress - half_length_progress,
@@ -1814,6 +1849,7 @@ class RaceEngine(
             or state.hazard_active
             or state.avoidance_active
             or state.emergency_braking
+            or state.contact_active
         ):
             return False
         if self._grid_launch_target_lateral_offset(state, 0.0) is not None:
@@ -1869,6 +1905,8 @@ class RaceEngine(
         delta: float,
         *,
         surface: VehicleSurfaceState | None = None,
+        following: VehicleFollowingConstraint | None = None,
+        following_driver_id: int | None = None,
     ) -> None:
         # The caller performs cheap safety/phase guards every physics frame;
         # the full nearby-traffic scan runs only when a regular replan is due.
@@ -2045,6 +2083,15 @@ class RaceEngine(
                 modifiers=modifiers,
                 line_name=active_line,
                 nearby_vehicles=nearby_vehicles,
+                following_driver_id=(
+                    following_driver_id if following is not None else None
+                ),
+                following_desired_gap_m=(
+                    following.desired_gap_m if following is not None else 0.0
+                ),
+                following_minimum_gap_m=(
+                    following.minimum_gap_m if following is not None else 0.0
+                ),
                 tire_wear=state.tire_wear,
                 tire_lateral_grip=state.tire_lateral_grip,
                 tire_braking_grip=state.tire_braking_grip,
@@ -2087,11 +2134,21 @@ class RaceEngine(
             self._local_trajectory_last_safe_plans[state.driver_id] = next_plan
             state.planner_fallback_active = False
         else:
-            fallback = self._local_trajectory_last_safe_plans.get(state.driver_id)
-            if fallback is not None:
-                next_plan = fallback
-                state.planner_fallback_active = True
-        self._local_trajectory_plans[state.driver_id] = next_plan
+            # Cached lateral geometry describes old traffic occupancy. Reusing
+            # it after every current candidate becomes unsafe can prolong a
+            # conflict for seconds. The 50 Hz following/collision controller
+            # is the safe fallback for this bounded no-plan interval.
+            self._local_trajectory_plans.pop(state.driver_id, None)
+            expected_traffic_hold = (
+                bool(nearby_vehicles)
+                and not state.avoidance_active
+                and not state.emergency_braking
+            )
+            state.planner_fallback_active = not expected_traffic_hold
+            if expected_traffic_hold:
+                state.planner_mode = "traffic_hold"
+        if next_plan.selected.viable:
+            self._local_trajectory_plans[state.driver_id] = next_plan
         self._local_trajectory_selected_ages[state.driver_id] = (
             selected_age_seconds
             if not force_pace_mode_replan
@@ -2556,6 +2613,87 @@ class RaceEngine(
         # motion only.
         return 0.0
 
+    def _guard_tactical_target_against_third_party(
+        self,
+        state: DriverRaceState,
+        target_lateral_offset_m: float,
+    ) -> float:
+        """Keep a validated pair maneuver from crossing an uninvolved car."""
+        excluded_driver_ids = {state.driver_id}
+        battle = self._side_by_side_battle_for_driver(state.driver_id)
+        if battle is not None:
+            excluded_driver_ids.update(
+                (battle.attacker_id, battle.defender_id)
+            )
+        pending = self._pending_overtake_commands.get(state.driver_id)
+        if pending is not None:
+            excluded_driver_ids.add(pending.defender_id)
+
+        guarded_target_m = target_lateral_offset_m
+        nearby = sorted(
+            (
+                other
+                for other in self.driver_states.values()
+                if other.driver_id not in excluded_driver_ids
+                and not other.in_pit
+                and not other.retired
+                and not other.finished
+                and abs(other.total_progress - state.total_progress)
+                * self.track_length_m
+                <= 35.0
+            ),
+            key=lambda other: abs(
+                other.total_progress - state.total_progress
+            ),
+        )
+        for other in nearby:
+            other_target_m = other.target_lateral_offset_m
+            required_clearance_m = (
+                self._physical_lateral_clearance_required_m(state, other)
+                + 0.10
+            )
+            current_delta_m = state.lateral_offset_m - other.lateral_offset_m
+            target_delta_m = guarded_target_m - other_target_m
+            longitudinal_separation_m = abs(
+                other.total_progress - state.total_progress
+            ) * self.track_length_m
+            already_side_by_side = (
+                longitudinal_separation_m
+                <= self._physical_longitudinal_half_extents_m(state, other) + 1.0
+                and abs(current_delta_m) >= required_clearance_m * 0.65
+            )
+            if (
+                abs(current_delta_m) < required_clearance_m
+                and not already_side_by_side
+            ):
+                # Cars already sharing one corridor are handled
+                # longitudinally. Near-width lateral overlap while the bodies
+                # are longitudinally alongside is instead separated back into
+                # the two established corridors.
+                continue
+            crosses_corridor = current_delta_m * target_delta_m <= 0.0
+            finishes_too_close = abs(target_delta_m) < required_clearance_m
+            if not crosses_corridor and not finishes_too_close:
+                continue
+            if abs(current_delta_m) > 0.10:
+                side = 1.0 if current_delta_m > 0.0 else -1.0
+            elif abs(target_delta_m) > 0.10:
+                side = 1.0 if target_delta_m > 0.0 else -1.0
+            else:
+                side = 1.0 if state.driver_id < other.driver_id else -1.0
+            guarded_target_m = other_target_m + side * required_clearance_m
+
+        minimum_m, maximum_m = self._track_surface.trajectory_body_lateral_bounds(
+            state.progress,
+            body_width_m=state.car_width_m,
+            edge_margin_m=TRACK_EDGE_MARGIN_M,
+        )
+        if guarded_target_m < minimum_m or guarded_target_m > maximum_m:
+            # If the reserved side has no legal body corridor, hold position;
+            # longitudinal following will create room before the rejoin.
+            guarded_target_m = state.lateral_offset_m
+        return max(minimum_m, min(maximum_m, guarded_target_m))
+
     def _physics_v2_lateral_speed_inputs(
         self,
         state: DriverRaceState,
@@ -2631,7 +2769,7 @@ class RaceEngine(
         if follower_snapshot is None:
             return preferred_leader
         follower_progress, _ = follower_snapshot
-        candidates: list[tuple[float, DriverRaceState]] = []
+        candidates: list[tuple[float, float, DriverRaceState]] = []
         for candidate in self.driver_states.values():
             if (
                 candidate.driver_id == state.driver_id
@@ -2655,19 +2793,43 @@ class RaceEngine(
             projected_lateral_gap_m = abs(
                 (
                     candidate.lateral_offset_m
-                    + candidate.lateral_speed_mps * 0.6
+                    + candidate.lateral_speed_mps * 1.5
                 )
                 - (
                     state.lateral_offset_m
-                    + state.lateral_speed_mps * 0.6
+                    + state.lateral_speed_mps * 1.5
                 )
             )
-            required_lateral_clearance_m = (
-                0.5 * (state.car_width_m + candidate.car_width_m)
-                + MANEUVER_CLEARANCE_MARGIN_M
+            target_lateral_gap_m = abs(
+                candidate.target_lateral_offset_m
+                - state.target_lateral_offset_m
             )
+            required_lateral_clearance_m = (
+                self._physical_lateral_clearance_required_m(
+                    state,
+                    candidate,
+                )
+            )
+            longitudinally_overlapping = (
+                longitudinal_gap_m
+                <= self._physical_longitudinal_half_extents_m(
+                    state,
+                    candidate,
+                )
+                + FOLLOWING_MIN_BUMPER_GAP_M
+            )
+            separating_into_distinct_corridors = (
+                projected_lateral_gap_m >= required_lateral_clearance_m
+                and target_lateral_gap_m >= required_lateral_clearance_m
+            )
+            if longitudinally_overlapping and separating_into_distinct_corridors:
+                continue
             shares_projected_lane = (
-                min(current_lateral_gap_m, projected_lateral_gap_m)
+                min(
+                    current_lateral_gap_m,
+                    projected_lateral_gap_m,
+                    target_lateral_gap_m,
+                )
                 < required_lateral_clearance_m
             )
             if not shares_projected_lane:
@@ -2689,12 +2851,43 @@ class RaceEngine(
                         # may pass that car without treating the sporting
                         # predecessor as its leader.
                         continue
-            if self._physics_v2_passing_authorized(state, candidate):
+            if (
+                self._physics_v2_passing_authorized(state, candidate)
+                and projected_lateral_gap_m >= required_lateral_clearance_m
+                and target_lateral_gap_m >= required_lateral_clearance_m
+            ):
                 continue
-            candidates.append((longitudinal_gap_m, candidate))
+            candidate_speed_mps = leader_snapshot[1]
+            minimum_longitudinal_gap_m = (
+                self._physical_longitudinal_half_extents_m(
+                    state,
+                    candidate,
+                )
+                + FOLLOWING_MIN_BUMPER_GAP_M
+            )
+            braking_gap_m = max(
+                0.0,
+                longitudinal_gap_m - minimum_longitudinal_gap_m,
+            )
+            kinematic_safe_speed_mps = sqrt(
+                max(
+                    0.0,
+                    candidate_speed_mps * candidate_speed_mps
+                    + 2.0
+                    * FOLLOWING_PREDICTIVE_DECELERATION_MPS2
+                    * braking_gap_m,
+                )
+            )
+            candidates.append(
+                (
+                    kinematic_safe_speed_mps,
+                    longitudinal_gap_m,
+                    candidate,
+                )
+            )
         if not candidates:
             return None
-        return min(candidates, key=lambda item: item[0])[1]
+        return min(candidates, key=lambda item: (item[0], item[1], item[2].driver_id))[2]
 
     def _nearest_physical_order_leader(
         self,
@@ -2821,7 +3014,29 @@ class RaceEngine(
             or car_ahead.in_pit
             or car_ahead.retired
             or car_ahead.finished
-            or self._physics_v2_passing_authorized(state, car_ahead)
+        ):
+            return None
+        projected_lateral_gap_m = abs(
+            (
+                car_ahead.lateral_offset_m
+                + car_ahead.lateral_speed_mps * 1.5
+            )
+            - (state.lateral_offset_m + state.lateral_speed_mps * 1.5)
+        )
+        target_lateral_gap_m = abs(
+            car_ahead.target_lateral_offset_m
+            - state.target_lateral_offset_m
+        )
+        required_lateral_clearance_m = (
+            self._physical_lateral_clearance_required_m(
+                state,
+                car_ahead,
+            )
+        )
+        if (
+            self._physics_v2_passing_authorized(state, car_ahead)
+            and projected_lateral_gap_m >= required_lateral_clearance_m
+            and target_lateral_gap_m >= required_lateral_clearance_m
         ):
             return None
         hazard_recovery_active = getattr(self, "_hazard_recovery_active", None)
@@ -2888,7 +3103,7 @@ class RaceEngine(
             return None
         current_gap_m = max(0.0, leader_distance_m - follower_distance_m)
         minimum_gap_m = (
-            0.5 * (state.car_length_m + car_ahead.car_length_m)
+            self._physical_longitudinal_half_extents_m(state, car_ahead)
             + FOLLOWING_MIN_BUMPER_GAP_M
         )
         dynamic_gap_m = min(28.0, max(10.0, minimum_gap_m + follower_speed_mps * 0.22))
@@ -3125,17 +3340,105 @@ class RaceEngine(
             if not state.retired and not state.finished and not state.in_pit
         }
 
-    def _is_drs_zone(self, progress: float) -> bool:
-        """Return whether current track progress is inside a configured DRS zone."""
+    def _drs_zone_index(self, progress: float) -> int | None:
+        """Return the activation-zone index containing ``progress``."""
         normalized = progress % 1.0
-        for zone in self.circuit.drs_zones:
+        for index, zone in enumerate(self.circuit.drs_zones):
             start = float(zone.start) % 1.0
             end = float(zone.end) % 1.0
             if start <= end and start <= normalized <= end:
-                return True
+                return index
             if start > end and (normalized >= start or normalized <= end):
-                return True
-        return False
+                return index
+        return None
+
+    def _is_drs_zone(self, progress: float) -> bool:
+        """Return whether current track progress is inside a DRS activation zone."""
+        return self._drs_zone_index(progress) is not None
+
+    def _drs_detection_progress(self, zone_index: int) -> float:
+        zone = self.circuit.drs_zones[zone_index]
+        if zone.detection is not None:
+            return float(zone.detection) % 1.0
+        fallback_progress = DRS_DETECTION_FALLBACK_DISTANCE_M / self.track_length_m
+        return (float(zone.start) - fallback_progress) % 1.0
+
+    @staticmethod
+    def _crossed_progress_anchor(
+        start_total_progress: float,
+        end_total_progress: float,
+        anchor_progress: float,
+    ) -> bool:
+        if end_total_progress <= start_total_progress:
+            return False
+        return floor(end_total_progress - anchor_progress + PROGRESS_EPSILON) > floor(
+            start_total_progress - anchor_progress + PROGRESS_EPSILON
+        )
+
+    def _drs_race_control_enabled(self) -> bool:
+        if not self.race_started or self.race_phase != "green":
+            return False
+        leader = self._on_track_leader()
+        return bool(
+            leader is not None
+            and leader.total_progress + PROGRESS_EPSILON
+            >= self._drs_enable_after_leader_total_progress
+        )
+
+    def _clear_drs_eligibility(self) -> None:
+        self._drs_eligibility.clear()
+        for state in self.driver_states.values():
+            state.drs_active = False
+
+    def _set_drs_restart_lockout(self) -> None:
+        leader = self._on_track_leader()
+        leader_progress = leader.total_progress if leader is not None else 0.0
+        self._drs_enable_after_leader_total_progress = (
+            leader_progress + DRS_SC_RESTART_DISABLED_LAPS
+        )
+        self._clear_drs_eligibility()
+
+    def _update_drs_detection_eligibility(
+        self,
+        start_snapshot: dict[int, tuple[float, float]],
+    ) -> None:
+        """Latch DRS qualification only when a car crosses a detection line."""
+        if not self._drs_race_control_enabled():
+            self._clear_drs_eligibility()
+            return
+
+        running = sorted(
+            (
+                state
+                for state in self.driver_states.values()
+                if not state.retired and not state.finished and not state.in_pit
+            ),
+            key=lambda state: (-state.total_progress, state.position),
+        )
+        ahead_by_driver = {
+            state.driver_id: (running[index - 1] if index > 0 else None)
+            for index, state in enumerate(running)
+        }
+        for state in running:
+            start = start_snapshot.get(state.driver_id, (state.total_progress, 0.0))[0]
+            for zone_index in range(len(self.circuit.drs_zones)):
+                detection = self._drs_detection_progress(zone_index)
+                if not self._crossed_progress_anchor(
+                    start,
+                    state.total_progress,
+                    detection,
+                ):
+                    continue
+                car_ahead = ahead_by_driver[state.driver_id]
+                eligible = False
+                if car_ahead is not None:
+                    progress_gap = car_ahead.total_progress - state.total_progress
+                    gap_seconds = self._progress_gap_to_seconds(progress_gap, state)
+                    eligible = (
+                        0.0 < gap_seconds <= TRAFFIC_GAP_SECONDS
+                        and self._overtaking_candidate_allowed(state, car_ahead)
+                    )
+                self._drs_eligibility[(state.driver_id, zone_index)] = eligible
 
     def _reset_wake_state(self, state: DriverRaceState) -> None:
         state.drs_active = False
@@ -3252,12 +3555,14 @@ class RaceEngine(
         state.wake_lateral_grip_multiplier = effects.lateral_grip_multiplier
         state.dirty_air_active = effects.dirty_air_strength >= 0.04
 
-        if car_ahead is not None:
+        zone_index = self._drs_zone_index(state.progress)
+        if car_ahead is not None and zone_index is not None:
             progress_gap = car_ahead.total_progress - state.total_progress
             gap_seconds = self._progress_gap_to_seconds(progress_gap, state)
             state.drs_active = (
-                0.0 < gap_seconds <= TRAFFIC_GAP_SECONDS
-                and self._is_drs_zone(state.progress)
+                self._drs_race_control_enabled()
+                and self._drs_eligibility.get((state.driver_id, zone_index), False)
+                and 0.0 < gap_seconds
                 and self._overtaking_candidate_allowed(state, car_ahead)
             )
         return effects
@@ -3579,29 +3884,7 @@ class RaceEngine(
                     continue
                 decision = self._local_pull_out_decision(state, car_ahead)
                 if decision is None:
-                    track_profile = self._track_physics_for_driver(state)
-                    fallback_line = self._choose_attack_line(
-                        state,
-                        car_ahead,
-                    )
-                    racing_offset = track_profile.line_offset_at_progress(
-                        DRIVING_LINE_RACING,
-                        state.progress,
-                    )
-                    target_offset = track_profile.line_offset_at_progress(
-                        fallback_line,
-                        state.progress,
-                    )
-                    decision = LocalPullOutDecision(
-                        candidate_id="battle_intent_command",
-                        lateral_bias_m=target_offset - racing_offset,
-                        target_lateral_offset_m=target_offset,
-                        minimum_clearance_m=abs(
-                            target_offset - car_ahead.lateral_offset_m
-                        )
-                        - 0.5 * (state.car_width_m + car_ahead.car_width_m),
-                        attacker_line=fallback_line,
-                    )
+                    continue
                 if decision.minimum_clearance_m >= MANEUVER_PULL_OUT_MIN_CLEARANCE_M:
                     self._pending_overtake_commands[state.driver_id] = (
                         PendingOvertakeCommand(
@@ -3626,55 +3909,14 @@ class RaceEngine(
                     if intent.event_kind in {"grid_attack", "grid_defend"}:
                         continue
                     decision = intent.trajectory_decision
-                    intent_attacker_line = intent.attacker_line
                 else:
-                    segment = segment_at_progress(self.circuit, state.progress)
-                    if (
-                        segment is None
-                        or not self._overtaking_candidate_allowed(state, car_ahead)
-                        or not self._overtake_opportunity_is_viable(state, car_ahead)
-                    ):
-                        continue
-                    if segment.type == TrackSegmentType.HEAVY_BRAKING:
-                        intent_attacker_line = self._choose_attack_line(
-                            state,
-                            car_ahead,
-                        )
-                    elif (
-                        segment.type == TrackSegmentType.STRAIGHT
-                        and segment.side_by_side_allowed
-                    ):
-                        decision = self._local_pull_out_decision(state, car_ahead)
-                        intent_attacker_line = (
-                            decision.attacker_line
-                            if decision is not None
-                            else self._choose_attack_line(state, car_ahead)
-                        )
-                    else:
-                        continue
-                    if segment.type == TrackSegmentType.HEAVY_BRAKING:
-                        decision = None
+                    # The first command pass above already installed every
+                    # safe straight-line pull-out.  A missing battle intent is
+                    # not permission to synthesize an unvalidated tactical
+                    # line, especially under braking.
+                    continue
                 if decision is None:
-                    track_profile = self._track_physics_for_driver(state)
-                    racing_offset = track_profile.line_offset_at_progress(
-                        DRIVING_LINE_RACING,
-                        state.progress,
-                    )
-                    target_offset = track_profile.line_offset_at_progress(
-                        intent_attacker_line,
-                        state.progress,
-                    )
-                    decision = LocalPullOutDecision(
-                        candidate_id="battle_intent_command",
-                        lateral_bias_m=target_offset - racing_offset,
-                        target_lateral_offset_m=target_offset,
-                        minimum_clearance_m=abs(
-                            target_offset - car_ahead.lateral_offset_m
-                        )
-                        - 0.5
-                        * (state.car_width_m + car_ahead.car_width_m),
-                        attacker_line=intent_attacker_line,
-                    )
+                    continue
                 self._pending_overtake_commands[state.driver_id] = (
                     PendingOvertakeCommand(
                         attacker_id=state.driver_id,
@@ -3771,7 +4013,7 @@ class RaceEngine(
             events.extend(self._pending_physical_handling_events)
             self._pending_physical_handling_events.clear()
         self._tick_race_phase(delta, events)
-        if racing:
+        if self.race_phase == "green":
             events.extend(self._tick_forced_wide_aftermaths(delta))
         self._apply_collision_facts(list(physics_result.collision_facts), events)
         for driver_id in in_pit_driver_ids:
@@ -3847,7 +4089,12 @@ class RaceEngine(
                 if event_result.event:
                     events.append(event_result.event)
 
-            if racing and not state.retired and not state.finished:
+            if (
+                self.solo_incidents_enabled
+                and self.race_phase == "green"
+                and not state.retired
+                and not state.finished
+            ):
                 incident = roll_solo_incident(
                     self.rng,
                     state.driver_id,
@@ -3862,7 +4109,8 @@ class RaceEngine(
                 if incident is not None:
                     self._apply_incident(incident, events)
 
-        if racing:
+        self._update_drs_detection_eligibility(physics_start_snapshot)
+        if self.race_phase == "green":
             wake_update_due = self._physics_frame % 2 == 0
             for state in self.driver_states.values():
                 if wake_update_due:
@@ -3893,7 +4141,7 @@ class RaceEngine(
                 if state.driver_id == battle.attacker_id
                 else battle.defender_line
             )
-        if racing:
+        if self.race_phase == "green":
             events.extend(self._build_pass_events(previous_positions))
         self._update_gaps()
         self._tick_battle_effects(delta)
@@ -4540,6 +4788,13 @@ class RaceEngine(
                 s.total_time,
             )
         )
+        retired.sort(
+            key=lambda state: (
+                -state.total_progress,
+                state.total_time,
+                state.driver_id,
+            )
+        )
 
         ordered = finished + active + retired
         for position, state in enumerate(ordered, start=1):
@@ -4881,6 +5136,14 @@ class RaceEngine(
                     pit_lane_progress_rate=round(
                         0.0 if self.paused else self._pit_lane_progress_rate(state.driver_id),
                         8,
+                    ),
+                    pit_main_route_progress=round(
+                        self._pit_main_route_progress(state.driver_id),
+                        7,
+                    ),
+                    pit_exit_lane_progress=round(
+                        self._pit_exit_lane_progress_value(state.driver_id),
+                        7,
                     ),
                     pit_box_progress=round(
                         self._pit_box_progress_for_driver(state.driver_id),

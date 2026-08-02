@@ -102,6 +102,7 @@ def advance_dynamic_bicycle(
     grip_factor: float,
     nominal_tire_force_n: float | None = None,
     external_lateral_acceleration_mps2: float = 0.0,
+    steering_curvature_1pm: float | None = None,
 ) -> DynamicBicycleResult:
     """Advance a linear dynamic bicycle model in track-relative coordinates.
 
@@ -139,8 +140,13 @@ def advance_dynamic_bicycle(
         -0.18,
         0.18,
     )
-    desired_yaw_rate_rad_s = speed * curvature_1pm
-    feed_forward_rad = atan(wheelbase * curvature_1pm)
+    steering_curvature = (
+        float(steering_curvature_1pm)
+        if steering_curvature_1pm is not None
+        else curvature_1pm
+    )
+    desired_yaw_rate_rad_s = speed * steering_curvature
+    feed_forward_rad = atan(wheelbase * steering_curvature)
     velocity_heading_error_rad = state.heading_error_rad + atan2(
         body_lateral_speed_mps,
         speed,
@@ -233,7 +239,7 @@ def advance_dynamic_bicycle(
     next_yaw_rate_rad_s = state.yaw_rate_rad_s + yaw_acceleration_rad_s2 * step
     unconstrained_heading_error_rad = state.heading_error_rad + (
         0.5 * (state.yaw_rate_rad_s + next_yaw_rate_rad_s)
-        - desired_yaw_rate_rad_s
+        - speed * curvature_1pm
     ) * step
     next_heading_error_rad = _clamp(
         unconstrained_heading_error_rad,

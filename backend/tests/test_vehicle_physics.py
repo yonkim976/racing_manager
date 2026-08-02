@@ -560,7 +560,7 @@ class LongitudinalVehiclePhysicsTests(unittest.TestCase):
             minimum_gap_m=PHYSICAL_CAR_LENGTH_M,
         )
         result = self.physics.advance(
-            distance_m=93.0,
+            distance_m=95.1,
             speed_mps=80.0,
             delta_seconds=0.1,
             modifiers=self.modifiers,
@@ -574,6 +574,29 @@ class LongitudinalVehiclePhysicsTests(unittest.TestCase):
         self.assertGreater(result.speed_mps, 74.0)
         self.assertLess(result.speed_mps, 80.0)
         self.assertGreater(result.brake, 0.0)
+
+    def test_legal_following_gap_cannot_cross_the_minimum_body_gap(self) -> None:
+        following = VehicleFollowingConstraint(
+            leader_distance_m=100.0,
+            leader_speed_mps=30.0,
+            leader_end_distance_m=103.0,
+            leader_end_speed_mps=30.0,
+            desired_gap_m=18.0,
+            minimum_gap_m=PHYSICAL_CAR_LENGTH_M,
+        )
+        result = self.physics.advance(
+            distance_m=93.0,
+            speed_mps=80.0,
+            delta_seconds=0.1,
+            modifiers=self.modifiers,
+            following=following,
+        )
+
+        self.assertLessEqual(
+            result.distance_m,
+            following.leader_end_distance_m - following.minimum_gap_m + 1e-9,
+        )
+        self.assertLess(result.speed_mps, 80.0)
 
     def test_following_controller_slows_car_before_the_hard_limit(self) -> None:
         following = VehicleFollowingConstraint(
@@ -629,6 +652,31 @@ class LongitudinalVehiclePhysicsTests(unittest.TestCase):
             maximum_lateral_offset_m=4.0,
         )
         self.assertLessEqual(clamped.lateral_offset_m, 4.0)
+
+    def test_reference_frame_transport_is_not_clamped_as_manoeuvre_speed(self) -> None:
+        straight_index = min(
+            range(len(self.profile.curvatures_1pm)),
+            key=lambda index: abs(self.profile.curvatures_1pm[index]),
+        )
+        distance_m = self.profile.progress[straight_index] * self.circuit.track_length_m
+        result = self.physics.advance(
+            distance_m=distance_m,
+            speed_mps=55.0,
+            delta_seconds=PHYSICS_STEP_SECONDS,
+            modifiers=self.modifiers,
+            lateral_offset_m=0.0,
+            lateral_speed_mps=2.5,
+            target_lateral_offset_m=0.05,
+            target_lateral_speed_mps=2.5,
+            reference_lateral_offset_m=0.0,
+            reference_lateral_speed_mps=2.5,
+            maximum_lateral_speed_mps=1.25,
+            minimum_lateral_offset_m=-6.0,
+            maximum_lateral_offset_m=6.0,
+        )
+
+        self.assertGreater(result.lateral_speed_mps, 1.25)
+        self.assertGreater(result.lateral_offset_m, 0.0)
 
     def test_nominal_bounds_hold_stable_car_inside_the_safety_envelope(self) -> None:
         stable = self.physics.advance(
