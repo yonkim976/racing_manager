@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from engines import (
     EngineFamily,
@@ -12,8 +13,10 @@ from engines import (
     simulation_engine_factory,
 )
 from engines.full.runtime.qualifying import run_qualifying as full_run_qualifying
+from engines.full.runtime import race_engine as full_race_engine
 from models.schemas import SimulationMode
 from simulation.qualifying import run_qualifying as compatibility_run_qualifying
+from simulation import race_engine as compatibility_race_engine
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -33,6 +36,12 @@ def imported_modules(path: Path) -> set[str]:
 class EngineBoundaryTests(unittest.TestCase):
     def test_full_qualifying_compatibility_import_is_the_runtime_symbol(self) -> None:
         self.assertIs(compatibility_run_qualifying, full_run_qualifying)
+
+    def test_full_race_engine_compatibility_path_is_a_patch_safe_alias(self) -> None:
+        self.assertIs(compatibility_race_engine, full_race_engine)
+        replacement = object()
+        with patch.object(compatibility_race_engine, "roll_solo_incident", replacement):
+            self.assertIs(full_race_engine.roll_solo_incident, replacement)
 
     def test_factory_routes_every_public_mode_to_one_engine_family(self) -> None:
         expected = {

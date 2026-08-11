@@ -29,7 +29,7 @@ from simulation.track_display import build_track_display_geometry
 from simulation.vehicle_physics import PHYSICS_STEP_SECONDS
 
 if TYPE_CHECKING:
-    from simulation.race_engine import RaceEngine
+    from engines.full.runtime.race_engine import RaceEngine
 
 POSE_BROADCAST_HZ = 30
 POSE_BROADCAST_INTERVAL = 1.0 / POSE_BROADCAST_HZ
