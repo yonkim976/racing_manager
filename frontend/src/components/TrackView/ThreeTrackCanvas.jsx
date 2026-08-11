@@ -14,6 +14,7 @@ import {
   appendPoseTickToBuffers,
   bufferedWorldPoseAtTime,
 } from './posePlayback';
+import { renderToLocalMetricPoint } from './coordinateContract';
 import {
   advanceSafetyCarRenderProgress,
   safetyCarProgressAtRenderTime,
@@ -109,16 +110,7 @@ function rotate2D(x, y, degrees) {
 }
 
 function renderCoordToWorld(coord, coordinateFrame) {
-  const metersPerRenderUnit = Math.max(
-    1e-9,
-    Number(coordinateFrame?.metersPerRenderUnit || 1),
-  );
-  return [
-    (Number(coord?.[0] || 0) - Number(coordinateFrame?.originXRender || 0))
-      * metersPerRenderUnit,
-    (Number(coord?.[1] || 0) - Number(coordinateFrame?.originYRender || 0))
-      * metersPerRenderUnit,
-  ];
+  return renderToLocalMetricPoint(coord, coordinateFrame);
 }
 
 function pathMetrics(points, closed = true) {
@@ -2343,7 +2335,7 @@ export default function ThreeTrackCanvas({
               ))}
             </div>
           )}
-          {followedDriver && (
+          {followedDriver && followedDriver.source_mode !== 'abstract' && (
             <div className="track-canvas__speed-hud">
               <span className="track-canvas__speed-driver">{followedDriver.name}</span>
               <span className="track-canvas__speed-value">

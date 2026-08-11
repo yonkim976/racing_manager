@@ -98,3 +98,25 @@ test('shutdown falls back to SIGKILL when SIGTERM does not exit', async () => {
   assert.equal(exitInfo.signal, 'SIGKILL');
   assert.equal(backend.child, null);
 });
+
+test('backend launch keeps a packaged app bundle immutable', async () => {
+  const child = new FakeChild();
+  child.pid = 77;
+  let spawnOptions = null;
+  const backend = new BackendProcess({
+    projectRoot: '/tmp/f1',
+    frontendDist: '/tmp/f1/dist',
+    token: 'token',
+    port: 12345,
+    spawnImpl: (_python, _args, options) => {
+      spawnOptions = options;
+      return child;
+    },
+    requestJsonImpl: async () => ({ status: 'ok', pid: 77 }),
+  });
+
+  await backend.start({ healthTimeoutMs: 20, healthPollMs: 1 });
+
+  assert.equal(spawnOptions.env.PYTHONDONTWRITEBYTECODE, '1');
+  assert.equal(spawnOptions.env.PYTHONUNBUFFERED, '1');
+});

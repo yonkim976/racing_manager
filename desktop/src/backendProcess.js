@@ -122,6 +122,9 @@ class BackendProcess {
       F1_DESKTOP_MODE: '1',
       F1_DESKTOP_TOKEN: this.token,
       F1_FRONTEND_DIST: this.frontendDist,
+      // A packaged app bundle is code-signed and must remain immutable at runtime.
+      // Prevent Python imports from creating __pycache__/*.pyc files inside it.
+      PYTHONDONTWRITEBYTECODE: '1',
       PYTHONUNBUFFERED: '1',
     };
     const child = this.spawnImpl(

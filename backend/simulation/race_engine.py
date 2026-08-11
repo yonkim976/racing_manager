@@ -761,6 +761,11 @@ class RaceEngine(
         self._initialize_driver_trajectory_physics()
         self._initialize_authoritative_vehicle_telemetry()
 
+    @property
+    def track_physics_profile(self) -> TrackPhysicsProfile:
+        """Public compiled track profile shared with display serializers."""
+        return self._track_physics
+
     def _build_vehicle_physics_by_line(
         self,
         track_physics: TrackPhysicsProfile | None = None,

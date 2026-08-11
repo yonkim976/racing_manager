@@ -8,6 +8,7 @@ import {
   appendPoseTickToBuffers,
   bufferedWorldPoseAtTime,
 } from './posePlayback';
+import { localMetricToRenderPoint } from './coordinateContract';
 import './TrackCanvas.css';
 
 const PADDING = 48;
@@ -408,14 +409,11 @@ function worldPoseAtTime(animation, now) {
 }
 
 function worldPoseToRenderPoint(worldPose, coordinateFrame, displayRotation, displayCenter) {
-  const metersPerRenderUnit = Math.max(
-    1e-9,
-    Number(coordinateFrame?.metersPerRenderUnit || 1),
+  return rotatePoint(
+    localMetricToRenderPoint(worldPose.xM, worldPose.yM, coordinateFrame),
+    displayRotation,
+    displayCenter,
   );
-  return rotatePoint([
-    Number(coordinateFrame?.originXRender || 0) + worldPose.xM / metersPerRenderUnit,
-    Number(coordinateFrame?.originYRender || 0) + worldPose.yM / metersPerRenderUnit,
-  ], displayRotation, displayCenter);
 }
 
 function markerPoseForWorld(
@@ -425,14 +423,11 @@ function markerPoseForWorld(
   displayCenter,
   transform,
 ) {
-  const metersPerRenderUnit = Math.max(
-    1e-9,
-    Number(coordinateFrame?.metersPerRenderUnit || 1),
+  const renderPoint = localMetricToRenderPoint(
+    worldPose.xM,
+    worldPose.yM,
+    coordinateFrame,
   );
-  const renderPoint = [
-    Number(coordinateFrame?.originXRender || 0) + worldPose.xM / metersPerRenderUnit,
-    Number(coordinateFrame?.originYRender || 0) + worldPose.yM / metersPerRenderUnit,
-  ];
   const [rotatedX, rotatedY] = rotatePoint(
     renderPoint,
     displayRotation,
@@ -2000,14 +1995,7 @@ export default function TrackCanvas({
       const xM = Number(driver.world_x_m);
       const yM = Number(driver.world_y_m);
       if (!worldCoordinateFrame || !Number.isFinite(xM) || !Number.isFinite(yM)) return [];
-      const metersPerRenderUnit = Math.max(
-        1e-9,
-        Number(worldCoordinateFrame.metersPerRenderUnit || 1),
-      );
-      const renderPoint = [
-        Number(worldCoordinateFrame.originXRender || 0) + xM / metersPerRenderUnit,
-        Number(worldCoordinateFrame.originYRender || 0) + yM / metersPerRenderUnit,
-      ];
+      const renderPoint = localMetricToRenderPoint(xM, yM, worldCoordinateFrame);
       const [x, y] = rotatePoint(renderPoint, displayRotation, displayCenter);
       return [{ ...driver, miniX: x, miniY: y }];
     });
@@ -3070,7 +3058,7 @@ export default function TrackCanvas({
               ))}
             </div>
           )}
-          {followedDriver && (
+          {followedDriver && followedDriver.source_mode !== 'abstract' && (
             <div className="track-canvas__speed-hud" aria-label={`${followedDriver.name} live speed`}>
               <span className="track-canvas__speed-driver">{followedDriver.name}</span>
               <span className="track-canvas__speed-value">{formatDriverSpeed(followedDriver)}</span>

@@ -1,0 +1,197 @@
+{
+  "circuits": [
+    {
+      "accepted_step_adjustment_count": 0,
+      "accepted_step_displacement_mismatch_count": 0,
+      "accepted_step_pose_acceleration_mismatch_count": 0,
+      "accepted_step_pose_distance_mismatch_count": 0,
+      "accepted_step_pose_speed_mismatch_count": 0,
+      "approval_passed": true,
+      "baseline_reproduction": {
+        "legacy_constant_progress_rate": 0.02,
+        "legacy_line_distance_error_at_progress_0_5_m": 2.1638865,
+        "legacy_max_chord_acceleration_mps2": 257.3486,
+        "legacy_max_speed_kph": 454.0601,
+        "legacy_min_chord_acceleration_mps2": -265.7765
+      },
+      "boundary_violation_count": 0,
+      "circuit_id": 3,
+      "circuit_name": "Bahrain International Circuit",
+      "coordinate_frame": {
+        "compiled_racing_line_length_m": 5422.916891005179,
+        "meters_per_render_unit": 2.3090140782992954,
+        "metric_track_length_m": 5412.0,
+        "origin_x_render": 239.61,
+        "origin_y_render": 360.46
+      },
+      "corner_chord": {
+        "curvature_cutoff_1pm": 0.006379909,
+        "maximum_world_chord_m": 8.571784,
+        "sample_count": 455
+      },
+      "derived_line_acceleration_max_mps2": 18.0,
+      "derived_line_acceleration_min_mps2": -28.617525,
+      "derived_line_speed_max_mps": 87.079171,
+      "derived_line_speed_min_mps": 0.0,
+      "grid_hold_and_launch_first_3s": [
+        {
+          "lateral_offset_m": 2.35,
+          "line_distance_m": 5414.916872,
+          "speed_mps": 0.0,
+          "time_s": 0.0
+        },
+        {
+          "lateral_offset_m": 2.35,
+          "line_distance_m": 5414.916872,
+          "speed_mps": 0.0,
+          "time_s": 1.0
+        },
+        {
+          "lateral_offset_m": 1.175,
+          "line_distance_m": 5423.916872,
+          "speed_mps": 18.0,
+          "time_s": 2.0
+        },
+        {
+          "lateral_offset_m": 0.0,
+          "line_distance_m": 5450.916872,
+          "speed_mps": 36.0,
+          "time_s": 3.0
+        }
+      ],
+      "integrator_distance_error_max_m": 0.0,
+      "integrator_identity_violation_count": 0,
+      "lap_wrap": {
+        "first_transition": {
+          "from_lap": 1,
+          "line_distance_m": 5423.916872,
+          "time_s": 2.0,
+          "to_lap": 2
+        },
+        "observed": true,
+        "transition_count": 3
+      },
+      "max_braking_magnitude_mps2": 28.706445,
+      "max_lateral_acceleration_mps2": 0.72,
+      "max_lateral_speed_mps": 0.46875,
+      "max_longitudinal_acceleration_mps2": 18.0,
+      "max_speed_kph": 313.485017,
+      "maximum_tick_displacement_m": 8.707917,
+      "maximum_world_chord_m": 8.707917,
+      "minimum_boundary_clearance_m": 4.542621,
+      "pose_hashes": {
+        "1x": "80f3a2d0e2c7c8453efb1f0add78256755f3c61a13d4778a686e7e1ae82563e7",
+        "2x": "80f3a2d0e2c7c8453efb1f0add78256755f3c61a13d4778a686e7e1ae82563e7",
+        "5x": "80f3a2d0e2c7c8453efb1f0add78256755f3c61a13d4778a686e7e1ae82563e7"
+      },
+      "post_integrator_distance_correction_count": 0,
+      "regression_progress_sample_distance": {
+        "0.13158": 5.7081e-05,
+        "0.42444": 0.000306563
+      },
+      "reported_acceleration_identity_violation_count": 0,
+      "reported_vs_derived_speed_error_max_mps": 0.0,
+      "tick_displacement_violation_count": 0,
+      "world_chord_speed_jump_max_mps": 2.95973,
+      "world_chord_violation_count": 0
+    },
+    {
+      "accepted_step_adjustment_count": 0,
+      "accepted_step_displacement_mismatch_count": 0,
+      "accepted_step_pose_acceleration_mismatch_count": 0,
+      "accepted_step_pose_distance_mismatch_count": 0,
+      "accepted_step_pose_speed_mismatch_count": 0,
+      "approval_passed": true,
+      "baseline_reproduction": {
+        "legacy_constant_progress_rate": 0.02,
+        "legacy_line_distance_error_at_progress_0_5_m": 3.1491842,
+        "legacy_max_chord_acceleration_mps2": 165.2304,
+        "legacy_max_speed_kph": 358.9163,
+        "legacy_min_chord_acceleration_mps2": -193.6523
+      },
+      "boundary_violation_count": 0,
+      "circuit_id": 4,
+      "circuit_name": "Red Bull Ring",
+      "coordinate_frame": {
+        "compiled_racing_line_length_m": 4325.753411544611,
+        "meters_per_render_unit": 1.7436374789258304,
+        "metric_track_length_m": 4318.0,
+        "origin_x_render": 555.963,
+        "origin_y_render": 483.631
+      },
+      "corner_chord": {
+        "curvature_cutoff_1pm": 0.003692963,
+        "maximum_world_chord_m": 7.859215,
+        "sample_count": 440
+      },
+      "derived_line_acceleration_max_mps2": 18.0,
+      "derived_line_acceleration_min_mps2": -30.399107,
+      "derived_line_speed_max_mps": 84.171768,
+      "derived_line_speed_min_mps": 0.0,
+      "grid_hold_and_launch_first_3s": [
+        {
+          "lateral_offset_m": 2.35,
+          "line_distance_m": 4317.753312,
+          "speed_mps": 0.0,
+          "time_s": 0.0
+        },
+        {
+          "lateral_offset_m": 2.35,
+          "line_distance_m": 4317.753312,
+          "speed_mps": 0.0,
+          "time_s": 1.0
+        },
+        {
+          "lateral_offset_m": 1.175,
+          "line_distance_m": 4326.753312,
+          "speed_mps": 18.0,
+          "time_s": 2.0
+        },
+        {
+          "lateral_offset_m": 0.0,
+          "line_distance_m": 4353.753312,
+          "speed_mps": 36.0,
+          "time_s": 3.0
+        }
+      ],
+      "integrator_distance_error_max_m": 0.0,
+      "integrator_identity_violation_count": 0,
+      "lap_wrap": {
+        "first_transition": {
+          "from_lap": 1,
+          "line_distance_m": 4326.753312,
+          "time_s": 2.0,
+          "to_lap": 2
+        },
+        "observed": true,
+        "transition_count": 3
+      },
+      "max_braking_magnitude_mps2": 30.581004,
+      "max_lateral_acceleration_mps2": 0.72,
+      "max_lateral_speed_mps": 0.46875,
+      "max_longitudinal_acceleration_mps2": 18.0,
+      "max_speed_kph": 303.018364,
+      "maximum_tick_displacement_m": 8.417177,
+      "maximum_world_chord_m": 8.417176,
+      "minimum_boundary_clearance_m": 4.061015,
+      "pose_hashes": {
+        "1x": "66d1f2b2cca4e98b7367c6e46d1a94008962f2bbeefa01160d6d00ffc51411e0",
+        "2x": "66d1f2b2cca4e98b7367c6e46d1a94008962f2bbeefa01160d6d00ffc51411e0",
+        "5x": "66d1f2b2cca4e98b7367c6e46d1a94008962f2bbeefa01160d6d00ffc51411e0"
+      },
+      "post_integrator_distance_correction_count": 0,
+      "regression_progress_sample_distance": {
+        "0.29789": 0.000518969,
+        "0.29960": 0.00067709
+      },
+      "reported_acceleration_identity_violation_count": 0,
+      "reported_vs_derived_speed_error_max_mps": 0.0,
+      "tick_displacement_violation_count": 0,
+      "world_chord_speed_jump_max_mps": 4.046362,
+      "world_chord_violation_count": 0
+    }
+  ],
+  "diagnostic": "abstract-stage3-single-vehicle-kinematics",
+  "logical_tick_seconds": 0.1,
+  "version": "abstract-stage3-kinematics-v1"
+}

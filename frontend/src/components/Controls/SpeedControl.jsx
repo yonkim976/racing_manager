@@ -5,6 +5,7 @@ const SPEEDS = [1, 2];
 export default function SpeedControl({
   connected,
   speedMultiplier = 1,
+  speeds = SPEEDS,
   paused = false,
   onSpeed,
   onPause,
@@ -20,7 +21,7 @@ export default function SpeedControl({
       </div>
 
       <div className="speed-control__speeds">
-        {SPEEDS.map((s) => (
+        {speeds.map((s) => (
           <button
             key={s}
             type="button"

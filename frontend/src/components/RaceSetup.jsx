@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import CircuitDesigner from './CircuitDesigner';
 import {
+  SIMULATION_MODE_OPTIONS,
   THERMAL_PRESET_OPTIONS,
   beginQualifyingRequest,
   buildQualifyingPayload,
@@ -45,6 +46,7 @@ export default function RaceSetup({ onStart }) {
   const [drivers, setDrivers] = useState([]);
   const [circuitId, setCircuitId] = useState(1);
   const [thermalPreset, setThermalPreset] = useState('NORMAL');
+  const [simulationMode, setSimulationMode] = useState('FULL');
   const [teamId, setTeamId] = useState(1);
   const [lapCount, setLapCount] = useState(30);
   const [startingTires, setStartingTires] = useState({});
@@ -123,6 +125,12 @@ export default function RaceSetup({ onStart }) {
     setQualifying(null);
   };
 
+  const handleSimulationModeChange = (nextMode) => {
+    invalidateQualifyingRequest(qualifyingRequestIdRef, setLoading);
+    setSimulationMode(nextMode);
+    setQualifying(null);
+  };
+
   const handleLapCountChange = (value) => {
     setLapCount(clampLapCount(value));
   };
@@ -140,6 +148,7 @@ export default function RaceSetup({ onStart }) {
           circuitId,
           playerTeamId: teamId,
           thermalPreset,
+          simulationMode,
         })),
       });
       if (!res.ok) {
@@ -178,6 +187,7 @@ export default function RaceSetup({ onStart }) {
           selectedTeamDrivers,
           startingTires,
           gridOrder: qualifying?.grid_order || [],
+          simulationMode,
         })),
       });
       if (!res.ok) {
@@ -209,7 +219,7 @@ export default function RaceSetup({ onStart }) {
         <div className="race-setup__header">
           <div>
             <h1 className="race-setup__title">F1 RACE MANAGER</h1>
-            <p className="race-setup__subtitle">Select your circuit and team to begin</p>
+            <p className="race-setup__subtitle">Select your engine, circuit and team to begin</p>
           </div>
           <button
             type="button"
@@ -222,6 +232,38 @@ export default function RaceSetup({ onStart }) {
         </div>
 
         {error && <div className="race-setup__error">{error}</div>}
+
+        <div className="race-setup__field">
+          <label>Simulation Mode</label>
+          <div className="race-setup__mode-options" role="radiogroup" aria-label="Simulation mode">
+            {SIMULATION_MODE_OPTIONS.map((mode) => {
+              const selected = simulationMode === mode.value;
+              return (
+                <button
+                  key={mode.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  className={`race-setup__mode-option ${selected ? 'race-setup__mode-option--selected' : ''}`}
+                  onClick={() => handleSimulationModeChange(mode.value)}
+                >
+                  <span className="race-setup__mode-label">{mode.label}</span>
+                  <span className="race-setup__mode-description">{mode.description}</span>
+                </button>
+              );
+            })}
+          </div>
+          {simulationMode === 'ABSTRACT_BROADCAST' && (
+            <span className="race-setup__hint">
+              Experimental Progress v5: progress, rank, pit stops and race control are authoritative; vehicle poses are presentation-only.
+            </span>
+          )}
+          {simulationMode === 'ABSTRACT_INSTANT' && (
+            <span className="race-setup__hint">
+              Deterministic result mode. No live replay is started.
+            </span>
+          )}
+        </div>
 
         <div className="race-setup__field">
           <label htmlFor="circuit">Circuit</label>

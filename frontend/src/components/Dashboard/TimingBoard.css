@@ -1,9 +1,13 @@
 .timing-board {
-  --timing-grid: 28px minmax(58px, 1fr) 32px 58px 38px 50px 48px;
+  --timing-grid: 28px minmax(58px, 1fr) 32px 58px 38px 42px 50px 48px;
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+}
+
+.timing-board--abstract {
+  --timing-grid: 28px minmax(58px, 1fr) 32px 58px 38px 50px 48px;
 }
 
 .timing-board__header {

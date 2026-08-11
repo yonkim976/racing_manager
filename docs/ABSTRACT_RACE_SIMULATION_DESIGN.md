@@ -1,15 +1,33 @@
 # 추상 레이스 시뮬레이션 설계
 
-상태: **실험 설계 · 미구현**
-기준일: **2026-08-03**
+상태: **진행률 권위 v5·Timing Authority v1·Racecraft Authority v2 구현 · 밸런스·패키지 수동 승인 미완료**
+기준일: **2026-08-11**
 적용 범위: 결과 전용 퀄리파잉, 방송형 레이스, 즉시 결과, seed 결정성, 키네마틱 차량 연출
 
 ## 1. 문서의 위치와 결정
 
-이 문서는 기존 50Hz 물리엔진을 즉시 교체하는 기준 문서가 아니다. 현재
+이 문서는 기존 50Hz 물리엔진을 즉시 삭제하는 기준 문서가 아니다. 현재
 `SIMULATION_FOUNDATION.md`의 물리 권위 계약은 `FULL` 모드에 그대로 적용한다.
-추상 시뮬레이션은 현재 코드와 결과를 보존한 별도 실험 경로로 구현하고, 제품
-승인 기준을 통과한 뒤에만 기본 모드 변경과 기존 물리 코드의 유지 범위를 결정한다.
+제품 방향은 `FULL`을 기준·보정·회귀 엔진으로 보존하고, 사용자가 운영하는 레이싱
+매니지먼트 게임의 기본 경로는 물리 제약을 가진 확률·논리형 `ABSTRACT`로 발전시키는
+것이다. 피트, 사건·SC·restart와 방송 연결까지 구현했지만 사건 빈도 보정과 단계 7
+패키지 수동 승인을 통과하기 전에는 전체 제품 기본값을 변경하지 않는다.
+
+2026-08-11에는 기존 Stage 4 교통 엔진을 건드리지 않고 별도 진행률 권위 커널을 추가했고,
+현재 `abstract-progress-race-v5`까지 논리 추월, 사고·퇴역, 피트·stint, local yellow/VSC/SC와
+restart 상태기를 확장했다. 이 커널은 세그먼트 소요시간, 누적 진행 거리, 순위와 간격만 결과
+권위로 사용하며 world pose·횡이동·가속도·충돌 형상은 소유하지 않는다. 진행률 권위를 기존
+bounded broadcast에 연결하는 presentation adapter와 사용자 pace·pit 명령 checkpoint rewind도
+구현했다. GAP/INT는 공통 mini-sector timing loop의 logical crossing time을 기준으로 초 단위로
+표시하고, pose 파생 속도는 ABSTRACT 사용자 UI에서 숨긴다. 앱 UI에서 ABSTRACT를 선택하면
+`PROGRESS_V5`를 명시하지만 API 호환 기본값은 Stage 4,
+전체 제품의 초기 선택값은 계속 `FULL`이다. 사건 빈도 보정과 패키지 수동 승인은 남아 있다.
+
+Racecraft Authority v2는 서킷 DRS detection/activation zone, 1초 timing 자격, SC 이후 1랩
+lockout, 직선 tow와 코너 dirty air를 진행률 권위에 포함한다. 추월 연출은 attack 준비,
+side-by-side, clearance 복귀를 별도 시간 상태로 표시하지만 논리 성공 여부를 바꾸지 않는다.
+세 대 이상이 1.2초 안에 연결되면 DRS train으로 분류하고, 폭 9m 이상 직선·강제동 구간에서
+활성 pair 바로 뒤 차량이 12m 안으로 압박하면 최대 3대 maneuver group을 만든다.
 
 이번 설계에서 채택하는 제품 방향은 다음과 같다.
 
@@ -56,6 +74,10 @@
 `ABSTRACT_BROADCAST`와 `ABSTRACT_INSTANT`의 같은 입력은 동일한 논리 결과를
 내야 한다. 렌더링 여부가 난수 호출 순서, 전략, 사건 또는 최종 순위를 바꾸면
 안 된다.
+
+ABSTRACT 레이스 요청은 `abstract_engine=STAGE4|PROGRESS_V5`를 명시한다. 현재 앱은 두 ABSTRACT
+레이스 모드에 `PROGRESS_V5`를 보내고, 생략한 API 호출은 기존 회귀 호환을 위해 `STAGE4`를 쓴다.
+퀄리파잉은 아직 기존 ABSTRACT 결과 엔진이며 진행률 커널 전환 범위에 포함되지 않는다.
 
 ## 4. 현재 물리엔진과 추상 시뮬레이션의 차이
 
@@ -262,8 +284,8 @@ segment_expected_time =
 
 ### 8.2 방송형 레이스
 
-레이스는 추상 0.10초 틱을 기본으로 하되 비싼 평가는 사건과 timing 구간에서만
-수행한다.
+레이스 권위는 0.5초 결정 경계와 더 작은 motion 경계에서 갱신하고, 방송 adapter는 0.10초
+presentation tick으로 20대 pose를 만든다. 비싼 평가는 사건과 논리 결정 경계에서만 수행한다.
 
 - 매 추상 틱: 논리 progress·간격과 예약 이벤트 진행
 - timing 구간 통과: 페이스·타이어·연료 갱신
@@ -271,6 +293,11 @@ segment_expected_time =
 - 피트 결정 시: pit timeline 예약
 - 위험 조건 충족 시: 실수·접촉·결함 평가
 - 랩 종료: 기록, 전략과 경기 종료 검사
+
+방송 producer는 최대 300 tick의 미공개 미래만 유지한다. 사용자 pace·pit 명령이 오면 현재 표시
+tick 이전 checkpoint로 복원하고 미공개 queue를 폐기한 뒤 같은 권위 커널로 미래를 다시 만든다.
+pose는 track/pit polyline에서 파생하며 결과에 피드백하지 않고, 370km/h presentation 상한으로
+결정 경계·pit 전환의 화면 순간이동을 막는다.
 
 ### 8.3 즉시 결과
 
@@ -302,6 +329,19 @@ segment_expected_time =
 
 렌더링은 결과에 맞춰 `approach → pull_out → overlap → pass/yield → rejoin`
 타임라인을 재생한다.
+
+### 9.1 DRS train과 3대 전투
+
+- DRS train은 선두가 1랩을 완료하고 DRS가 규정상 활성화된 green 구간에서만 계산한다.
+- 인접 차량의 Timing Authority INT가 1.2초 이내로 연속되면 같은 train이다. train은 전술
+  문맥과 UI 정보이며 그 자체로 순위를 바꾸지 않는다.
+- 3대 maneuver group은 기존 공격·방어 pair가 side-by-side이고 바로 뒤 opportunist가 12m
+  이내에서 DRS 또는 강한 tow를 가질 때만 형성한다.
+- 세 차량은 presentation corridor 0/1/2로 나뉘어 표시한다. 코너성 구간, caution, pit 또는
+  사건 상태에서는 새 그룹을 만들지 않으며 clearance 뒤 해산한다.
+- 한 결정 경계에서 순위 권위는 계속 하나의 인접 pair만 원자적으로 교환한다. 세 번째 차량은
+  다음 명시적 공격 이벤트 없이 동시에 두 자리를 얻을 수 없다. 화면의 3-wide는 독립적인
+  다중 rank swap 권위가 아니다.
 
 ## 10. 락업·사고·충돌
 
@@ -431,6 +471,7 @@ backend/simulation/abstract/
 
 ```text
 simulation_mode = FULL | ABSTRACT_BROADCAST | ABSTRACT_INSTANT
+abstract_engine = STAGE4 | PROGRESS_V5
 simulation_contract_version = 1
 ```
 

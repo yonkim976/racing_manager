@@ -27,13 +27,16 @@ from simulation.strategy_ops import (
     PACE_MODE_TRANSITION_SECONDS,
 )
 from simulation.tire_model import tire_blanket_temperature_c
+from simulation.start_grid_geometry import (
+    GRID_COLUMN_OFFSET_M,
+    GRID_POLE_DISTANCE_BEHIND_LINE_M,
+    GRID_SLOT_PROGRESS_GAP,
+    GRID_SLOT_SPACING_M,
+    build_grid_slots,
+)
 from simulation.track_physics import PHYSICAL_CAR_LENGTH_M, PHYSICAL_CAR_WIDTH_M
 from simulation.vehicle_dimensions import PHYSICAL_CAR_WHEELBASE_M
 
-GRID_SLOT_PROGRESS_GAP = 0.0028
-GRID_POLE_DISTANCE_BEHIND_LINE_M = 8.0
-GRID_SLOT_SPACING_M = 8.0
-GRID_COLUMN_OFFSET_M = 2.35
 GRID_FIRST_LIGHT_SECONDS = 0.25
 GRID_LIGHT_INTERVAL_SECONDS = 0.62
 GRID_LIGHTS_OUT_SECONDS = GRID_FIRST_LIGHT_SECONDS + GRID_LIGHT_INTERVAL_SECONDS * 5
@@ -305,14 +308,16 @@ class StartOpsMixin:
 
     def get_grid_slots(self) -> list[dict]:
         """Return the exact staggered boxes used by the vehicle simulation."""
-        return [
-            {
-                "position": state.position,
-                "progress": self._grid_start_progress[state.driver_id] % 1.0,
-                "lateral_offset_m": self._grid_lateral_offsets[state.driver_id],
-            }
-            for state in sorted(self.driver_states.values(), key=lambda item: item.position)
-        ]
+        slots = build_grid_slots(
+            (
+                state.driver_id
+                for state in sorted(self.driver_states.values(), key=lambda item: item.position)
+            ),
+            self.track_length_m,
+            start_sequence_enabled=self.start_sequence_enabled,
+            track_profile=self._track_physics,
+        )
+        return [slot.to_dict() for slot in slots]
 
     def _advance_start_sequence(self, delta: float) -> list[RaceEvent]:
         """Hold the field in its boxes and release everyone on lights out."""

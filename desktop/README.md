@@ -24,13 +24,16 @@ npm run package
 
 `npm run package`는 frontend production build, backend 코드·데이터와 one-directory
 Python runtime을 `Contents/Resources` 아래에 복사해 macOS arm64 `.app`를 만든다.
-현재 빌드는 진단·로컬 사용용이며 외부 배포용 code signing/notarization은 별도다.
+추가 resource 복사 뒤 번들 전체에 로컬 ad-hoc 서명을 다시 적용하고 strict 검증한다.
+현재 빌드는 진단·로컬 사용용이며 외부 배포용 Developer ID 서명/notarization은 별도다.
 
 ## 런타임 계약
 
 - main process가 `127.0.0.1`의 임시 포트를 고르고 256-bit 세션 token을 만든다.
 - Python sidecar는 같은 origin에서 정적 frontend와 API/WebSocket을 제공한다.
 - health 응답의 PID가 생성한 sidecar와 일치한 뒤에만 창을 연다.
+- sidecar는 `PYTHONDONTWRITEBYTECODE=1`로 실행해 서명된 앱 번들 내부에
+  `__pycache__`/`.pyc`를 생성하지 않는다. 패키지는 실행 전후 strict code-sign 검증을 유지해야 한다.
 - 세션 삭제 API는 desktop token을 요구하며 앱 종료 전에 현재 레이스를 해제한다.
 - 정상 종료가 지연되면 `SIGTERM` 뒤 제한 시간 이후 해당 child PID에만 `SIGKILL`한다.
 - 브라우저 창은 `nodeIntegration=false`, `contextIsolation=true`, `sandbox=true`이며

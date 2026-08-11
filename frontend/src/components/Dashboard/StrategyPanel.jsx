@@ -247,6 +247,7 @@ export default function StrategyPanel({
   tireNomination = null,
   pitWindowOpen = false,
   onPitCall,
+  onPitCancel = null,
   onPaceModeChange,
 }) {
   const [tireChoices, setTireChoices] = useState({});
@@ -291,6 +292,11 @@ export default function StrategyPanel({
   }
 
   const handlePit = (driverId) => {
+    const driver = drivers.find((item) => item.driver_id === driverId);
+    if (driver?.pit_request_pending && onPitCancel) {
+      onPitCancel(driverId);
+      return;
+    }
     const tire = tireChoices[driverId] || 'MEDIUM';
     onPitCall(driverId, tire);
   };
@@ -453,7 +459,7 @@ export default function StrategyPanel({
                   [driver.driver_id]: e.target.value,
                 }))
               }
-              disabled={driver.in_pit || driver.retired}
+              disabled={driver.in_pit || driver.retired || driver.pit_request_pending}
             >
               {tireOptions.map((option) => (
                 <option key={option.role} value={option.role}>
@@ -468,7 +474,7 @@ export default function StrategyPanel({
               onClick={() => handlePit(driver.driver_id)}
               disabled={driver.in_pit || driver.retired}
             >
-              BOX BOX
+              {driver.pit_request_pending && onPitCancel ? 'CANCEL BOX' : 'BOX BOX'}
             </button>
           </div>
               </>

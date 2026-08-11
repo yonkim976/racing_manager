@@ -1,0 +1,62 @@
+{
+  "contract": "FULL/ABSTRACT shared TrackDisplayGeometry; local metric pose via coordinate_frame.to_local_m",
+  "sample_count": 1000,
+  "circuits": [
+    {
+      "circuit_id": 3,
+      "circuit_name": "Bahrain International Circuit",
+      "metric_length_m": {
+        "official": 5412.0,
+        "compiled_track": 5412.0,
+        "racing_line": 5405.244257674466,
+        "compiled_error_percent": 0.0
+      },
+      "coordinate_frame": {
+        "origin_x_render": 239.61,
+        "origin_y_render": 360.46,
+        "meters_per_render_unit": 2.3090140782992954
+      },
+      "sample_validation_1000": {
+        "position_p95_m": 0.0,
+        "position_max_m": 0.0,
+        "heading_p95_deg": 2.5444437451708134e-14
+      },
+      "points": {
+        "start_finish": {"progress": 0.0, "local_metric_m": [0.2353162427476347, 0.009300708707401684], "render": [239.711912, 360.464028]},
+        "upper_left_corner": {"progress": 0.174, "local_metric_m": [237.52208113065333, -688.1448885798399], "render": [342.4773161255042, 62.43458081905976]},
+        "upper_right_corner": {"progress": 0.257, "local_metric_m": [678.6924804724812, -604.5215784799511], "render": [533.5417204043954, 98.65060517586295]},
+        "pit_entry": {"progress": 0.9593911628563715, "local_metric_m": [-9.562956764242593, 219.56931347719026], "render": [235.46842422784786, 455.55223678658297]},
+        "pit_exit": {"progress": 0.10284173724315086, "local_metric_m": [23.652986987657872, -556.0771983904049], "render": [249.85376040404202, 119.63115291043022]}
+      },
+      "geometry_counts": {"pit_lane_coords": 52, "pit_exit_lane_coords": 39, "grid_slots": 20}
+    },
+    {
+      "circuit_id": 4,
+      "circuit_name": "Red Bull Ring",
+      "metric_length_m": {
+        "official": 4318.0,
+        "compiled_track": 4318.0,
+        "racing_line": 4318.8292988774065,
+        "compiled_error_percent": 0.0
+      },
+      "coordinate_frame": {
+        "origin_x_render": 555.963,
+        "origin_y_render": 483.631,
+        "meters_per_render_unit": 1.7436374789258304
+      },
+      "sample_validation_1000": {
+        "position_p95_m": 0.0,
+        "position_max_m": 0.0,
+        "heading_p95_deg": 2.5444437451708134e-14
+      },
+      "points": {
+        "start_finish": {"progress": 0.0, "local_metric_m": [-0.1601740260890705, -0.5931784957806374], "render": [555.871138, 483.290804]},
+        "upper_left_corner": {"progress": 0.304, "local_metric_m": [-882.2408479810125, -678.9471143829292], "render": [49.985777874379096, 94.24552131598176]},
+        "upper_right_corner": {"progress": 0.49, "local_metric_m": [-88.5815248857276, -619.876648503073], "render": [505.1602809965645, 128.12324337334803]},
+        "pit_entry": {"progress": 0.8710638974963625, "local_metric_m": [335.2009333856575, -286.05252403741497], "render": [748.2053310103189, 319.5759555915499]},
+        "pit_exit": {"progress": 0.11921372382793972, "local_metric_m": [-443.5664652713274, -23.714402265583107], "render": [301.5715507266184, 470.0304651685324]}
+      },
+      "geometry_counts": {"pit_lane_coords": 86, "pit_exit_lane_coords": 55, "grid_slots": 20}
+    }
+  ]
+}

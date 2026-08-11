@@ -78,6 +78,53 @@
   margin-bottom: var(--space-lg);
 }
 
+.race-setup__mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.race-setup__mode-option {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 76px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast),
+              border-color var(--transition-fast),
+              transform var(--transition-fast);
+}
+
+.race-setup__mode-option:hover {
+  background: rgba(225, 6, 0, 0.1);
+  border-color: var(--accent-red);
+  transform: translateY(-1px);
+}
+
+.race-setup__mode-option--selected {
+  background: rgba(225, 6, 0, 0.16);
+  border-color: var(--accent-red);
+  box-shadow: 0 0 0 1px rgba(225, 6, 0, 0.18);
+}
+
+.race-setup__mode-label {
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.race-setup__mode-description {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
 .race-setup__field {
   margin-bottom: var(--space-xl);
   position: relative;

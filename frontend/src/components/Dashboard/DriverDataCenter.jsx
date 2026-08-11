@@ -71,6 +71,7 @@ export default function DriverDataCenter({ driver, sectors, onClose }) {
     ? 'LIVE'
     : 'EST';
   const gap = driver.position === 1 ? 'LEADER' : (driver.gap || '—');
+  const isAbstractMode = driver.source_mode === 'abstract';
 
   return createPortal(
     <div
@@ -114,7 +115,11 @@ export default function DriverDataCenter({ driver, sectors, onClose }) {
             <SummaryItem label="POSITION" value={`P${driver.position}`} />
             <SummaryItem label={`GAP · ${gapSource}`} value={gap} tone={gapSource === 'EST' ? 'estimated' : ''} />
             <SummaryItem label="INTERVAL" value={driver.position === 1 ? '—' : (driver.interval || '—')} />
-            <SummaryItem label="SPEED" value={`${Math.round(Number(driver.speed_kph || 0))} km/h`} />
+            {isAbstractMode ? (
+              <SummaryItem label="PACE MODE" value={String(driver.pace_mode || 'STANDARD').toUpperCase()} />
+            ) : (
+              <SummaryItem label="SPEED" value={`${Math.round(Number(driver.speed_kph || 0))} km/h`} />
+            )}
             <SummaryItem label="LAST LAP" value={formatLapTime(driver.last_lap_time)} />
             <SummaryItem label="BEST LAP" value={formatLapTime(driver.best_lap_time)} tone="best" />
             <SummaryItem label="TIRE" value={`${driver.tire_compound} · ${tireLifePercent(driver.tire_wear)}%`} />
@@ -125,11 +130,73 @@ export default function DriverDataCenter({ driver, sectors, onClose }) {
             <header>
               <div>
                 <span>LIVE CAR CONDITION</span>
-                <small>PHYSICS &amp; RESOURCE STATE</small>
+                <small>{isAbstractMode ? 'LOGICAL RACECRAFT STATE' : 'PHYSICS & RESOURCE STATE'}</small>
               </div>
-              <strong>{String(driver.handling_state || 'stable').toUpperCase()}</strong>
+              <strong>{String(
+                isAbstractMode
+                  ? driver.attack_mode || driver.maneuver || 'clear'
+                  : driver.handling_state || 'stable'
+              ).toUpperCase()}</strong>
             </header>
 
+            {isAbstractMode ? (
+              <div className="driver-data-center__condition-group">
+                <h3>RACECRAFT &amp; STRATEGY</h3>
+                <div className="driver-data-center__metric-grid">
+                  <ConditionMetric
+                    label="DRS"
+                    value={driver.drs_active ? 'ACTIVE' : 'CLOSED'}
+                    detail="detection-line eligibility"
+                    tone={driver.drs_active ? 'best' : ''}
+                  />
+                  <ConditionMetric
+                    label="SLIPSTREAM"
+                    value={formatPercent(driver.tow_strength || 0)}
+                    detail="logical straight-line tow"
+                  />
+                  <ConditionMetric
+                    label="DIRTY AIR"
+                    value={formatPercent(driver.dirty_air_strength || 0)}
+                    detail={driver.dirty_air_active ? 'corner pace affected' : 'clear airflow'}
+                    tone={driver.dirty_air_active ? 'warning' : ''}
+                  />
+                  <ConditionMetric
+                    label="TRAFFIC"
+                    value={String(driver.maneuver || 'clear').toUpperCase()}
+                    detail={`attack ${String(driver.attack_mode || 'none').toUpperCase()}`}
+                  />
+                  <ConditionMetric
+                    label="DRS TRAIN"
+                    value={driver.drs_train_size >= 3 ? `${driver.drs_train_size} CARS` : 'NONE'}
+                    detail={driver.drs_train_size >= 3
+                      ? `logical order ${Number(driver.drs_train_position || 0) + 1}`
+                      : 'no contiguous train'}
+                    tone={driver.drs_train_size >= 3 ? 'warning' : ''}
+                  />
+                  <ConditionMetric
+                    label="PACE MODE"
+                    value={String(driver.pace_mode || 'STANDARD').toUpperCase()}
+                    detail="manager command authority"
+                  />
+                  <ConditionMetric
+                    label="TIRE LIFE"
+                    value={`${tireLifePercent(driver.tire_wear)}%`}
+                    detail={`${driver.tire_compound || '—'} · ${driver.tire_age || 0} laps`}
+                  />
+                  <ConditionMetric
+                    label="PIT STATE"
+                    value={driver.in_pit ? String(driver.pit_phase || 'PIT').toUpperCase() : 'TRACK'}
+                    detail={`${driver.pit_count || 0} stops completed`}
+                  />
+                  <ConditionMetric
+                    label="DAMAGE"
+                    value={formatPercent(driver.damage_level || 0)}
+                    detail={driver.retired ? 'retired' : 'logical incident state'}
+                    tone={Number(driver.damage_level || 0) > 0.2 ? 'warning' : ''}
+                  />
+                </div>
+              </div>
+            ) : (<>
             <div className="driver-data-center__condition-group">
               <h3>TYRES &amp; FUEL</h3>
               <div className="driver-data-center__metric-grid">
@@ -233,6 +300,7 @@ export default function DriverDataCenter({ driver, sectors, onClose }) {
                 />
               </div>
             </div>
+            </>)}
           </section>
 
           <SectorTimingPanel

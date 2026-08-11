@@ -55,6 +55,7 @@ function getStatusBadge(driver, isFinished) {
   if (driver.maneuver_group_size >= 4) return '4W';
   if (driver.maneuver_group_size === 3) return '3W';
   if (driver.side_by_side_active) return 'SBS';
+  if (driver.drs_train_size >= 3) return `T${driver.drs_train_size}`;
   if (driver.drs_active) return 'DRS';
   if (driver.dirty_air_active && !driver.drs_active) return 'AIR';
   return '';
@@ -68,13 +69,6 @@ function formatPitCell(driver) {
   if (driver.pit_phase === 'stop') return `BOX ${elapsed}s`;
   if (driver.pit_phase === 'out') return `OUT ${elapsed}s`;
   return `${elapsed}s`;
-}
-
-function formatSpeed(driver) {
-  if (driver.retired || driver.finished) return '—';
-  const speed = Number(driver.speed_kph || 0);
-  if (!Number.isFinite(speed) || speed <= 0) return '—';
-  return Math.round(speed);
 }
 
 /**
@@ -101,12 +95,13 @@ export default function TimingBoard({ positions, playerDriverIds, sectors = [] }
   }
 
   const sorted = [...positions].sort((a, b) => a.position - b.position);
+  const isAbstractMode = sorted.every((driver) => driver.source_mode === 'abstract');
   const selectedDriver = sorted.find(
     (driver) => driver.driver_id === dataCenterDriverId,
   ) || null;
 
   return (
-    <div className="timing-board glass-panel">
+    <div className={`timing-board glass-panel ${isAbstractMode ? 'timing-board--abstract' : ''}`}>
       <div className="timing-board__header">
         <span className="timing-board__title">LIVE TIMING</span>
         <span className="timing-board__driver-count">{sorted.length} drivers</span>
@@ -126,7 +121,7 @@ export default function TimingBoard({ positions, playerDriverIds, sectors = [] }
           <span className={!isGapMode ? 'is-active' : ''}>INT</span>
         </button>
         <span className="col-last">LAST</span>
-        <span className="col-speed">SPD</span>
+        {!isAbstractMode && <span className="col-speed">SPD</span>}
         <span className="col-tire">TIRE</span>
         <span className="col-pit">PIT</span>
       </div>
@@ -221,9 +216,13 @@ export default function TimingBoard({ positions, playerDriverIds, sectors = [] }
                 {formatLapTime(driver.last_lap_time)}
               </span>
 
-              <span className={driver.drs_active ? 'timing-row__speed timing-row__speed--drs' : 'timing-row__speed'}>
-                {formatSpeed(driver)}
-              </span>
+              {!isAbstractMode && (
+                <span className={driver.drs_active ? 'timing-row__speed timing-row__speed--drs' : 'timing-row__speed'}>
+                  {driver.retired || driver.finished || !Number.isFinite(Number(driver.speed_kph)) || Number(driver.speed_kph) <= 0
+                    ? '—'
+                    : Math.round(Number(driver.speed_kph))}
+                </span>
+              )}
 
               <span className="timing-row__tire">
                 <span className={`tire-badge ${getTireClass(driver.tire_compound)}`}>

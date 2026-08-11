@@ -8,10 +8,10 @@ import os
 import struct
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import WebSocket
-from data_loader import resolve_circuit_thermal_conditions, resolve_tire_compound
+from engines.full import FullEngineAdapter, empty_tire_temperature_diagnostic_snapshot
 
 from models.schemas import (
     Circuit,
@@ -21,22 +21,15 @@ from models.schemas import (
     RaceEventsMessage,
     RaceInfoMessage,
     RaceSetupRequest,
-    TireCompound,
     Team,
 )
 from simulation.pit_stop import parse_tire_choice
-from simulation.race_engine import (
-    PIT_LANE_SPEED_LIMIT_KPH,
-    RaceEngine,
-    empty_tire_temperature_diagnostic_snapshot,
-)
 from simulation.track_physics import clear_vehicle_track_physics_cache, track_physics_cache_counts
+from simulation.track_display import build_track_display_geometry
 from simulation.vehicle_physics import PHYSICS_STEP_SECONDS
-from simulation.vehicle_dimensions import (
-    PHYSICAL_CAR_LENGTH_M,
-    PHYSICAL_CAR_WIDTH_M,
-    PHYSICAL_CAR_WHEELBASE_M,
-)
+
+if TYPE_CHECKING:
+    from simulation.race_engine import RaceEngine
 
 POSE_BROADCAST_HZ = 30
 POSE_BROADCAST_INTERVAL = 1.0 / POSE_BROADCAST_HZ
@@ -180,6 +173,14 @@ DASHBOARD_POSITION_FIELDS = {
     "dirty_air_active",
     "side_by_side_active",
     "maneuver_group_size",
+    "maneuver_group_id",
+    "maneuver_group_member_ids",
+    "maneuver_group_phase",
+    "maneuver_group_corridor_index",
+    "drs_train_id",
+    "drs_train_size",
+    "drs_train_position",
+    "drs_train_member_ids",
     "hazard_active",
     "local_yellow_active",
 }
@@ -285,6 +286,24 @@ class RaceSession:
             "track_conditions_source",
             "explicit_override",
         )
+        self.display_geometry = None
+        if self.circuit is not None:
+            track_profile = getattr(engine, "track_physics_profile", None)
+            grid_order = (
+                engine.get_grid_order()
+                if hasattr(engine, "get_grid_order")
+                else ()
+            )
+            self.display_geometry = build_track_display_geometry(
+                self.circuit,
+                track_profile=track_profile,
+                grid_driver_ids=(item["driver_id"] for item in grid_order),
+                start_sequence_enabled=getattr(
+                    engine,
+                    "start_sequence_enabled",
+                    True,
+                ),
+            )
         self.clients: set[WebSocket] = set()
         self._loop_task: asyncio.Task | None = None
         self._trajectory_samples: dict[int, list[bytes]] = {}
@@ -317,88 +336,20 @@ class RaceSession:
 
     @property
     def race_info(self) -> RaceInfoMessage:
+        geometry = self.display_geometry.to_race_info_geometry()
         return RaceInfoMessage(
             circuit_name=self.circuit.name,
             total_laps=self.circuit.total_laps,
             player_team=self.player_team.name,
             player_team_color=self.player_team.color,
             player_drivers=[d.id for d in self.player_drivers],
-            track_length_m=self.circuit.track_length_m,
-            world_origin_x_render=(
-                self.engine._track_physics.coordinate_frame.origin_x_render
-                if self.engine._track_physics.coordinate_frame
-                else 0.0
-            ),
-            world_origin_y_render=(
-                self.engine._track_physics.coordinate_frame.origin_y_render
-                if self.engine._track_physics.coordinate_frame
-                else 0.0
-            ),
-            world_meters_per_render_unit=(
-                self.engine._track_physics.coordinate_frame.meters_per_render_unit
-                if self.engine._track_physics.coordinate_frame
-                else 1.0
-            ),
-            track_width_m=self.circuit.track_width_m,
-            car_width_m=PHYSICAL_CAR_WIDTH_M,
-            car_length_m=PHYSICAL_CAR_LENGTH_M,
-            wheelbase_m=PHYSICAL_CAR_WHEELBASE_M,
-            grid_slots=self.engine.get_grid_slots(),
-            racing_line_profile=[
-                [sample.progress, sample.racing_line_offset_m]
-                for sample in self.engine._track_physics.samples
-            ],
-            track_width_profile=[
-                [sample.progress, sample.left_width_m, sample.right_width_m]
-                for sample in self.engine._track_physics.samples
-            ],
+            **geometry,
             surface_zones=self.engine._track_surface.zones,
             track_conditions=self.circuit.track_conditions,
             environment_conditions=self.engine.track_conditions,
             thermal_preset=self.resolved_thermal_preset,
             track_conditions_source=self.track_conditions_source,
             tire_compound_nomination=self.circuit.tire_compound_nomination,
-            racing_line_coords=self.engine._track_physics.racing_line_coords,
-            racing_line_length_m=self.engine._track_physics.racing_line_length_m,
-            predicted_racing_lap_time=self.engine._track_physics.predicted_racing_lap_time,
-            driving_line_coords=self.engine._track_physics.driving_line_coords,
-            driving_line_lengths_m=self.engine._track_physics.driving_line_lengths_m,
-            predicted_line_lap_times=self.engine._track_physics.predicted_line_lap_times,
-            track_coords=self.circuit.track_coords,
-            start_finish_index=self.circuit.start_finish_index,
-            # Graphics and marker interpolation must use the same entry/exit
-            # anchors and arc-length frame as authoritative pit physics.
-            pit_lane_coords=self.engine.get_pit_route_coords(),
-            pit_exit_lane_coords=self.engine.get_pit_exit_lane_coords(),
-            pit_wall_coords=self.circuit.pit_wall_coords,
-            pit_box_offset=self.circuit.pit_lane.box_offset if self.circuit.pit_lane else 11.0,
-            pit_lane_width_m=(
-                self.circuit.pit_lane.lane_width_m if self.circuit.pit_lane else 4.0
-            ),
-            pit_speed_limit_kph=(
-                self.circuit.pit_lane.speed_limit_kph
-                if self.circuit.pit_lane
-                else PIT_LANE_SPEED_LIMIT_KPH
-            ),
-            pit_side_entry_progress=(
-                self.circuit.pit_lane.side_entry_progress
-                if self.circuit.pit_lane
-                else 0.02
-            ),
-            pit_speed_limit_start=(
-                self.circuit.pit_lane.speed_limit_start if self.circuit.pit_lane else 0.12
-            ),
-            pit_box_progress=(
-                self.circuit.pit_lane.box_progress if self.circuit.pit_lane else 0.50
-            ),
-            pit_speed_limit_end=(
-                self.circuit.pit_lane.speed_limit_end if self.circuit.pit_lane else 0.88
-            ),
-            pit_side_rejoin_progress=(
-                self.circuit.pit_lane.side_rejoin_progress
-                if self.circuit.pit_lane
-                else 0.94
-            ),
             drs_zones=self.circuit.drs_zones,
             sectors=self.circuit.sectors,
             landmarks=self.circuit.landmarks,
@@ -1033,63 +984,19 @@ class SessionManager:
         circuits: list[Circuit],
     ) -> RaceSession:
         self.clear()
-
-        circuit = next((c for c in circuits if c.id == request.circuit_id), None)
-        if circuit is None:
-            raise ValueError(f"Circuit {request.circuit_id} not found")
-        circuit = circuit.model_copy(update={"total_laps": request.total_laps})
-
-        resolved_conditions, resolved_preset, conditions_source = (
-            resolve_circuit_thermal_conditions(
-                circuit,
-                thermal_preset=request.thermal_preset,
-                track_conditions=request.track_conditions,
-            )
-        )
-
-        player_team = next((t for t in teams if t.id == request.player_team_id), None)
-        if player_team is None:
-            raise ValueError(f"Team {request.player_team_id} not found")
-
-        team_map = {t.id: t for t in teams}
-        player_drivers = [d for d in drivers if d.team_id == player_team.id]
-        if len(player_drivers) < 1:
-            raise ValueError("Player team has no drivers")
-        player_driver_ids = {d.id for d in player_drivers}
-        starting_tires = {
-            driver_id: role
-            for driver_id, role in request.starting_tires.items()
-            if driver_id in player_driver_ids
-        }
-        starting_physical_tires = {
-            driver.id: resolve_tire_compound(
-                circuit,
-                starting_tires.get(driver.id, TireCompound.MEDIUM),
-            )[0]
-            for driver in drivers
-        }
-
-        engine = RaceEngine(
-            circuit=circuit,
+        build = FullEngineAdapter().build_race(
+            request=request,
             drivers=drivers,
-            teams=team_map,
-            player_team_id=player_team.id,
-            player_driver_ids=list(player_driver_ids),
-            starting_tires=starting_tires,
-            starting_physical_tires=starting_physical_tires,
-            grid_order=request.grid_order,
-            track_conditions=resolved_conditions,
-            thermal_preset=resolved_preset,
-            track_conditions_source=conditions_source,
+            teams=teams,
+            circuits=circuits,
         )
-
         session_id = str(uuid.uuid4())
         self._session = RaceSession(
             session_id=session_id,
-            engine=engine,
-            circuit=circuit,
-            player_team=player_team,
-            player_drivers=player_drivers,
+            engine=build.engine,
+            circuit=build.circuit,
+            player_team=build.player_team,
+            player_drivers=list(build.player_drivers),
         )
         return self._session
 

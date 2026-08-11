@@ -23,6 +23,10 @@ from simulation.collision import BodyPose, oriented_body_overlap
 from simulation.pit_stop import compute_pit_components
 from simulation.state_contract import TickPhase
 from simulation.tire_model import physical_compound_for_state, tire_blanket_temperature_c
+from simulation.track_display import (
+    build_pit_exit_lane_points_m,
+    build_pit_route_points_m,
+)
 from simulation.track_physics import DRIVING_LINE_RACING, TrackPhysicsProfile
 from simulation.vehicle_physics import PHYSICS_STEP_SECONDS
 
@@ -87,85 +91,7 @@ class PitOpsMixin:
         track_profile: TrackPhysicsProfile | None = None,
     ) -> list[tuple[float, float]]:
         """Return the compiled pit route in the immutable local metre frame."""
-        track_profile = track_profile or self._track_physics
-        entry = self._pit_entry_progress()
-        exit_ = self._pit_exit_progress()
-        coordinate_frame = track_profile.coordinate_frame
-        if (
-            entry is None
-            or exit_ is None
-            or coordinate_frame is None
-            or len(self.circuit.pit_lane_coords) < 2
-        ):
-            return []
-
-        entry_x, entry_y, entry_heading = track_profile.line_pose_at_progress_m(
-            DRIVING_LINE_RACING,
-            entry,
-        )
-        exit_x, exit_y, exit_heading = track_profile.line_pose_at_progress_m(
-            DRIVING_LINE_RACING,
-            exit_,
-        )
-        interior_points = [
-            coordinate_frame.to_local_m(x, y)
-            for x, y in self.circuit.pit_lane_coords
-        ]
-        # Imported pit paths commonly repeat each track anchor with a point
-        # only centimetres away in the lateral direction. Keeping that point
-        # creates an artificial 90-degree tangent on pit-in/pit-out even
-        # though the remaining route is correctly aligned. Collapse the
-        # near-anchor samples and use the first meaningful route segment.
-        while interior_points and hypot(
-            interior_points[0][0] - entry_x,
-            interior_points[0][1] - entry_y,
-        ) < PIT_ROUTE_ANCHOR_MERGE_DISTANCE_M:
-            interior_points.pop(0)
-        while interior_points and hypot(
-            interior_points[-1][0] - exit_x,
-            interior_points[-1][1] - exit_y,
-        ) < PIT_ROUTE_ANCHOR_MERGE_DISTANCE_M:
-            interior_points.pop()
-
-        points = [(entry_x, entry_y)]
-        if interior_points:
-            entry_distance = hypot(
-                interior_points[0][0] - entry_x,
-                interior_points[0][1] - entry_y,
-            )
-            entry_lead = min(
-                PIT_ROUTE_TANGENT_LEAD_M,
-                entry_distance * 0.4,
-            )
-            points.append(
-                (
-                    entry_x + cos(entry_heading) * entry_lead,
-                    entry_y + sin(entry_heading) * entry_lead,
-                )
-            )
-        points.extend(interior_points)
-        if interior_points:
-            exit_distance = hypot(
-                interior_points[-1][0] - exit_x,
-                interior_points[-1][1] - exit_y,
-            )
-            exit_lead = min(
-                PIT_ROUTE_TANGENT_LEAD_M,
-                exit_distance * 0.4,
-            )
-            points.append(
-                (
-                    exit_x - cos(exit_heading) * exit_lead,
-                    exit_y - sin(exit_heading) * exit_lead,
-                )
-            )
-        points.append((exit_x, exit_y))
-
-        deduplicated = [points[0]]
-        for point in points[1:]:
-            if hypot(point[0] - deduplicated[-1][0], point[1] - deduplicated[-1][1]) > 1e-9:
-                deduplicated.append(point)
-        return deduplicated
+        return list(build_pit_route_points_m(self.circuit, track_profile or self._track_physics))
 
     def _pit_route_length_m(
         self,
@@ -235,68 +161,7 @@ class PitOpsMixin:
         track_profile: TrackPhysicsProfile | None = None,
     ) -> list[tuple[float, float]]:
         """Build the side lane followed after pit-out before the racing line."""
-        pit_lane = self.circuit.pit_lane
-        if pit_lane is None or pit_lane.exit_lane_rejoin_progress is None:
-            return []
-        track_profile = track_profile or self._track_physics
-        start_progress = self._pit_exit_lane_start_track_progress(track_profile)
-        if start_progress is None:
-            return []
-        rejoin_progress = pit_lane.exit_lane_rejoin_progress % 1.0
-        progress_range = self._progress_distance(start_progress, rejoin_progress)
-        if progress_range <= PROGRESS_EPSILON:
-            return []
-
-        start_x, start_y, _ = self._pit_lane_pose_at_progress_m(
-            pit_lane.side_rejoin_progress,
-            track_profile,
-        )
-        line_x, line_y, line_heading = track_profile.line_pose_at_progress_m(
-            DRIVING_LINE_RACING,
-            start_progress,
-        )
-        start_lateral_delta_m = (
-            (start_x - line_x) * -sin(line_heading)
-            + (start_y - line_y) * cos(line_heading)
-        )
-        sample_count = max(
-            12,
-            ceil(
-                progress_range
-                * self.track_length_m
-                / PIT_EXIT_LANE_SAMPLE_SPACING_M
-            ),
-        )
-        merge_start = pit_lane.exit_lane_merge_start
-        points: list[tuple[float, float]] = []
-        for index in range(sample_count + 1):
-            route_progress = index / sample_count
-            track_progress = (
-                start_progress + progress_range * route_progress
-            ) % 1.0
-            x, y, heading = track_profile.line_pose_at_progress_m(
-                DRIVING_LINE_RACING,
-                track_progress,
-            )
-            if route_progress <= merge_start:
-                lateral_scale = 1.0
-            else:
-                merge_ratio = (
-                    (route_progress - merge_start)
-                    / max(PROGRESS_EPSILON, 1.0 - merge_start)
-                )
-                merge_ratio = min(1.0, max(0.0, merge_ratio))
-                smooth = merge_ratio * merge_ratio * (3.0 - 2.0 * merge_ratio)
-                lateral_scale = 1.0 - smooth
-            lateral_delta_m = start_lateral_delta_m * lateral_scale
-            points.append(
-                (
-                    x - sin(heading) * lateral_delta_m,
-                    y + cos(heading) * lateral_delta_m,
-                )
-            )
-        points[0] = (start_x, start_y)
-        return points
+        return list(build_pit_exit_lane_points_m(self.circuit, track_profile or self._track_physics))
 
     def get_pit_exit_lane_coords(self) -> list[list[float]]:
         """Expose the dedicated post-pit side lane in circuit coordinates."""

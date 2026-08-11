@@ -4,8 +4,10 @@ import StrategyPanel from './components/Dashboard/StrategyPanel';
 import SpeedControl from './components/Controls/SpeedControl';
 import EventFeed from './components/Controls/EventFeed';
 import DevRaceControl from './components/DevRaceControl/DevRaceControl';
+import AbstractRaceResult from './components/AbstractRaceResult';
 import RaceSetup from './components/RaceSetup';
 import { useRaceWebSocket } from './hooks/useRaceWebSocket';
+import { runtimeProfileForMode } from './engines/runtimeProfiles';
 import './App.css';
 
 const CIRCUIT_DISPLAY_ROTATION_OVERRIDES = {
@@ -118,6 +120,12 @@ export default function App() {
   const [isDisposing, setIsDisposing] = useState(false);
   const [disposalError, setDisposalError] = useState(null);
   const raceIndexRef = useRef(0);
+  const runtimeProfile = runtimeProfileForMode(
+    setupResult?.simulation_mode || 'FULL',
+  );
+  const isAbstractInstant = runtimeProfile.resultOnly;
+  const isAbstractBroadcast = runtimeProfile.family === 'abstract'
+    && runtimeProfile.liveBroadcast;
 
   const {
     raceInfo,
@@ -130,7 +138,9 @@ export default function App() {
     transportStats,
     sendCommand,
     resetState,
-  } = useRaceWebSocket(phase === 'race');
+  } = useRaceWebSocket(
+    phase === 'race' && !isAbstractInstant,
+  );
 
   const handleRaceStart = (result) => {
     resetState();
@@ -146,6 +156,7 @@ export default function App() {
       race_index: raceIndexRef.current,
       circuit: result?.circuit?.name || null,
       total_laps: result?.circuit?.total_laps || null,
+      simulation_mode: result?.simulation_mode || 'FULL',
     }).catch?.(() => {});
   };
 
@@ -205,6 +216,16 @@ export default function App() {
 
   if (phase === 'setup') {
     return <RaceSetup onStart={handleRaceStart} />;
+  }
+
+  if (isAbstractInstant) {
+    return (
+      <AbstractRaceResult
+        result={setupResult}
+        onBack={handleBackToSetup}
+        isDisposing={isDisposing}
+      />
+    );
   }
 
   const playerDriverIds = raceInfo?.player_drivers || setupResult?.player_drivers?.map((d) => d.id) || [];
@@ -271,6 +292,9 @@ export default function App() {
   const startLightCount = raceState?.start_light_count || 0;
   const lightsOut = startSequencePhase === 'lights_out';
   const startLightsActive = ['grid', 'lights', 'lights_out'].includes(startSequencePhase);
+  const localYellowActive = Boolean(
+    raceState?.positions?.some((position) => position.local_yellow_active),
+  );
   const statusText = startLightsActive
     ? (lightsOut ? 'LIGHTS OUT' : 'ON THE GRID')
     : (connectionState === 'connected' ? '● LIVE' : connectionState.toUpperCase());
@@ -308,6 +332,11 @@ export default function App() {
                   </span>
                 </span>
               )}
+              {raceState.race_phase === 'green' && localYellowActive && (
+                <span className="race-header__sc race-header__sc--vsc">
+                  LOCAL YELLOW
+                </span>
+              )}
               {raceState.pit_window_open && (
                 <span className="race-header__pit-window">PIT WINDOW OPEN</span>
               )}
@@ -320,7 +349,7 @@ export default function App() {
               {thermalPreset || 'OVERRIDE'} · {environmentConditions.ambient_temperature_c}°/{environmentConditions.track_temperature_c}°C
             </span>
           )}
-          <span className="race-header__renderer-label">THREE.JS</span>
+          <span className="race-header__renderer-label">{runtimeProfile.rendererLabel}</span>
           <span className={`race-header__status race-header__status--${statusClass}`}>
             {statusText}
           </span>
@@ -450,6 +479,7 @@ export default function App() {
           <SpeedControl
             connected={connected}
             speedMultiplier={raceState?.speed_multiplier ?? 1}
+            speeds={runtimeProfile.allowedSpeeds}
             paused={displayedPaused}
             onSpeed={(m) => sendCommand({ type: 'set_speed', multiplier: m })}
             onPause={() => {
@@ -458,7 +488,7 @@ export default function App() {
             }}
             onResume={() => sendCommand({ type: 'resume' })}
           />
-          {DEV_RACE_CONTROLS_ENABLED && (
+          {DEV_RACE_CONTROLS_ENABLED && runtimeProfile.physicsDevControls && (
             <DevRaceControl
               connected={connected}
               racePhase={raceState?.race_phase || 'green'}
@@ -486,6 +516,9 @@ export default function App() {
             onPitCall={(driverId, tire) =>
               sendCommand({ type: 'pit_call', driver_id: driverId, tire_choice: tire })
             }
+            onPitCancel={isAbstractBroadcast
+              ? (driverId) => sendCommand({ type: 'pit_cancel', driver_id: driverId })
+              : null}
             onPaceModeChange={(driverId, paceMode) =>
               sendCommand({ type: 'set_pace_mode', driver_id: driverId, pace_mode: paceMode })
             }

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  SIMULATION_MODE_OPTIONS,
   THERMAL_PRESET_OPTIONS,
   beginQualifyingRequest,
   buildQualifyingPayload,
@@ -41,6 +42,14 @@ test('thermal setup exposes the three presets and circuit default', () => {
   });
 });
 
+test('simulation setup exposes FULL, ABSTRACT broadcast and instant modes', () => {
+  assert.deepEqual(
+    SIMULATION_MODE_OPTIONS.map((mode) => mode.value),
+    ['FULL', 'ABSTRACT_BROADCAST', 'ABSTRACT_INSTANT'],
+  );
+  assert.equal(SIMULATION_MODE_OPTIONS[0].value, 'FULL');
+});
+
 test('missing circuit profile uses the compatibility default without inventing preview values', () => {
   assert.equal(defaultThermalPresetForCircuit({ id: 99 }), 'NORMAL');
   assert.equal(thermalConditionsForPreset({ id: 99 }, 'NORMAL'), null);
@@ -73,6 +82,7 @@ test('qualifying payload carries the selected thermal preset', () => {
       circuit_id: 3,
       player_team_id: 1,
       attempt_laps: 3,
+      simulation_mode: 'FULL',
       thermal_preset: 'COOL',
     },
   );
@@ -92,12 +102,62 @@ test('race setup payload reuses the same preset and preserves tire/grid choices'
     {
       circuit_id: 3,
       player_team_id: 1,
+      simulation_mode: 'FULL',
+      abstract_engine: 'STAGE4',
       thermal_preset: 'HOT',
       total_laps: 57,
       starting_tires: { 7: 'SOFT', 8: 'MEDIUM' },
       grid_order: [8, 7],
     },
   );
+});
+
+test('abstract mode is carried through qualifying and race setup payloads', () => {
+  assert.equal(
+    buildQualifyingPayload({
+      circuitId: 3,
+      playerTeamId: 1,
+      thermalPreset: 'NORMAL',
+      simulationMode: 'ABSTRACT',
+    }).simulation_mode,
+    'ABSTRACT',
+  );
+  const racePayload = buildRaceSetupPayload({
+      circuitId: 3,
+      playerTeamId: 1,
+      thermalPreset: 'NORMAL',
+      totalLaps: 10,
+      selectedTeamDrivers: [{ id: 7 }],
+      startingTires: { 7: 'MEDIUM' },
+      gridOrder: [],
+      simulationMode: 'ABSTRACT',
+    });
+  assert.equal(racePayload.simulation_mode, 'ABSTRACT');
+  assert.equal(racePayload.abstract_engine, 'PROGRESS_V5');
+});
+
+test('abstract broadcast mode is carried through qualifying and race setup payloads', () => {
+  assert.equal(
+    buildQualifyingPayload({
+      circuitId: 3,
+      playerTeamId: 1,
+      thermalPreset: 'NORMAL',
+      simulationMode: 'ABSTRACT_BROADCAST',
+    }).simulation_mode,
+    'ABSTRACT_BROADCAST',
+  );
+  const racePayload = buildRaceSetupPayload({
+      circuitId: 3,
+      playerTeamId: 1,
+      thermalPreset: 'NORMAL',
+      totalLaps: 10,
+      selectedTeamDrivers: [{ id: 7 }],
+      startingTires: { 7: 'MEDIUM' },
+      gridOrder: [],
+      simulationMode: 'ABSTRACT_BROADCAST',
+    });
+  assert.equal(racePayload.simulation_mode, 'ABSTRACT_BROADCAST');
+  assert.equal(racePayload.abstract_engine, 'PROGRESS_V5');
 });
 
 test('invalidating an in-flight qualifying request clears loading and rejects stale completion', async () => {

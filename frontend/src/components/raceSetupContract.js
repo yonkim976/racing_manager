@@ -1,5 +1,22 @@
 export const THERMAL_PRESET_OPTIONS = ['COOL', 'NORMAL', 'HOT'];
 export const WEEKEND_TIRE_ROLES = ['HARD', 'MEDIUM', 'SOFT'];
+export const SIMULATION_MODE_OPTIONS = [
+  {
+    value: 'FULL',
+    label: 'FULL · Physics',
+    description: 'Existing high-fidelity physical engine',
+  },
+  {
+    value: 'ABSTRACT_BROADCAST',
+    label: 'ABSTRACT · Broadcast (Experimental)',
+    description: 'Progress-authoritative race with bounded live presentation',
+  },
+  {
+    value: 'ABSTRACT_INSTANT',
+    label: 'ABSTRACT · Instant',
+    description: 'Progress-authoritative deterministic result without live replay',
+  },
+];
 
 export function tireNominationForCircuit(circuit) {
   return circuit?.tire_compound_nomination || null;
@@ -47,11 +64,17 @@ export function thermalConditionsForPreset(circuit, thermalPreset) {
   return circuit?.thermal_profile?.presets?.[thermalPreset] || null;
 }
 
-export function buildQualifyingPayload({ circuitId, playerTeamId, thermalPreset }) {
+export function buildQualifyingPayload({
+  circuitId,
+  playerTeamId,
+  thermalPreset,
+  simulationMode = 'FULL',
+}) {
   return {
     circuit_id: circuitId,
     player_team_id: playerTeamId,
     attempt_laps: 3,
+    simulation_mode: simulationMode,
     thermal_preset: thermalPreset,
   };
 }
@@ -64,10 +87,13 @@ export function buildRaceSetupPayload({
   selectedTeamDrivers,
   startingTires,
   gridOrder,
+  simulationMode = 'FULL',
 }) {
   return {
     circuit_id: circuitId,
     player_team_id: playerTeamId,
+    simulation_mode: simulationMode,
+    abstract_engine: simulationMode.startsWith('ABSTRACT') ? 'PROGRESS_V5' : 'STAGE4',
     thermal_preset: thermalPreset,
     total_laps: totalLaps,
     starting_tires: Object.fromEntries(

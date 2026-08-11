@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from math import isfinite
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
@@ -66,6 +66,27 @@ class ThermalPresetName(str, Enum):
     COOL = "COOL"
     NORMAL = "NORMAL"
     HOT = "HOT"
+
+
+class SimulationMode(str, Enum):
+    """Authoritative engine selected for a new race session."""
+
+    FULL = "FULL"
+    ABSTRACT_BROADCAST = "ABSTRACT_BROADCAST"
+    ABSTRACT_INSTANT = "ABSTRACT_INSTANT"
+    # Kept for clients using the Stage E result-only contract.
+    ABSTRACT = "ABSTRACT"
+
+
+class AbstractRaceAuthority(str, Enum):
+    """Result authority used behind an ABSTRACT API mode.
+
+    Stage 4 remains available as an explicit compatibility path while the
+    progress-authoritative kernel is exercised by the product UI.
+    """
+
+    STAGE4 = "STAGE4"
+    PROGRESS_V5 = "PROGRESS_V5"
 
 
 # Session-owned environmental defaults.  The tire model has no implicit
@@ -1454,6 +1475,10 @@ class DriverPositionInfo(BaseModel):
     maneuver_group_corridor_index: Optional[int] = None
     maneuver_group_corner_priority: Optional[int] = None
     maneuver_group_corner_turn_direction: int = 0
+    drs_train_id: Optional[str] = None
+    drs_train_size: int = 0
+    drs_train_position: Optional[int] = None
+    drs_train_member_ids: list[int] = Field(default_factory=list)
     forced_wide_by_driver_id: Optional[int] = None
     surface_state: str = "track"
     wheel_surfaces: list[str] = Field(default_factory=lambda: ["track"] * 4)
@@ -1498,6 +1523,9 @@ class RaceSetupRequest(BaseModel):
     circuit_id: int
     player_team_id: int
     total_laps: int = Field(default=30, ge=5, le=100)
+    simulation_mode: SimulationMode = SimulationMode.FULL
+    abstract_engine: AbstractRaceAuthority = AbstractRaceAuthority.STAGE4
+    session_seed: int | str = 42
     starting_tires: dict[int, TireCompound] = Field(default_factory=dict)
     grid_order: list[int] = Field(default_factory=list)
     thermal_preset: ThermalPresetName | None = None
@@ -1507,6 +1535,9 @@ class RaceSetupRequest(BaseModel):
 class RaceSetupResponse(BaseModel):
     """Response after setting up a race."""
     session_id: str
+    simulation_mode: SimulationMode = SimulationMode.FULL
+    abstract_engine: AbstractRaceAuthority = AbstractRaceAuthority.STAGE4
+    session_seed: int | str = 42
     circuit: Circuit
     player_team: Team
     player_drivers: list[Driver]
@@ -1515,6 +1546,7 @@ class RaceSetupResponse(BaseModel):
     thermal_preset: ThermalPresetName | None = None
     track_conditions_source: str = "explicit_override"
     tire_compound_nomination: TireCompoundNomination | None = None
+    abstract_result_summary: dict[str, Any] | None = None
 
 
 class StartingGridSlot(BaseModel):
@@ -1530,6 +1562,8 @@ class QualifyingRequest(BaseModel):
     circuit_id: int
     player_team_id: int
     attempt_laps: int = Field(default=3, ge=1, le=6)
+    simulation_mode: SimulationMode = SimulationMode.FULL
+    session_seed: int | str = 42
     thermal_preset: ThermalPresetName | None = None
 
 
@@ -1554,6 +1588,8 @@ class QualifyingResult(BaseModel):
 
 class QualifyingResponse(BaseModel):
     """Response after running qualifying."""
+    simulation_mode: SimulationMode = SimulationMode.FULL
+    session_seed: int | str = 42
     circuit: Circuit
     player_team: Team
     results: list[QualifyingResult]
@@ -1562,6 +1598,7 @@ class QualifyingResponse(BaseModel):
     thermal_preset: ThermalPresetName | None = None
     track_conditions_source: str = "circuit_preset"
     tire_compound_nomination: TireCompoundNomination | None = None
+    canonical_result_hash: str | None = None
 
 
 class RaceInfoMessage(BaseModel):
