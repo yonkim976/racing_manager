@@ -69,5 +69,6 @@ ABSTRACT DRS train, 3대 전투 그룹과 pair-only rank 권위는 같은 문서
 Racecraft Authority v2 macOS 패키징과 실행 전 검증 결과는 같은 문서의 49절을 기준으로 한다.
 FULL·ABSTRACT 듀얼 엔진 factory·adapter와 남은 물리적 이동 상태는 같은 문서의 50절을 기준으로 한다.
 FULL 예선·중앙 RaceEngine runtime의 첫 물리 이동과 compatibility shim 상태는 같은 문서의 51절을 기준으로 한다.
+FULL 핵심 차량 물리 6개 모듈 이동과 package 지연 로딩 경계는 같은 문서의 52절을 기준으로 한다.
 
 마지막 정리일: **2026-08-12**

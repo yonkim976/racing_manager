@@ -26,7 +26,7 @@ from models.schemas import (
 from simulation.pit_stop import parse_tire_choice
 from simulation.track_physics import clear_vehicle_track_physics_cache, track_physics_cache_counts
 from simulation.track_display import build_track_display_geometry
-from simulation.vehicle_physics import PHYSICS_STEP_SECONDS
+from engines.full.runtime.vehicle_physics import PHYSICS_STEP_SECONDS
 
 if TYPE_CHECKING:
     from engines.full.runtime.race_engine import RaceEngine

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import importlib
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -34,6 +35,52 @@ def imported_modules(path: Path) -> set[str]:
 
 
 class EngineBoundaryTests(unittest.TestCase):
+    def test_shared_geometry_does_not_import_full_runtime_aliases(self) -> None:
+        shared_module_names = (
+            "start_grid_geometry",
+            "track_display",
+            "track_physics",
+            "trajectory_physics",
+            "vehicle_dimensions",
+            "vehicle_dynamics",
+        )
+        full_aliases = {
+            "simulation.brake_model",
+            "simulation.collision",
+            "simulation.fixed_step",
+            "simulation.speed_profile",
+            "simulation.vehicle_physics",
+            "simulation.wake_model",
+        }
+        for module_name in shared_module_names:
+            with self.subTest(module=module_name):
+                modules = imported_modules(
+                    BACKEND_ROOT / "simulation" / f"{module_name}.py"
+                )
+                self.assertFalse(modules & full_aliases)
+                self.assertFalse(
+                    {module for module in modules if module.startswith("engines.full")}
+                )
+
+    def test_full_physics_compatibility_paths_alias_runtime_modules(self) -> None:
+        module_names = (
+            "brake_model",
+            "collision",
+            "fixed_step",
+            "speed_profile",
+            "vehicle_physics",
+            "wake_model",
+        )
+        for module_name in module_names:
+            with self.subTest(module=module_name):
+                compatibility_module = importlib.import_module(
+                    f"simulation.{module_name}"
+                )
+                runtime_module = importlib.import_module(
+                    f"engines.full.runtime.{module_name}"
+                )
+                self.assertIs(compatibility_module, runtime_module)
+
     def test_full_qualifying_compatibility_import_is_the_runtime_symbol(self) -> None:
         self.assertIs(compatibility_run_qualifying, full_run_qualifying)
 

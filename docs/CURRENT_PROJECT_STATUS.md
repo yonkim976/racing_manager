@@ -2632,3 +2632,29 @@ legacy 예선 import도 제거했다.
 이번 이동은 FULL 물리 분리의 첫 단위이며 차량 물리 하위 모듈과 ABSTRACT runtime의 실제 이동은
 아직 시작하지 않았다. 다음 단위는 `RaceEngine`의 `simulation.*` 하위 의존성을 기능 묶음별로
 옮기는 작업이다.
+
+## 52. FULL runtime 물리 이동 2차 — 핵심 차량 물리 묶음 (2026-08-12)
+
+ABSTRACT가 직접 또는 track presentation을 통해 사용하는 `track_physics`, `track_display`,
+`start_grid_geometry`, `vehicle_dimensions`는 공용 계약으로 남겼다. 직접 import 조사 뒤 전이 의존성도
+검사해 `track_physics → trajectory_physics`가 사용하는 `vehicle_dynamics` 역시 공용으로 유지했다.
+FULL 전용으로 확인된 다음 6개
+모듈은 `backend/engines/full/runtime/`으로 이동했다.
+
+- `fixed_step`, `speed_profile`
+- `vehicle_physics`
+- `brake_model`, `collision`, `wake_model`
+
+`RaceEngine`과 `vehicle_physics` 내부 연결은 package-relative import로 바꿨다. 기존
+`simulation.<module>` 경로는 새 runtime 모듈 객체를 직접 가리키므로 import와 module-level patch
+호환을 모두 유지한다. 6개 legacy/runtime 모듈 identity를 자동 검사하는 경계 회귀도 추가했다.
+
+초기 경계 실행에서는 ABSTRACT 공용 track geometry 초기화 중 compatibility alias가 상위
+`engines` package의 eager factory import를 유발하는 순환 의존을 검출했다. `engines`,
+`engines.full`, `engines.abstract` package initializer를 지연 로딩으로 바꿔 runtime leaf import가
+상대 엔진 adapter를 초기화하지 않도록 수정했다. `vehicle_dynamics` 공용 분류를 바로잡은 최종
+상태에서 경계 **8개, 0.061초, OK**, 경계·충돌·차량 동역학·vehicle physics·wake·trajectory 표적
+**62개, 3.857초, OK**다. FULL 예선·타이어·레이스 엔진 **326개, 658.712초, OK**, ABSTRACT
+Stage 1~4·Progress 전체 **119개, 251.976초, OK**로 두 엔진의 장기 회귀를 모두 통과했다. API 전체
+**19개, 336.871초, OK**로 lazy factory의 실제 FastAPI 진입점과 57랩 controlled broadcast도
+통과했다. 문서 상대 링크 누락은 0개이며 `git diff --check`도 통과했다.

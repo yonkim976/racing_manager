@@ -31,8 +31,8 @@ from models.schemas import (
     VehicleTrajectorySample,
 )
 from simulation.car_performance import CarPerformanceFactors, car_performance_factors
-from simulation.brake_model import brake_temperature_force_factor
-from simulation.collision import (
+from .brake_model import brake_temperature_force_factor
+from .collision import (
     BodyPose,
     oriented_body_separation_m,
 )
@@ -52,8 +52,8 @@ from simulation.physics import (
     GAME_TICK_SECONDS,
     driver_pace_multiplier,
 )
-from simulation.fixed_step import FixedStepAccumulator
-from simulation.speed_profile import SpeedProfile, build_speed_profile
+from .fixed_step import FixedStepAccumulator
+from .speed_profile import SpeedProfile, build_speed_profile
 from simulation.track_physics import (
     DRIVING_LINE_DEFENSIVE,
     DRIVING_LINE_INSIDE,
@@ -69,7 +69,7 @@ from simulation.track_physics import (
     track_physics_cache_counts,
 )
 from simulation.track_surface import TrackSurfaceProfile, VehicleSurfaceState
-from simulation.vehicle_physics import (
+from .vehicle_physics import (
     FOLLOWING_PREDICTIVE_DECELERATION_MPS2,
     LOCKUP_SLIP_RATIO_THRESHOLD,
     PHYSICS_MAX_LATERAL_SPEED_MPS,
@@ -109,7 +109,7 @@ from simulation.state_contract import (
     TickPhase,
 )
 
-from simulation.wake_model import (
+from .wake_model import (
     WAKE_MAX_GAP_M,
     WAKE_MIN_GAP_M,
     WakeEffects,
