@@ -2678,3 +2678,22 @@ runtime 내부에서 이 모듈들 및 앞서 이동한 핵심 차량 물리를 
 session·simulation foundation **39개, 36.854초, OK**, ABSTRACT Stage 1~4·Progress 전체
 **119개, 259.666초, OK**다. 이번 단계는 API·factory 계약을 변경하지 않았으므로 API 전체 묶음은
 재실행하지 않았으며, 직전 52절의 **19개, 336.871초, OK** 기준을 유지한다.
+
+## 54. 공용 트랙 계약 분리 — ABSTRACT solver 직접 의존 제거 (2026-08-12)
+
+`track_physics.py`는 공용 display profile과 FULL trajectory 최적화 구현이 섞여 있어 파일 전체를
+FULL runtime으로 이동할 수 없었다. 엔진 중립 `simulation/track_contracts.py`를 추가하고 다음
+계약을 옮겼다.
+
+- `DRIVING_LINE_RACING|INSIDE|OUTSIDE|DEFENSIVE`
+- `TrackPhysicsSample`, `LocalMetricCoordinateFrame`
+- 최소 geometry 표면을 정의하는 `TrackGeometryProfile` Protocol
+
+`TrackPhysicsProfile`은 이 Protocol을 구조적으로 구현하며 기존 symbol도 재수출하므로 FULL 및 외부
+호출 호환을 유지한다. ABSTRACT pose·kinematics와 공용 start-grid는 더 이상 `track_physics` solver
+모듈을 직접 import하지 않는다. `track_display`도 type 계약은 Protocol을 사용하고 실제 profile 생성
+함수만 기존 compiler에서 호출한다.
+
+경계·track physics·ABSTRACT geometry·kinematics 표적 **45개, 21.691초, OK**다. 별도 경계 테스트는 ABSTRACT
+presentation 소비자가 `track_contracts`를 사용하고 `track_physics`를 직접 import하지 않는지
+검사한다. 다음 이동 대상은 이 경계 밖의 FULL 전용 local planner·planner scheduler·lap physics다.

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from simulation.track_physics import TrackPhysicsProfile
+from simulation.track_contracts import TrackGeometryProfile
 
 
 GRID_SLOT_PROGRESS_GAP = 0.0028
@@ -35,7 +35,7 @@ def build_grid_slots(
     track_length_m: float,
     *,
     start_sequence_enabled: bool = True,
-    track_profile: TrackPhysicsProfile | None = None,
+    track_profile: TrackGeometryProfile | None = None,
 ) -> tuple[GridDisplaySlot, ...]:
     """Build the same staggered boxes used by the FULL start operation.
 

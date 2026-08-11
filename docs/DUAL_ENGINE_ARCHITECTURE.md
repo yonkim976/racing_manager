@@ -37,6 +37,9 @@ backend/engines/
 │   └── state_contract.py  FULL tick 내부 계약
 └── abstract/adapter.py    snapshot·qualifying·instant·broadcast 생성 경계
 
+backend/simulation/
+└── track_contracts.py     엔진 중립 주행선·폭·좌표·pose protocol
+
 frontend/src/engines/
 ├── full/profile.js        physics telemetry·physics pose
 ├── abstract/profile.js    logical event·strategy map
@@ -57,6 +60,7 @@ FULL adapter는 예선과 중앙 경기 구현을 `engines.full.runtime`에서 �
 
 - 드라이버·팀·차량 성능 콘텐츠
 - 서킷, sector, timing line, DRS와 pit 데이터
+- `TrackGeometryProfile`, 주행선 이름, 폭 샘플과 로컬 좌표 변환
 - 타이어 nomination과 환경 preset
 - `SimulationMode`, 사용자 command, 순위·GAP·이벤트·결과 schema
 - 저장 게임, 시즌과 커리어 데이터
@@ -74,6 +78,8 @@ FULL adapter는 예선과 중앙 경기 구현을 `engines.full.runtime`에서 �
 FULL은 `PHYSICS VIEW`, ABSTRACT broadcast는 `STRATEGY MAP` profile을 선택한다. 현재 ABSTRACT도
 기존 track renderer를 호환 사용하지만 선택 경계는 분리됐다. 다음 presentation 단계에서
 ABSTRACT만 확대 지도·마커·이벤트 효과로 교체하고 FULL renderer는 변경하지 않는다.
+ABSTRACT pose·kinematics·grid는 `track_physics` solver 타입을 직접 import하지 않고
+`track_contracts.TrackGeometryProfile`만 소비한다.
 
 ## 5. 남은 물리 이동 단계
 

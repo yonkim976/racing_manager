@@ -35,6 +35,18 @@ def imported_modules(path: Path) -> set[str]:
 
 
 class EngineBoundaryTests(unittest.TestCase):
+    def test_abstract_presentation_uses_track_contract_not_solver_module(self) -> None:
+        consumers = (
+            BACKEND_ROOT / "simulation" / "abstract" / "kinematics.py",
+            BACKEND_ROOT / "simulation" / "abstract" / "pose.py",
+            BACKEND_ROOT / "simulation" / "start_grid_geometry.py",
+        )
+        for path in consumers:
+            with self.subTest(path=path.name):
+                modules = imported_modules(path)
+                self.assertIn("simulation.track_contracts", modules)
+                self.assertNotIn("simulation.track_physics", modules)
+
     def test_shared_geometry_does_not_import_full_runtime_aliases(self) -> None:
         shared_module_names = (
             "start_grid_geometry",

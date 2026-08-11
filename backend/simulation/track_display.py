@@ -8,12 +8,12 @@ from typing import Any, Iterable
 
 from models.schemas import Circuit
 from simulation.start_grid_geometry import GridDisplaySlot, build_grid_slots
-from simulation.track_physics import (
+from simulation.track_contracts import (
     DRIVING_LINE_RACING,
     LocalMetricCoordinateFrame,
-    TrackPhysicsProfile,
-    build_track_physics_profile,
+    TrackGeometryProfile,
 )
+from simulation.track_physics import build_track_physics_profile
 from simulation.vehicle_dimensions import (
     PHYSICAL_CAR_LENGTH_M,
     PHYSICAL_CAR_WIDTH_M,
@@ -57,7 +57,7 @@ def _pit_progress(circuit: Circuit, name: str) -> float | None:
 
 def build_pit_route_points_m(
     circuit: Circuit,
-    track_profile: TrackPhysicsProfile,
+    track_profile: TrackGeometryProfile,
 ) -> tuple[Point, ...]:
     """Build the authoritative pit route in the profile's local metre frame."""
 
@@ -132,7 +132,7 @@ def build_pit_route_points_m(
 
 def _pit_lane_pose_at_progress_m(
     circuit: Circuit,
-    track_profile: TrackPhysicsProfile,
+    track_profile: TrackGeometryProfile,
     lane_progress: float,
 ) -> tuple[float, float, float]:
     points = build_pit_route_points_m(circuit, track_profile)
@@ -177,7 +177,7 @@ def _pit_lane_pose_at_progress_m(
 
 def _pit_exit_lane_start_track_progress(
     circuit: Circuit,
-    track_profile: TrackPhysicsProfile,
+    track_profile: TrackGeometryProfile,
 ) -> float | None:
     pit_lane = circuit.pit_lane
     entry = _pit_progress(circuit, "entry_progress")
@@ -208,7 +208,7 @@ def _pit_exit_lane_start_track_progress(
 
 def build_pit_exit_lane_points_m(
     circuit: Circuit,
-    track_profile: TrackPhysicsProfile,
+    track_profile: TrackGeometryProfile,
 ) -> tuple[Point, ...]:
     """Build the dedicated post-pit side lane in local metre coordinates."""
 
@@ -283,7 +283,7 @@ class TrackDisplayGeometry:
 
     Track paths remain in ``*_render`` coordinate space for canvas consumers;
     pose samplers return local metric metres through the retained compiled
-    ``TrackPhysicsProfile``.  The profile is intentionally presentation-only
+    ``TrackGeometryProfile``.  The profile is intentionally presentation-only
     and is excluded from serialization and result hashes.
     """
 
@@ -318,7 +318,7 @@ class TrackDisplayGeometry:
     pit_box_progress: float
     pit_speed_limit_end: float
     pit_side_rejoin_progress: float
-    _compiled_profile: TrackPhysicsProfile = field(repr=False, compare=False)
+    _compiled_profile: TrackGeometryProfile = field(repr=False, compare=False)
 
     @property
     def world_origin_x_render(self) -> float:
@@ -333,7 +333,7 @@ class TrackDisplayGeometry:
         return self.coordinate_frame.meters_per_render_unit
 
     @property
-    def compiled_profile(self) -> TrackPhysicsProfile:
+    def compiled_profile(self) -> TrackGeometryProfile:
         """Return the compiled profile used by the public pose sampler."""
         return self._compiled_profile
 
@@ -388,7 +388,7 @@ class TrackDisplayGeometry:
 def build_track_display_geometry(
     circuit: Circuit,
     *,
-    track_profile: TrackPhysicsProfile | None = None,
+    track_profile: TrackGeometryProfile | None = None,
     grid_driver_ids: Iterable[int | str] = (),
     start_sequence_enabled: bool = True,
 ) -> TrackDisplayGeometry:

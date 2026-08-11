@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from math import atan2, ceil, cos, floor, pi, sin
 from typing import Any
 
-from simulation.track_physics import DRIVING_LINE_RACING
+from simulation.track_contracts import DRIVING_LINE_RACING
 from simulation.start_grid_geometry import GridDisplaySlot
 
 from .clock import LogicalClock
@@ -69,7 +69,7 @@ class TrackSpline:
 
     The name remains for existing pose callers, but this class no longer owns
     an independent centerline spline.  All samples come from the public
-    ``TrackPhysicsProfile.line_pose_at_progress_m`` contract.
+    ``TrackGeometryProfile.line_pose_at_progress_m`` contract.
     """
 
     def __init__(self, track: AbstractTrackSnapshot, samples_per_segment: int = 16):

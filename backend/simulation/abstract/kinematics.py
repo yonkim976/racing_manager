@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from math import floor, isfinite, sqrt
 from typing import Any, Iterable
 
-from simulation.track_physics import DRIVING_LINE_RACING, TrackPhysicsProfile
+from simulation.track_contracts import DRIVING_LINE_RACING, TrackGeometryProfile
 
 from .performance import calculate_segment_time
 from .state import canonical_json
@@ -47,12 +47,12 @@ ARC_LENGTH_LUT_SAMPLE_COUNT = 16_384
 class CompiledSplineArcLengthAdapter:
     """Periodic arc-length parameterization of the shared world pose spline.
 
-    The adapter samples the exact public ``TrackPhysicsProfile`` spline used by
+    The adapter samples the exact public ``TrackGeometryProfile`` spline used by
     pose rendering.  Its distance axis is therefore the distance of that same
     curve, rather than the profile's older path-distance approximation.
     """
 
-    profile: TrackPhysicsProfile = field(repr=False, compare=False)
+    profile: TrackGeometryProfile = field(repr=False, compare=False)
     line_name: str
     progress_samples: tuple[float, ...]
     arc_distances_m: tuple[float, ...]
@@ -62,7 +62,7 @@ class CompiledSplineArcLengthAdapter:
     @classmethod
     def from_profile(
         cls,
-        profile: TrackPhysicsProfile,
+        profile: TrackGeometryProfile,
         line_name: str = DRIVING_LINE_RACING,
         *,
         sample_count: int = ARC_LENGTH_LUT_SAMPLE_COUNT,
@@ -124,7 +124,7 @@ class CompiledSplineArcLengthAdapter:
 class RacingLineDistanceContract:
     """The one public distance authority for a compiled racing line."""
 
-    profile: TrackPhysicsProfile
+    profile: TrackGeometryProfile
     line_name: str = DRIVING_LINE_RACING
     arc_length_adapter: CompiledSplineArcLengthAdapter | None = field(
         default=None,

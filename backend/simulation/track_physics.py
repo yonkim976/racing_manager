@@ -16,6 +16,14 @@ from simulation.global_trajectory_optimizer import (
     GlobalTrajectoryOptimizerConfig,
 )
 from simulation.track_geometry import normalize_points
+from simulation.track_contracts import (
+    DRIVING_LINE_DEFENSIVE,
+    DRIVING_LINE_INSIDE,
+    DRIVING_LINE_OUTSIDE,
+    DRIVING_LINE_RACING,
+    LocalMetricCoordinateFrame,
+    TrackPhysicsSample,
+)
 from simulation.track_surface import (
     TRAJECTORY_LOW_KERB_ALLOWANCE_M,
     TrackSurfaceProfile,
@@ -51,55 +59,12 @@ RACING_LINE_BRAKING_MPS2 = 34.0
 RACING_LINE_LATERAL_ACCEL_MPS2 = 34.0
 RACING_LINE_MIN_SPEED_MPS = 28.0
 RACING_LINE_MAX_SPEED_MPS = 96.0
-DRIVING_LINE_RACING = "racing_line"
-DRIVING_LINE_INSIDE = "inside"
-DRIVING_LINE_OUTSIDE = "outside"
-DRIVING_LINE_DEFENSIVE = "defensive_line"
 TRACK_PHYSICS_CACHE_SIZE = 32
 VEHICLE_TRACK_PHYSICS_CACHE_SIZE = 128
 LIVE_TRAJECTORY_OPTIMIZATION_STEPS_M = (0.6, 0.3)
 LIVE_TRAJECTORY_CENTER_STRIDE = 12
 LIVE_TRAJECTORY_SPEED_PASS_COUNT = 1
 LIVE_TRAJECTORY_CORNER_CURVATURE_THRESHOLD_1PM = 0.004
-
-
-@dataclass(frozen=True)
-class TrackPhysicsSample:
-    progress: float
-    left_width_m: float
-    right_width_m: float
-    racing_line_offset_m: float
-    turn_signal: float
-
-
-@dataclass(frozen=True)
-class LocalMetricCoordinateFrame:
-    """Explicit transform from compiled render units into local track metres.
-
-    ``track_coords`` are intentionally still kept in their render coordinate
-    space for the existing canvas/API consumers.  Physics and telemetry use
-    this frame instead, so neither canvas fitting nor a later viewport resize
-    can change a driver's world position.
-    """
-
-    origin_x_render: float
-    origin_y_render: float
-    meters_per_render_unit: float
-    track_length_m: float
-
-    def to_local_m(self, x_render: float, y_render: float) -> tuple[float, float]:
-        return (
-            (x_render - self.origin_x_render) * self.meters_per_render_unit,
-            (y_render - self.origin_y_render) * self.meters_per_render_unit,
-        )
-
-    def from_local_m(self, x_m: float, y_m: float) -> tuple[float, float]:
-        """Convert the immutable metric frame back to circuit render units."""
-        scale = max(1e-12, self.meters_per_render_unit)
-        return (
-            self.origin_x_render + x_m / scale,
-            self.origin_y_render + y_m / scale,
-        )
 
 
 @dataclass(frozen=True)
