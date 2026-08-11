@@ -2607,3 +2607,19 @@ ABSTRACT runtime도 `backend/simulation/abstract/`에 있으므로 물리적 이
 다음 단계는 현재 상태 커밋 후 결과 공식을 바꾸지 않는 기계적 모듈 이동이며 기준은
 [`DUAL_ENGINE_ARCHITECTURE.md`](DUAL_ENGINE_ARCHITECTURE.md)를 따른다. 현재 macOS 패키지는 이 분리
 직전에 생성됐으므로 새 frontend profile/factory를 포함하려면 다시 패키징해야 한다.
+
+## 51. FULL runtime 물리 이동 1차 — qualifying ownership (2026-08-12)
+
+듀얼 엔진 이동 전 기준점을 `2d0236a`로 커밋한 뒤 FULL 예선 구현을
+`backend/engines/full/runtime/qualifying.py`로 실제 이동했다. `FullEngineAdapter`는 새 경로를
+직접 호출하며 `backend/simulation/qualifying.py`에는 기존 테스트와 외부 호출자를 위한 공개 symbol
+재수출만 남겼다. 예선 공식, RNG, compound mapping과 응답 schema는 변경하지 않았다.
+
+경계 검사는 FULL·ABSTRACT 하위 디렉터리 전체를 재귀 탐색하도록 보강했고, legacy import와 새 runtime
+import가 동일 `run_qualifying` 함수 객체를 반환하는 회귀를 추가했다. API 진입점의 사용하지 않는
+legacy 예선 import도 제거했다.
+
+검증은 엔진 경계 **5개**, FULL 예선·타이어·레이스 엔진 **326개, 795.263초, OK**, API 전체
+**19개, 345.373초, OK**다. 이번 이동은 FULL 물리 분리의 첫 단위이며 `RaceEngine`과
+차량 물리 하위 모듈, ABSTRACT runtime의 실제 이동은 아직 시작하지 않았다. 다음 단위는 중앙
+`RaceEngine`을 옮기되 module-level patch 호환을 유지하는 alias shim을 먼저 설계한 뒤 진행한다.

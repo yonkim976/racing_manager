@@ -16,10 +16,10 @@ from models.schemas import (
     Team,
     TireCompound,
 )
-from simulation.qualifying import run_qualifying
 from simulation.race_engine import RaceEngine, empty_tire_temperature_diagnostic_snapshot
 
 from ..contracts import EngineCapabilities, EngineFamily
+from .runtime.qualifying import run_qualifying
 
 
 @dataclass(frozen=True, slots=True)

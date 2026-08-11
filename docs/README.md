@@ -68,5 +68,6 @@ macOS 재패키징, 실행 후 코드 서명 불변성과 단기 ABSTRACT smoke 
 ABSTRACT DRS train, 3대 전투 그룹과 pair-only rank 권위는 같은 문서의 48절을 기준으로 한다.
 Racecraft Authority v2 macOS 패키징과 실행 전 검증 결과는 같은 문서의 49절을 기준으로 한다.
 FULL·ABSTRACT 듀얼 엔진 factory·adapter와 남은 물리적 이동 상태는 같은 문서의 50절을 기준으로 한다.
+FULL 예선 runtime의 첫 물리 이동과 compatibility shim 상태는 같은 문서의 51절을 기준으로 한다.
 
-마지막 정리일: **2026-08-11**
+마지막 정리일: **2026-08-12**

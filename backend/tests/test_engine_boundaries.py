@@ -11,7 +11,9 @@ from engines import (
     SimulationEngineAdapter,
     simulation_engine_factory,
 )
+from engines.full.runtime.qualifying import run_qualifying as full_run_qualifying
 from models.schemas import SimulationMode
+from simulation.qualifying import run_qualifying as compatibility_run_qualifying
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +31,9 @@ def imported_modules(path: Path) -> set[str]:
 
 
 class EngineBoundaryTests(unittest.TestCase):
+    def test_full_qualifying_compatibility_import_is_the_runtime_symbol(self) -> None:
+        self.assertIs(compatibility_run_qualifying, full_run_qualifying)
+
     def test_factory_routes_every_public_mode_to_one_engine_family(self) -> None:
         expected = {
             SimulationMode.FULL: EngineFamily.FULL,
@@ -63,10 +68,10 @@ class EngineBoundaryTests(unittest.TestCase):
 
     def test_engine_adapters_do_not_import_each_others_internals(self) -> None:
         full_modules = set()
-        for path in (BACKEND_ROOT / "engines" / "full").glob("*.py"):
+        for path in (BACKEND_ROOT / "engines" / "full").rglob("*.py"):
             full_modules.update(imported_modules(path))
         abstract_modules = set()
-        for path in (BACKEND_ROOT / "engines" / "abstract").glob("*.py"):
+        for path in (BACKEND_ROOT / "engines" / "abstract").rglob("*.py"):
             abstract_modules.update(imported_modules(path))
 
         self.assertFalse(

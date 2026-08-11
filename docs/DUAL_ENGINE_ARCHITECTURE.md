@@ -1,6 +1,6 @@
 # FULL·ABSTRACT 듀얼 엔진 아키텍처
 
-상태: **1차 실행 경계 분리 완료 · 기존 FULL 파일 물리 이동 대기**
+상태: **1차 실행 경계 분리 완료 · FULL runtime 물리 이동 진행 중**
 기준일: **2026-08-12**
 
 ## 1. 결정
@@ -20,6 +20,8 @@ backend/engines/
 ├── contracts.py           공통 family·capability·adapter protocol
 ├── factory.py             SimulationMode의 단일 선택 지점
 ├── full/adapter.py        FULL qualifying·RaceEngine 생성 경계
+├── full/runtime/
+│   └── qualifying.py      FULL 예선 구현 권위
 └── abstract/adapter.py    snapshot·qualifying·instant·broadcast 생성 경계
 
 frontend/src/engines/
@@ -30,7 +32,9 @@ frontend/src/engines/
 
 `main.py`의 qualifying/race setup은 `simulation_engine_factory.for_mode()`만 호출한다.
 `SessionManager`도 `RaceEngine`을 직접 생성하지 않고 `FullEngineAdapter.build_race()`를 사용한다.
-FULL adapter는 `simulation.abstract`를, ABSTRACT adapter는 `simulation.race_engine`과
+FULL adapter는 예선 구현을 `engines.full.runtime.qualifying`에서 직접 호출한다. 기존
+`simulation.qualifying`은 기존 도구·테스트를 깨지 않기 위한 얇은 재수출 shim이며 새 FULL 코드는
+이 경로를 사용하지 않는다. FULL adapter는 `simulation.abstract`를, ABSTRACT adapter는 `simulation.race_engine`과
 `simulation.vehicle_physics`를 import할 수 없다. 이 규칙은 AST 기반 자동 테스트가 검사한다.
 
 ## 3. 공유 가능한 계약
@@ -57,13 +61,14 @@ ABSTRACT만 확대 지도·마커·이벤트 효과로 교체하고 FULL rendere
 
 ## 5. 남은 물리 이동 단계
 
-현재 실제 FULL 구현 파일은 호환성을 위해 기존 `backend/simulation/` 아래에 남아 있다. 한 번에
-이동하면 수백 개 import와 회귀 기준이 동시에 바뀌므로 다음 순서를 지킨다.
+FULL 예선 구현은 `backend/engines/full/runtime/`으로 이동했다. `RaceEngine`과 나머지 물리 전용
+모듈은 호환성을 위해 아직 기존 `backend/simulation/` 아래에 있다. 한 번에 이동하면 수백 개 import와
+회귀 기준이 동시에 바뀌므로 다음 순서를 지킨다.
 
-1. 현재 듀얼 경계를 커밋해 이동 전 기준점 확보
-2. FULL 내부 import를 package-relative 경계로 변환
-3. 물리 전용 모듈을 `backend/engines/full/runtime/`으로 기계적 이동
-4. 기존 `simulation.*` 경로에는 경고 없는 얇은 compatibility shim만 유지
+1. 현재 듀얼 경계를 커밋해 이동 전 기준점 확보 — 완료 (`2d0236a`)
+2. FULL 내부 import를 package-relative 경계로 변환 — 예선 완료, 나머지 대기
+3. 물리 전용 모듈을 `backend/engines/full/runtime/`으로 기계적 이동 — 예선 완료, 나머지 대기
+4. 기존 `simulation.*` 경로에는 경고 없는 얇은 compatibility shim만 유지 — 예선 적용
 5. ABSTRACT 기존 모듈을 `backend/engines/abstract/runtime/`으로 이동
 6. API·도구·테스트의 public import를 `engines.*`로 전환
 7. compatibility 사용처 0 확인 후 shim 삭제 여부 결정

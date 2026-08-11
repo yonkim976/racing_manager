@@ -44,7 +44,6 @@ from simulation.abstract import (
     TireConditionSnapshot,
 )
 from simulation.abstract.broadcast import abstract_broadcast_session_manager
-from simulation.qualifying import run_qualifying
 from simulation.track_compiler import compile_circuit_layout
 from simulation.track_geometry import validate_circuit_geometry_detailed
 
