@@ -16,7 +16,7 @@ from models.schemas import (
     TrackSegmentType,
 )
 from simulation.car_performance import car_performance_factors
-from simulation.physics import driver_pace_multiplier
+from .physics import driver_pace_multiplier
 from .racecraft_ops import MANEUVER_CLEARANCE_MARGIN_M
 from .runtime_constants import GRID_LAUNCH_MERGE_DISTANCE_M
 from .strategy_ops import (

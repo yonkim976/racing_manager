@@ -41,14 +41,14 @@ from .incidents import (
     Incident,
     roll_solo_incident,
 )
-from simulation.local_trajectory_planner import (
+from .local_trajectory_planner import (
     LOCAL_TRAJECTORY_PLAN_INTERVAL_SECONDS,
     LocalTrajectoryPlan,
     LocalTrajectoryPlanner,
     LocalTrajectoryPlanningRequest,
     NearbyVehiclePredictionInput,
 )
-from simulation.physics import (
+from .physics import (
     GAME_TICK_SECONDS,
     driver_pace_multiplier,
 )
@@ -79,7 +79,7 @@ from .vehicle_physics import (
     VehiclePhysicsModifiers,
 )
 from simulation.vehicle_dynamics import maximum_braking_deceleration_mps2
-from simulation.planner_scheduler import (
+from .planner_scheduler import (
     AdaptivePlannerScheduler,
     TrackSpatialIndex,
 )

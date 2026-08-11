@@ -2697,3 +2697,23 @@ FULL runtime으로 이동할 수 없었다. 엔진 중립 `simulation/track_cont
 경계·track physics·ABSTRACT geometry·kinematics 표적 **45개, 21.691초, OK**다. 별도 경계 테스트는 ABSTRACT
 presentation 소비자가 `track_contracts`를 사용하고 `track_physics`를 직접 import하지 않는지
 검사한다. 다음 이동 대상은 이 경계 밖의 FULL 전용 local planner·planner scheduler·lap physics다.
+
+## 55. FULL runtime 물리 이동 4차 — local planner·lap physics (2026-08-12)
+
+54절의 공용 `TrackGeometryProfile` 경계 밖에 있는 FULL 전용 모듈 3개를
+`backend/engines/full/runtime/`으로 이동했다.
+
+- `local_trajectory_planner`: short-horizon lateral lattice와 traffic validation
+- `planner_scheduler`: 5/10/20/50Hz 검증 cadence와 progress spatial index
+- `physics`: FULL 예선·랩 시간·progress 계산
+
+local planner는 공용 profile의 구현 클래스 대신 `TrackGeometryProfile` Protocol만 타입 계약으로
+사용한다. 충돌·차량 integrator는 FULL runtime 상대 import를 사용하고, track surface와
+`vehicle_dynamics`는 공용 solver 계약으로 유지한다. `RaceEngine`, qualifying, racecraft, strategy,
+start operation의 내부 참조도 package-relative 경로로 전환했다. 기존 `simulation.<module>` 경로는
+동일 runtime 모듈을 가리키는 alias다.
+
+경계·local planner·scheduler 표적 **30개, 0.767초, OK**, FULL 예선·타이어·레이스 엔진
+**326개, 637.234초, OK**, 별도 session·simulation foundation **39개, 34.663초, OK**다.
+ABSTRACT Stage 1~4·Progress 전체 **119개, 245.763초, OK**다. API·factory 계약은 변경하지 않았으므로
+API 전체 묶음은 재실행하지 않고 52절의 **19개, 336.871초, OK** 기준을 유지한다.

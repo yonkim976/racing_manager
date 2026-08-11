@@ -12,11 +12,11 @@ from __future__ import annotations
 from models.schemas import DriverRaceState, PaceMode, TrackSegmentType
 from .ai_strategy import choose_pit_tire, should_pit
 from .brake_model import advance_brake_thermal_state
-from simulation.local_trajectory_planner import (
+from .local_trajectory_planner import (
     LOCAL_TRAJECTORY_PLAN_INTERVAL_SECONDS,
     LocalTrajectoryPlannerWeights,
 )
-from simulation.physics import compute_effective_lap_time
+from .physics import compute_effective_lap_time
 from .racecraft_ops import (
     AI_ATTACK_EXIT_GAP_SECONDS,
     AI_ATTACK_GAP_SECONDS,

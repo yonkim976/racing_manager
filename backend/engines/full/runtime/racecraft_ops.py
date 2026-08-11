@@ -13,7 +13,7 @@ from typing import Any
 
 from models.schemas import DriverRaceState, PaceMode, RaceEvent, TrackSegmentType
 from .collision import BodyPose, oriented_body_overlap, oriented_body_separation_m
-from simulation.local_trajectory_planner import LOCAL_TRAJECTORY_PLAN_INTERVAL_SECONDS
+from .local_trajectory_planner import LOCAL_TRAJECTORY_PLAN_INTERVAL_SECONDS
 from simulation.track_geometry import segment_at_progress
 from simulation.track_physics import (
     DRIVING_LINE_DEFENSIVE,
