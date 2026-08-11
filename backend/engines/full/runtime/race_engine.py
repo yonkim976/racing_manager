@@ -36,8 +36,8 @@ from .collision import (
     BodyPose,
     oriented_body_separation_m,
 )
-from simulation.events import roll_events
-from simulation.incidents import (
+from .events import roll_events
+from .incidents import (
     Incident,
     roll_solo_incident,
 )
@@ -101,7 +101,7 @@ from simulation.trajectory_physics import (
     TireTrajectorySpec,
     VehicleTrajectorySpec,
 )
-from simulation.state_contract import (
+from .state_contract import (
     CollisionFact,
     TELEMETRY_SOURCE_DERIVED,
     PhysicsStepResult,
@@ -115,7 +115,7 @@ from .wake_model import (
     WakeEffects,
     compute_wake_effects,
 )
-from simulation.safety_car import (
+from .safety_car import (
     SC_ADDITIONAL_INCIDENT_SECONDS,
     SC_CAR_LENGTH_M,
     SC_CATCH_UP_FAST_LAP_TIME_FACTOR,
@@ -157,12 +157,12 @@ from simulation.safety_car import (
     VSC_LAP_TIME_FACTOR,
 )
 
-from simulation.pit_ops import (
+from .pit_ops import (
     PIT_LANE_SPEED_LIMIT_KPH,
     PitMergeDecision,
     PitOpsMixin,
 )
-from simulation.racecraft_ops import (
+from .racecraft_ops import (
     AI_ATTACK_EXIT_GAP_SECONDS,
     AI_ATTACK_GAP_SECONDS,
     AI_DEFEND_EXIT_GAP_SECONDS,
@@ -190,12 +190,12 @@ from simulation.racecraft_ops import (
     PendingOvertakeCommand,
     RacecraftMixin,
 )
-from simulation.timing_ops import (
+from .timing_ops import (
     TIMING_CROSSING_LAPS_TO_RETAIN,
     TimingLoop,
     TimingOpsMixin,
 )
-from simulation.strategy_ops import (
+from .strategy_ops import (
     AI_CONSERVE_EXIT_TIRE_LIFE,
     AI_CRITICAL_TIRE_LIFE,
     AI_FRESH_TIRE_USAGE,
@@ -219,7 +219,7 @@ from simulation.strategy_ops import (
     StrategyOpsMixin,
     TIRE_SLIDE_WEAR_LAPS_PER_JOULE,
 )
-from simulation.incident_ops import (
+from .incident_ops import (
     COLLISION_DISPLAY_SECONDS,
     COLLISION_ESCALATION_IMPACT_MPS,
     COLLISION_MIN_REPORT_IMPACT_MPS,
@@ -245,8 +245,8 @@ from simulation.incident_ops import (
     DriverInputError,
     IncidentOpsMixin,
 )
-from simulation.runtime_constants import GRID_LAUNCH_MERGE_DISTANCE_M
-from simulation.start_ops import (
+from .runtime_constants import GRID_LAUNCH_MERGE_DISTANCE_M
+from .start_ops import (
     GRID_COLUMN_OFFSET_M,
     GRID_FIRST_LIGHT_SECONDS,
     GRID_LAUNCH_LANE_HOLD_M,

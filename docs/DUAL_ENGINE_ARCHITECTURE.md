@@ -28,7 +28,13 @@ backend/engines/
 │   ├── vehicle_physics.py 차량 상태 적분
 │   ├── brake_model.py     브레이크 열 모델
 │   ├── collision.py       차체 충돌 geometry
-│   └── wake_model.py      tow·dirty-air 물리
+│   ├── wake_model.py      tow·dirty-air 물리
+│   ├── *_ops.py           사고·피트·전략·출발·타이밍·racecraft
+│   ├── safety_car.py      FULL SC·VSC 통제
+│   ├── events.py          FULL 확률 event
+│   ├── incidents.py       FULL 사고 분류
+│   ├── pit_stop.py        FULL pit timing
+│   └── state_contract.py  FULL tick 내부 계약
 └── abstract/adapter.py    snapshot·qualifying·instant·broadcast 생성 경계
 
 frontend/src/engines/
@@ -73,13 +79,14 @@ ABSTRACT만 확대 지도·마커·이벤트 효과로 교체하고 FULL rendere
 
 FULL 예선과 중앙 `RaceEngine`, fixed-step·속도 profile·차량 integrator·브레이크·충돌·wake 구현은
 `backend/engines/full/runtime/`으로 이동했다. `vehicle_dynamics`는 공용 trajectory 계산에도 사용하므로
-공용 영역에 남겼다. 트랙 물리, 사고, 피트와 전략 등의 하위 모듈도 아직 기존
+공용 영역에 남겼다. 사고·피트·전략·SC·출발·타이밍·racecraft 운영 계층도 FULL runtime으로
+이동했다. 트랙 물리·trajectory planner·타이어·성능 계산과 데이터 compiler는 아직 기존
 `backend/simulation/` 아래에 있다.
 한 번에 이동하면 수백 개 import와 회귀 기준이 동시에 바뀌므로 다음 순서를 지킨다.
 
 1. 현재 듀얼 경계를 커밋해 이동 전 기준점 확보 — 완료 (`2d0236a`)
-2. FULL 내부 import를 package-relative 경계로 변환 — 예선·중앙·핵심 차량 물리 완료
-3. 물리 전용 모듈을 `backend/engines/full/runtime/`으로 기계적 이동 — 핵심 차량 물리까지 완료
+2. FULL 내부 import를 package-relative 경계로 변환 — 예선·중앙·핵심 물리·경기 운영 완료
+3. 물리 전용 모듈을 `backend/engines/full/runtime/`으로 기계적 이동 — 경기 운영 계층까지 완료
 4. 기존 `simulation.*` 경로에는 경고 없는 얇은 compatibility shim만 유지 — 이동 모듈 전체 적용
 5. ABSTRACT 기존 모듈을 `backend/engines/abstract/runtime/`으로 이동
 6. API·도구·테스트의 public import를 `engines.*`로 전환

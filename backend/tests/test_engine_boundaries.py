@@ -45,10 +45,23 @@ class EngineBoundaryTests(unittest.TestCase):
             "vehicle_dynamics",
         )
         full_aliases = {
+            "simulation.ai_strategy",
             "simulation.brake_model",
             "simulation.collision",
+            "simulation.events",
             "simulation.fixed_step",
+            "simulation.incident_ops",
+            "simulation.incidents",
+            "simulation.pit_ops",
+            "simulation.pit_stop",
+            "simulation.racecraft_ops",
+            "simulation.runtime_constants",
+            "simulation.safety_car",
             "simulation.speed_profile",
+            "simulation.start_ops",
+            "simulation.state_contract",
+            "simulation.strategy_ops",
+            "simulation.timing_ops",
             "simulation.vehicle_physics",
             "simulation.wake_model",
         }
@@ -62,12 +75,25 @@ class EngineBoundaryTests(unittest.TestCase):
                     {module for module in modules if module.startswith("engines.full")}
                 )
 
-    def test_full_physics_compatibility_paths_alias_runtime_modules(self) -> None:
+    def test_full_runtime_compatibility_paths_alias_runtime_modules(self) -> None:
         module_names = (
+            "ai_strategy",
             "brake_model",
             "collision",
+            "events",
             "fixed_step",
+            "incident_ops",
+            "incidents",
+            "pit_ops",
+            "pit_stop",
+            "racecraft_ops",
+            "runtime_constants",
+            "safety_car",
             "speed_profile",
+            "start_ops",
+            "state_contract",
+            "strategy_ops",
+            "timing_ops",
             "vehicle_physics",
             "wake_model",
         )

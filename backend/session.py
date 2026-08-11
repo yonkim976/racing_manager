@@ -23,7 +23,7 @@ from models.schemas import (
     RaceSetupRequest,
     Team,
 )
-from simulation.pit_stop import parse_tire_choice
+from engines.full.runtime.pit_stop import parse_tire_choice
 from simulation.track_physics import clear_vehicle_track_physics_cache, track_physics_cache_counts
 from simulation.track_display import build_track_display_geometry
 from engines.full.runtime.vehicle_physics import PHYSICS_STEP_SECONDS

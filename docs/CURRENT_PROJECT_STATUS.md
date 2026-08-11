@@ -2658,3 +2658,23 @@ FULL 전용으로 확인된 다음 6개
 Stage 1~4·Progress 전체 **119개, 251.976초, OK**로 두 엔진의 장기 회귀를 모두 통과했다. API 전체
 **19개, 336.871초, OK**로 lazy factory의 실제 FastAPI 진입점과 57랩 controlled broadcast도
 통과했다. 문서 상대 링크 누락은 0개이며 `git diff --check`도 통과했다.
+
+## 53. FULL runtime 물리 이동 3차 — 경기 운영 계층 (2026-08-12)
+
+`RaceEngine`이 조합하는 경기 운영 mixin과 그 FULL 전용 보조 계약을 한 묶음으로
+`backend/engines/full/runtime/`에 이동했다. 이동 대상은 다음 13개다.
+
+- 운영 mixin: `incident_ops`, `racecraft_ops`, `pit_ops`, `strategy_ops`, `safety_car`, `start_ops`,
+  `timing_ops`
+- 보조 계약: `ai_strategy`, `events`, `incidents`, `pit_stop`, `runtime_constants`, `state_contract`
+
+runtime 내부에서 이 모듈들 및 앞서 이동한 핵심 차량 물리를 참조할 때는 package-relative import를
+사용한다. 기존 `simulation.<module>` 경로는 동일 runtime 모듈 객체를 가리키는 patch-safe alias로
+유지한다. `SessionManager`의 pit command parsing도 새 runtime 경로를 직접 사용한다.
+
+경계 검사는 총 19개 이동 모듈의 legacy/runtime identity와 공용 geometry의 FULL alias 비의존을
+확인한다. 경계 8개와 기존 `simulation.race_engine.roll_solo_incident` patch 회귀 1개는
+**9개, 2.815초, OK**다. FULL 예선·타이어·레이스 엔진 **326개, 667.509초, OK**, 별도
+session·simulation foundation **39개, 36.854초, OK**, ABSTRACT Stage 1~4·Progress 전체
+**119개, 259.666초, OK**다. 이번 단계는 API·factory 계약을 변경하지 않았으므로 API 전체 묶음은
+재실행하지 않았으며, 직전 52절의 **19개, 336.871초, OK** 기준을 유지한다.
