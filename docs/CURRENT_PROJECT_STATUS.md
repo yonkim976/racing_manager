@@ -2793,3 +2793,20 @@ FULL runtime으로 이동 완료된 모듈을 계속 `simulation.*`으로 호출
 `--help` 진입점도 모두 정상이다. Backend 전체 discovery는 **674개, 1,828.368초, OK**다. 이번 단계는
 import와 patch 대상 경로만 바꿨으며 물리·확률·결과 schema를 변경하지 않았다. 저장소 내부 전환은
 완료됐지만 외부 도구·패키지 사용자를 위해 compatibility shim은 아직 삭제하지 않는다.
+
+## 60. 엔진 compatibility 정책 확정 (2026-08-12)
+
+`backend/engines/compatibility.py`를 `engine-runtime-compat-v1` 단일 코드 계약으로 추가했다. FULL
+patch-safe alias 28개, ABSTRACT alias 16개와 FULL qualifying·ABSTRACT package facade를 명시한다.
+manifest는 immutable mapping이며 경계 테스트가 각 legacy/runtime 파일 존재, 동일 module 객체,
+facade 공개 symbol identity와 patch 전달을 검사한다.
+
+정책 문서 [`ENGINE_COMPATIBILITY_POLICY.md`](ENGINE_COMPATIBILITY_POLICY.md)는 shim을 현재 유지하는
+이유와 네 가지 삭제 gate를 정의한다. desktop packaging은 backend 전체를 복사하므로 runtime과 shim을
+함께 포함한다. shim은 runtime module 객체를 재사용해 별도 물리 계산, 상태 복제나 tick당 메모리 비용을
+추가하지 않는다.
+
+경계·API는 **34개, 342.707초, OK**, 추가 manifest/facade 경계는 **16개, 1.271초, OK**다. Frontend
+**18개**, lint와 production build, Desktop **13개**도 모두 통과했다. 직전 59절의 Backend 전체
+**674개, 1,828.368초, OK** 이후 계산 코드는 변경하지 않았다. 새 macOS 앱 패키지는 이번 단계에서
+생성하지 않았다.

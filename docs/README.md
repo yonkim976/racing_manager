@@ -9,21 +9,22 @@
 1. [`SIMULATION_FOUNDATION.md`](SIMULATION_FOUNDATION.md): `FULL` 모드의 제품·물리·데이터 권위 기준
 2. [`ABSTRACT_RACE_SIMULATION_DESIGN.md`](ABSTRACT_RACE_SIMULATION_DESIGN.md): 기존 물리를 보존한 추상 결과·방송·즉시 시뮬레이션 실험 설계
 3. [`DUAL_ENGINE_ARCHITECTURE.md`](DUAL_ENGINE_ARCHITECTURE.md): FULL·ABSTRACT 독립 엔진 경계, 공유 계약과 물리적 이동 순서
-4. [`ABSTRACT_RACE_SIMULATION_REWORK_DIRECTIVE.md`](ABSTRACT_RACE_SIMULATION_REWORK_DIRECTIVE.md): 현재 추상 prototype의 저장·좌표·운동·교통·피트·사건·제품 연결을 단계별로 재승인하는 작업 지시
-5. [`ABSTRACT_RACE_SIMULATION_STAGE4_CORRECTION_DIRECTIVE.md`](ABSTRACT_RACE_SIMULATION_STAGE4_CORRECTION_DIRECTIVE.md): 단계 4 독립 검증에서 남은 reservation·conflict 계측·상태기·전체 매트릭스 최종 보완 지시
-6. [`ABSTRACT_RACE_SIMULATION_STAGE4_WORK_DIRECTIVE.md`](ABSTRACT_RACE_SIMULATION_STAGE4_WORK_DIRECTIVE.md): 단계 4의 20대 교통·car-following·corridor·crossing·full-field broadcast 최초 작업 지시
-7. [`ABSTRACT_STAGE4_TRAFFIC_DIAGNOSTIC.json`](ABSTRACT_STAGE4_TRAFFIC_DIAGNOSTIC.json): 단계 4 Bahrain/RBR 10 seed·10랩, 80-run Instant/controlled Broadcast 전체 승인 매트릭스 (`abstract-stage4-traffic-v3`, SHA-256 `4946e797…`)
-8. [`ABSTRACT_RACE_SIMULATION_STAGE3_BROADCAST_CORRECTION_DIRECTIVE.md`](ABSTRACT_RACE_SIMULATION_STAGE3_BROADCAST_CORRECTION_DIRECTIVE.md): 단계 3의 checkpoint-snap 제거와 실제 0.10초 single-probe 방송 재보완 기록
-9. [`ABSTRACT_RACE_SIMULATION_STAGE3_EVENT_TIMELINE_CORRECTION_DIRECTIVE.md`](ABSTRACT_RACE_SIMULATION_STAGE3_EVENT_TIMELINE_CORRECTION_DIRECTIVE.md): 단계 3의 race-start event 지연 최종 보완 기록
-10. [`CURRENT_PROJECT_STATUS.md`](CURRENT_PROJECT_STATUS.md): 구현 현황, 최신 검증 결과와 로드맵
-11. [`FULL_MODE_CIRCUIT_CALIBRATION_STATUS.md`](FULL_MODE_CIRCUIT_CALIBRATION_STATUS.md): Bahrain·Red Bull Ring의 교통 승인과 남은 기본선 보정
-12. [`TIRE_COMPOUND_SPEC.md`](TIRE_COMPOUND_SPEC.md): C1~C5 권위 계약, provisional 사양과 남은 C4/C5 승인
-13. [`COLD_OUTLAP_CONTROL_DESIGN.md`](COLD_OUTLAP_CONTROL_DESIGN.md): 출발 90°C·피트 70°C 분리와 콜드 아웃랩 미구현 설계
-14. [`ADDING_REAL_CIRCUITS.md`](ADDING_REAL_CIRCUITS.md): 실제 서킷 데이터 추가·검증 절차와 출처 기록
-15. [`CIRCUIT_THERMAL_PRESET_SOURCES.md`](CIRCUIT_THERMAL_PRESET_SOURCES.md): 9개 회로 COOL/NORMAL/HOT 시나리오 근거
-16. [`AI_RACECRAFT_BENCHMARK.md`](AI_RACECRAFT_BENCHMARK.md): `FULL` 모드 Bahrain AI 판단 회귀 계약
-17. [`MODULE_DECOMPOSITION_LOG.md`](MODULE_DECOMPOSITION_LOG.md): 현재 `RaceEngine` 모듈 경계와 후속 분리 규칙
-18. [`../desktop/README.md`](../desktop/README.md): Electron 진단 앱 실행·패키징·수명주기·보안 계약
+4. [`ENGINE_COMPATIBILITY_POLICY.md`](ENGINE_COMPATIBILITY_POLICY.md): runtime 권위, legacy shim 유지 범위와 삭제 gate
+5. [`ABSTRACT_RACE_SIMULATION_REWORK_DIRECTIVE.md`](ABSTRACT_RACE_SIMULATION_REWORK_DIRECTIVE.md): 현재 추상 prototype의 저장·좌표·운동·교통·피트·사건·제품 연결을 단계별로 재승인하는 작업 지시
+6. [`ABSTRACT_RACE_SIMULATION_STAGE4_CORRECTION_DIRECTIVE.md`](ABSTRACT_RACE_SIMULATION_STAGE4_CORRECTION_DIRECTIVE.md): 단계 4 독립 검증에서 남은 reservation·conflict 계측·상태기·전체 매트릭스 최종 보완 지시
+7. [`ABSTRACT_RACE_SIMULATION_STAGE4_WORK_DIRECTIVE.md`](ABSTRACT_RACE_SIMULATION_STAGE4_WORK_DIRECTIVE.md): 단계 4의 20대 교통·car-following·corridor·crossing·full-field broadcast 최초 작업 지시
+8. [`ABSTRACT_STAGE4_TRAFFIC_DIAGNOSTIC.json`](ABSTRACT_STAGE4_TRAFFIC_DIAGNOSTIC.json): 단계 4 Bahrain/RBR 10 seed·10랩, 80-run Instant/controlled Broadcast 전체 승인 매트릭스 (`abstract-stage4-traffic-v3`, SHA-256 `4946e797…`)
+9. [`ABSTRACT_RACE_SIMULATION_STAGE3_BROADCAST_CORRECTION_DIRECTIVE.md`](ABSTRACT_RACE_SIMULATION_STAGE3_BROADCAST_CORRECTION_DIRECTIVE.md): 단계 3의 checkpoint-snap 제거와 실제 0.10초 single-probe 방송 재보완 기록
+10. [`ABSTRACT_RACE_SIMULATION_STAGE3_EVENT_TIMELINE_CORRECTION_DIRECTIVE.md`](ABSTRACT_RACE_SIMULATION_STAGE3_EVENT_TIMELINE_CORRECTION_DIRECTIVE.md): 단계 3의 race-start event 지연 최종 보완 기록
+11. [`CURRENT_PROJECT_STATUS.md`](CURRENT_PROJECT_STATUS.md): 구현 현황, 최신 검증 결과와 로드맵
+12. [`FULL_MODE_CIRCUIT_CALIBRATION_STATUS.md`](FULL_MODE_CIRCUIT_CALIBRATION_STATUS.md): Bahrain·Red Bull Ring의 교통 승인과 남은 기본선 보정
+13. [`TIRE_COMPOUND_SPEC.md`](TIRE_COMPOUND_SPEC.md): C1~C5 권위 계약, provisional 사양과 남은 C4/C5 승인
+14. [`COLD_OUTLAP_CONTROL_DESIGN.md`](COLD_OUTLAP_CONTROL_DESIGN.md): 출발 90°C·피트 70°C 분리와 콜드 아웃랩 미구현 설계
+15. [`ADDING_REAL_CIRCUITS.md`](ADDING_REAL_CIRCUITS.md): 실제 서킷 데이터 추가·검증 절차와 출처 기록
+16. [`CIRCUIT_THERMAL_PRESET_SOURCES.md`](CIRCUIT_THERMAL_PRESET_SOURCES.md): 9개 회로 COOL/NORMAL/HOT 시나리오 근거
+17. [`AI_RACECRAFT_BENCHMARK.md`](AI_RACECRAFT_BENCHMARK.md): `FULL` 모드 Bahrain AI 판단 회귀 계약
+18. [`MODULE_DECOMPOSITION_LOG.md`](MODULE_DECOMPOSITION_LOG.md): 현재 `RaceEngine` 모듈 경계와 후속 분리 규칙
+19. [`../desktop/README.md`](../desktop/README.md): Electron 진단 앱 실행·패키징·수명주기·보안 계약
 
 단계 4 진단 artifact는 다음 단일 명령으로 run 기록과 matrix/quality/resources 집계를 함께 재생성한다.
 
@@ -77,5 +78,6 @@ FULL tire·vehicle dynamics·surface·trajectory solver 이동과 공용 compile
 FULL 차량별 track solver·profile cache 분리와 기존 import 지연 호환은 같은 문서의 57절을 기준으로 한다.
 ABSTRACT 구현 16개 모듈의 runtime 이동과 patch-safe legacy alias는 같은 문서의 58절을 기준으로 한다.
 FULL 제품·도구·테스트의 runtime 권위 import 전환과 legacy 재유입 차단은 같은 문서의 59절을 기준으로 한다.
+엔진 compatibility manifest·유지 정책·삭제 gate와 제품 빌드 검증은 같은 문서의 60절을 기준으로 한다.
 
 마지막 정리일: **2026-08-12**

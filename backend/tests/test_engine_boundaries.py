@@ -15,6 +15,13 @@ from engines import (
     SimulationEngineAdapter,
     simulation_engine_factory,
 )
+from engines.compatibility import (
+    ABSTRACT_PATCH_SAFE_MODULE_ALIASES,
+    ALL_PATCH_SAFE_MODULE_ALIASES,
+    ENGINE_COMPATIBILITY_POLICY_VERSION,
+    FULL_PATCH_SAFE_MODULE_ALIASES,
+    SYMBOL_COMPATIBILITY_FACADES,
+)
 from engines.full.runtime.qualifying import run_qualifying as full_run_qualifying
 from engines.full.runtime import race_engine as full_race_engine
 from models.schemas import SimulationMode
@@ -23,41 +30,6 @@ from simulation import race_engine as compatibility_race_engine
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
-
-LEGACY_FULL_RUNTIME_MODULES = frozenset(
-    {
-        "simulation.ai_strategy",
-        "simulation.brake_model",
-        "simulation.car_performance",
-        "simulation.collision",
-        "simulation.events",
-        "simulation.fixed_step",
-        "simulation.incident_ops",
-        "simulation.incidents",
-        "simulation.local_trajectory_planner",
-        "simulation.physics",
-        "simulation.pit_ops",
-        "simulation.pit_stop",
-        "simulation.racecraft_ops",
-        "simulation.planner_scheduler",
-        "simulation.qualifying",
-        "simulation.race_engine",
-        "simulation.runtime_constants",
-        "simulation.safety_car",
-        "simulation.speed_profile",
-        "simulation.start_ops",
-        "simulation.state_contract",
-        "simulation.strategy_ops",
-        "simulation.timing_ops",
-        "simulation.tire_model",
-        "simulation.track_surface",
-        "simulation.trajectory_physics",
-        "simulation.vehicle_dynamics",
-        "simulation.vehicle_physics",
-        "simulation.wake_model",
-    }
-)
-
 
 def imported_modules(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -177,7 +149,12 @@ class EngineBoundaryTests(unittest.TestCase):
         for path in BACKEND_ROOT.rglob("*.py"):
             if path.resolve() == this_test or ".venv" in path.parts:
                 continue
-            legacy_imports = imported_modules(path) & LEGACY_FULL_RUNTIME_MODULES
+            legacy_imports = imported_modules(path) & set(
+                FULL_PATCH_SAFE_MODULE_ALIASES
+            )
+            legacy_imports |= imported_modules(path) & set(
+                SYMBOL_COMPATIBILITY_FACADES
+            )
             if legacy_imports:
                 offenders[str(path.relative_to(BACKEND_ROOT))] = sorted(
                     legacy_imports
@@ -185,76 +162,54 @@ class EngineBoundaryTests(unittest.TestCase):
         self.assertEqual(offenders, {})
 
     def test_full_runtime_compatibility_paths_alias_runtime_modules(self) -> None:
-        module_names = (
-            "ai_strategy",
-            "brake_model",
-            "car_performance",
-            "collision",
-            "events",
-            "fixed_step",
-            "incident_ops",
-            "incidents",
-            "local_trajectory_planner",
-            "physics",
-            "pit_ops",
-            "pit_stop",
-            "racecraft_ops",
-            "planner_scheduler",
-            "runtime_constants",
-            "safety_car",
-            "speed_profile",
-            "start_ops",
-            "state_contract",
-            "strategy_ops",
-            "timing_ops",
-            "tire_model",
-            "track_surface",
-            "trajectory_physics",
-            "vehicle_dynamics",
-            "vehicle_physics",
-            "wake_model",
-        )
-        for module_name in module_names:
-            with self.subTest(module=module_name):
-                compatibility_module = importlib.import_module(
-                    f"simulation.{module_name}"
-                )
-                runtime_module = importlib.import_module(
-                    f"engines.full.runtime.{module_name}"
-                )
+        for compatibility_name, runtime_name in (
+            FULL_PATCH_SAFE_MODULE_ALIASES.items()
+        ):
+            with self.subTest(module=compatibility_name):
+                compatibility_module = importlib.import_module(compatibility_name)
+                runtime_module = importlib.import_module(runtime_name)
                 self.assertIs(compatibility_module, runtime_module)
 
     def test_full_qualifying_compatibility_import_is_the_runtime_symbol(self) -> None:
         self.assertIs(compatibility_run_qualifying, full_run_qualifying)
 
+    def test_abstract_package_facade_reexports_runtime_symbols(self) -> None:
+        compatibility_package = importlib.import_module("simulation.abstract")
+        runtime_package = importlib.import_module("engines.abstract.runtime")
+        self.assertEqual(compatibility_package.__all__, runtime_package.__all__)
+        for name in runtime_package.__all__:
+            with self.subTest(name=name):
+                self.assertIs(
+                    getattr(compatibility_package, name),
+                    getattr(runtime_package, name),
+                )
+
     def test_abstract_runtime_compatibility_paths_alias_runtime_modules(self) -> None:
-        module_names = (
-            "broadcast",
-            "clock",
-            "engine",
-            "incidents",
-            "kinematics",
-            "performance",
-            "pit",
-            "pose",
-            "progress_broadcast",
-            "progress_race",
-            "qualifying",
-            "race",
-            "racecraft",
-            "replay",
-            "rng",
-            "state",
-        )
-        for module_name in module_names:
-            with self.subTest(module=module_name):
-                compatibility_module = importlib.import_module(
-                    f"simulation.abstract.{module_name}"
-                )
-                runtime_module = importlib.import_module(
-                    f"engines.abstract.runtime.{module_name}"
-                )
+        for compatibility_name, runtime_name in (
+            ABSTRACT_PATCH_SAFE_MODULE_ALIASES.items()
+        ):
+            with self.subTest(module=compatibility_name):
+                compatibility_module = importlib.import_module(compatibility_name)
+                runtime_module = importlib.import_module(runtime_name)
                 self.assertIs(compatibility_module, runtime_module)
+
+    def test_compatibility_manifest_has_files_and_version(self) -> None:
+        self.assertEqual(
+            ENGINE_COMPATIBILITY_POLICY_VERSION,
+            "engine-runtime-compat-v1",
+        )
+        for compatibility_name, runtime_name in (
+            ALL_PATCH_SAFE_MODULE_ALIASES.items()
+        ):
+            with self.subTest(module=compatibility_name):
+                compatibility_path = BACKEND_ROOT.joinpath(
+                    *compatibility_name.split(".")
+                ).with_suffix(".py")
+                runtime_path = BACKEND_ROOT.joinpath(
+                    *runtime_name.split(".")
+                ).with_suffix(".py")
+                self.assertTrue(compatibility_path.is_file())
+                self.assertTrue(runtime_path.is_file())
 
     def test_abstract_state_compatibility_path_is_patch_safe(self) -> None:
         compatibility_state = importlib.import_module("simulation.abstract.state")

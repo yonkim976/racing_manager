@@ -121,6 +121,9 @@ runtime 경로를 직접 사용하며, 기존 `simulation.abstract.*`에는 동�
 6. API·도구·테스트의 public import를 `engines.*`로 전환 — FULL·ABSTRACT 완료
 7. compatibility 사용처 0 확인 후 shim 삭제 여부 결정 — 저장소 내부 권위 사용처 0, 외부 호환 정책 대기
 
+호환 경로의 전체 목록과 삭제 gate는
+[`ENGINE_COMPATIBILITY_POLICY.md`](ENGINE_COMPATIBILITY_POLICY.md)를 단일 정책 문서로 사용한다.
+
 파일 이동 단계에서는 물리 상수, 확률, 결과 hash와 테스트 기대값을 변경하지 않는다.
 
 ## 6. 검증 기준
