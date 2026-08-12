@@ -9,7 +9,7 @@ from copy import deepcopy
 from math import cos, hypot, isfinite, pi, sin
 
 from data_loader import load_circuits, load_teams
-from simulation.car_performance import car_performance_factors
+from engines.full.runtime.car_performance import car_performance_factors
 from simulation.track_geometry import self_intersections
 from simulation.track_physics import (
     DRIVING_LINE_DEFENSIVE,
@@ -28,9 +28,9 @@ from simulation.track_physics import (
     build_vehicle_track_physics_profile,
     clear_vehicle_track_physics_cache,
 )
-from simulation.track_surface import TrackSurfaceProfile
-from simulation.tire_model import compute_tire_physics_factors
-from simulation.trajectory_physics import TireTrajectorySpec, VehicleTrajectorySpec
+from engines.full.runtime.track_surface import TrackSurfaceProfile
+from engines.full.runtime.tire_model import compute_tire_physics_factors
+from engines.full.runtime.trajectory_physics import TireTrajectorySpec, VehicleTrajectorySpec
 from models.schemas import TireCompound
 
 

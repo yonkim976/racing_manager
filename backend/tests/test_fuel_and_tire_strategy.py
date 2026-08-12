@@ -6,12 +6,12 @@ import unittest
 
 from data_loader import load_circuits, load_drivers, load_teams
 from models.schemas import PaceMode, TireCompound
-from simulation.brake_model import (
+from engines.full.runtime.brake_model import (
     advance_brake_thermal_state,
     brake_temperature_force_factor,
 )
-from simulation.race_engine import RaceEngine
-from simulation.tire_model import (
+from engines.full.runtime.race_engine import RaceEngine
+from engines.full.runtime.tire_model import (
     advance_tire_thermal_state,
     compute_tire_physics_factors,
     tire_temperature_grip_factor,

@@ -25,10 +25,10 @@ from models.schemas import (
     TireCompoundNomination,
 )
 from session import SessionManager
-from simulation.qualifying import run_qualifying
-from simulation.race_engine import RaceEngine
-from simulation.state_contract import TickPhase
-from simulation.tire_model import (
+from engines.full.runtime.qualifying import run_qualifying
+from engines.full.runtime.race_engine import RaceEngine
+from engines.full.runtime.state_contract import TickPhase
+from engines.full.runtime.tire_model import (
     COMPOUND_SPECS,
     LEGACY_TIRE_COMPOUND_TO_PHYSICAL,
     advance_tire_thermal_state,

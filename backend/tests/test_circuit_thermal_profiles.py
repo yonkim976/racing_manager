@@ -17,8 +17,8 @@ from models.schemas import (
     TrackConditions,
 )
 from session import SessionManager
-from simulation.brake_model import advance_brake_thermal_state
-from simulation.tire_model import advance_tire_thermal_state
+from engines.full.runtime.brake_model import advance_brake_thermal_state
+from engines.full.runtime.tire_model import advance_tire_thermal_state
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]

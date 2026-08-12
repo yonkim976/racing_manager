@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from simulation.wake_model import compute_wake_effects
+from engines.full.runtime.wake_model import compute_wake_effects
 
 
 class WakeModelTests(unittest.TestCase):

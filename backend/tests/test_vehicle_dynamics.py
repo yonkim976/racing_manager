@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import unittest
 
-from simulation.vehicle_dynamics import (
+from engines.full.runtime.vehicle_dynamics import (
     DYNAMIC_BICYCLE_MAX_CONTROLLED_HEADING_ERROR_RAD,
     DynamicBicycleState,
     advance_dynamic_bicycle,

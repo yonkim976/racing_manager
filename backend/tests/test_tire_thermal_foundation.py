@@ -13,8 +13,8 @@ from models.schemas import (
     TrackConditions,
     TireCompound,
 )
-from simulation.race_engine import RaceEngine
-from simulation.tire_model import (
+from engines.full.runtime.race_engine import RaceEngine
+from engines.full.runtime.tire_model import (
     TIRE_CORE_NUMERIC_GUARD_C,
     TIRE_SURFACE_NUMERIC_GUARD_C,
     TireThermalBudget,

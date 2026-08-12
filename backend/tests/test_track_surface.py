@@ -3,7 +3,7 @@ import unittest
 from data_loader import load_circuits
 from models.schemas import RunoffSurface, TrackSide, TrackSurfaceZone
 from simulation.track_physics import build_track_physics_profile
-from simulation.track_surface import (
+from engines.full.runtime.track_surface import (
     CAR_WHEEL_TRACK_M,
     TRAJECTORY_LOW_KERB_ALLOWANCE_M,
     TrackSurfaceProfile,

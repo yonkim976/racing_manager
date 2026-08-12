@@ -26,18 +26,18 @@ from models.schemas import (
     TrackSegmentType,
 )
 from session import SessionManager
-from simulation.ai_strategy import choose_tire_for_remaining_laps, should_pit
-from simulation.car_performance import car_performance_factors
-from simulation.collision import oriented_body_overlap
-from simulation.incidents import (
+from engines.full.runtime.ai_strategy import choose_tire_for_remaining_laps, should_pit
+from engines.full.runtime.car_performance import car_performance_factors
+from engines.full.runtime.collision import oriented_body_overlap
+from engines.full.runtime.incidents import (
     Incident,
     IncidentCause,
     IncidentSeverity,
     escalate_collision,
 )
-from simulation.physics import GAME_TICK_SECONDS, driver_pace_multiplier
-from simulation.qualifying import run_qualifying
-from simulation.race_engine import (
+from engines.full.runtime.physics import GAME_TICK_SECONDS, driver_pace_multiplier
+from engines.full.runtime.qualifying import run_qualifying
+from engines.full.runtime.race_engine import (
     AI_PACE_INITIAL_STAGGER_MAX_SECONDS,
     AI_PACE_INITIAL_STAGGER_MIN_SECONDS,
     ATTACK_LINE_INSIDE,
@@ -102,15 +102,15 @@ def _test_thermal_profile() -> CircuitThermalProfile:
         }
     )
 from simulation.track_compiler import _point_and_tangent_at_progress, compile_circuit_layout, compile_layout_segments
-from simulation.tire_model import (
+from engines.full.runtime.tire_model import (
     compute_managed_tire_age,
     compute_tire_performance,
     compute_tire_physics_factors,
     compute_wear,
     tire_management_age_multiplier,
 )
-from simulation.vehicle_physics import PHYSICS_STEP_SECONDS
-from simulation.state_contract import TickPhase
+from engines.full.runtime.vehicle_physics import PHYSICS_STEP_SECONDS
+from engines.full.runtime.state_contract import TickPhase
 
 
 def _make_engine(seed: int = 42) -> RaceEngine:
@@ -4711,7 +4711,7 @@ class RaceEngineTests(unittest.TestCase):
                 continue
             state.tire_usage = 30.0
         # 확정적으로 피트를 굴리도록 확률을 1.0으로.
-        import simulation.safety_car as safety_car_mod
+        import engines.full.runtime.safety_car as safety_car_mod
 
         original = safety_car_mod.SC_PIT_PROBABILITY
         safety_car_mod.SC_PIT_PROBABILITY = 1.0

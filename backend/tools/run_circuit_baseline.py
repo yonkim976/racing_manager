@@ -36,13 +36,13 @@ from models.schemas import (
     ThermalPresetName,
     TireCompound,
 )
-from simulation.physics import GAME_TICK_SECONDS
-from simulation.race_engine import RaceEngine
+from engines.full.runtime.physics import GAME_TICK_SECONDS
+from engines.full.runtime.race_engine import RaceEngine
 from simulation.track_physics import DRIVING_LINE_RACING
-from simulation.vehicle_dynamics import (
+from engines.full.runtime.vehicle_dynamics import (
     DYNAMIC_BICYCLE_MAX_CONTROLLED_HEADING_ERROR_RAD,
 )
-from simulation.vehicle_physics import VehiclePhysicsModifiers
+from engines.full.runtime.vehicle_physics import VehiclePhysicsModifiers
 from tools.audit_tier_a import audit_circuit
 
 

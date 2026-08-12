@@ -76,5 +76,6 @@ FULL local trajectory planner·scheduler·lap physics 이동은 같은 문서의
 FULL tire·vehicle dynamics·surface·trajectory solver 이동과 공용 compiler lazy 경계는 같은 문서의 56절을 기준으로 한다.
 FULL 차량별 track solver·profile cache 분리와 기존 import 지연 호환은 같은 문서의 57절을 기준으로 한다.
 ABSTRACT 구현 16개 모듈의 runtime 이동과 patch-safe legacy alias는 같은 문서의 58절을 기준으로 한다.
+FULL 제품·도구·테스트의 runtime 권위 import 전환과 legacy 재유입 차단은 같은 문서의 59절을 기준으로 한다.
 
 마지막 정리일: **2026-08-12**

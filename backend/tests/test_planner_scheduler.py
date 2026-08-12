@@ -5,7 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 import unittest
 
-from simulation.planner_scheduler import (
+from engines.full.runtime.planner_scheduler import (
     AdaptivePlannerScheduler,
     TrackSpatialIndex,
 )

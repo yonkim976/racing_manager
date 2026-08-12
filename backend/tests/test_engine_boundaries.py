@@ -24,6 +24,40 @@ from simulation import race_engine as compatibility_race_engine
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
+LEGACY_FULL_RUNTIME_MODULES = frozenset(
+    {
+        "simulation.ai_strategy",
+        "simulation.brake_model",
+        "simulation.car_performance",
+        "simulation.collision",
+        "simulation.events",
+        "simulation.fixed_step",
+        "simulation.incident_ops",
+        "simulation.incidents",
+        "simulation.local_trajectory_planner",
+        "simulation.physics",
+        "simulation.pit_ops",
+        "simulation.pit_stop",
+        "simulation.racecraft_ops",
+        "simulation.planner_scheduler",
+        "simulation.qualifying",
+        "simulation.race_engine",
+        "simulation.runtime_constants",
+        "simulation.safety_car",
+        "simulation.speed_profile",
+        "simulation.start_ops",
+        "simulation.state_contract",
+        "simulation.strategy_ops",
+        "simulation.timing_ops",
+        "simulation.tire_model",
+        "simulation.track_surface",
+        "simulation.trajectory_physics",
+        "simulation.vehicle_dynamics",
+        "simulation.vehicle_physics",
+        "simulation.wake_model",
+    }
+)
+
 
 def imported_modules(path: Path) -> set[str]:
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -136,6 +170,19 @@ class EngineBoundaryTests(unittest.TestCase):
                 self.assertFalse(
                     {module for module in modules if module.startswith("engines.full")}
                 )
+
+    def test_backend_authority_imports_do_not_use_full_compatibility_paths(self) -> None:
+        offenders: dict[str, list[str]] = {}
+        this_test = Path(__file__).resolve()
+        for path in BACKEND_ROOT.rglob("*.py"):
+            if path.resolve() == this_test or ".venv" in path.parts:
+                continue
+            legacy_imports = imported_modules(path) & LEGACY_FULL_RUNTIME_MODULES
+            if legacy_imports:
+                offenders[str(path.relative_to(BACKEND_ROOT))] = sorted(
+                    legacy_imports
+                )
+        self.assertEqual(offenders, {})
 
     def test_full_runtime_compatibility_paths_alias_runtime_modules(self) -> None:
         module_names = (

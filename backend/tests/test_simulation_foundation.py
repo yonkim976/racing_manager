@@ -20,13 +20,13 @@ from models.schemas import (
     TrackConditions,
     TrackWidthSample,
 )
-from simulation.incidents import Incident, IncidentCause, IncidentSeverity
-from simulation.race_engine import (
+from engines.full.runtime.incidents import Incident, IncidentCause, IncidentSeverity
+from engines.full.runtime.race_engine import (
     MAX_PHYSICS_DIAGNOSTIC_SAMPLES,
     PIT_LANE_SPEED_LIMIT_KPH,
     RaceEngine,
 )
-from simulation.state_contract import PhysicsStepResult, TickPhase
+from engines.full.runtime.state_contract import PhysicsStepResult, TickPhase
 from simulation.track_data_validation import (
     track_data_warnings,
     validate_track_data_v2,
@@ -43,9 +43,9 @@ from simulation.track_physics import (
     build_track_physics_profile,
     clear_track_physics_caches,
 )
-from simulation.track_surface import CAR_WHEELBASE_M
+from engines.full.runtime.track_surface import CAR_WHEELBASE_M
 from simulation.vehicle_dimensions import PHYSICAL_CAR_WHEELBASE_M
-from simulation.vehicle_physics import PHYSICS_STEP_SECONDS
+from engines.full.runtime.vehicle_physics import PHYSICS_STEP_SECONDS
 
 
 def _test_thermal_profile() -> CircuitThermalProfile:
@@ -350,7 +350,7 @@ class SimulationFoundationBaselineTests(unittest.TestCase):
             severity=IncidentSeverity.MINOR,
             primary_driver_id=1,
         )
-        with patch("simulation.race_engine.roll_solo_incident", return_value=incident):
+        with patch("engines.full.runtime.race_engine.roll_solo_incident", return_value=incident):
             engine.tick(0.1)
 
         self.assertTrue(observed_progress)

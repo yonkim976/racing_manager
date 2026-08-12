@@ -22,9 +22,9 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from data_loader import load_circuits, load_drivers, load_teams
-from simulation.race_engine import RaceEngine
+from engines.full.runtime.race_engine import RaceEngine
 from simulation.track_physics import DRIVING_LINE_RACING
-from simulation.vehicle_physics import (
+from engines.full.runtime.vehicle_physics import (
     LongitudinalVehiclePhysics,
     VehiclePhysicsModifiers,
 )

@@ -6,14 +6,14 @@ from dataclasses import replace
 import unittest
 
 from data_loader import load_circuits, load_drivers, load_teams
-from simulation.local_trajectory_planner import (
+from engines.full.runtime.local_trajectory_planner import (
     LocalTrajectoryPlanner,
     LocalTrajectoryPlannerConfig,
     LocalTrajectoryPlannerWeights,
     LocalTrajectoryPlanningRequest,
     NearbyVehiclePredictionInput,
 )
-from simulation.race_engine import RaceEngine
+from engines.full.runtime.race_engine import RaceEngine
 from simulation.track_physics import DRIVING_LINE_RACING
 
 

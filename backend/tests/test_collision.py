@@ -1,6 +1,6 @@
 import unittest
 
-from simulation.collision import (
+from engines.full.runtime.collision import (
     BodyMotion,
     BodyPose,
     oriented_body_overlap,

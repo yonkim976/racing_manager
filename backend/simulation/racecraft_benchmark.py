@@ -8,10 +8,10 @@ from math import cos, sin, sqrt
 from typing import Any, Iterable
 
 from data_loader import load_circuits, load_drivers, load_teams
-from simulation.race_engine import ManeuverGroup, RaceEngine
+from engines.full.runtime.race_engine import ManeuverGroup, RaceEngine
 from simulation.track_geometry import TRACK_GEOMETRY_MODE
 from simulation.track_physics import DRIVING_LINE_RACING
-from simulation.vehicle_physics import PHYSICS_STEP_SECONDS
+from engines.full.runtime.vehicle_physics import PHYSICS_STEP_SECONDS
 
 
 @dataclass(frozen=True)

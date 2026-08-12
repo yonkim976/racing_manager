@@ -2776,3 +2776,20 @@ session·foundation 회귀는 **58개, 372.103초, OK**다. 결과 공식, RNG s
 canonical hash payload와 방송 계약은 변경하지 않았다. 다음 구조 작업은 FULL 테스트·도구에 남은
 legacy import 사용처 감사이며, compatibility shim 삭제는 사용처 0과 외부 호환 정책을 별도로 승인한
 뒤 결정한다. Backend 전체 discovery도 **673개, 1,827.339초, OK**로 최종 통과했다.
+
+## 59. FULL legacy import 권위 경로 정리 (2026-08-12)
+
+FULL runtime으로 이동 완료된 모듈을 계속 `simulation.*`으로 호출하던 제품 benchmark, 진단 도구와
+테스트를 `engines.full.runtime.*` 권위 경로로 전환했다. 사고·SC monkey-patch도 실제 runtime 경로를
+직접 대상으로 삼는다. 공용 track geometry·compiler·display·data validation과 vehicle dimension은
+엔진 중립 `simulation.*` 계약이므로 이동 대상에서 제외했다.
+
+`test_engine_boundaries.py`는 backend 저장소 전체 AST를 검사해 FULL compatibility module import가
+권위 코드에 다시 들어오면 실패한다. 기존 `simulation.<moved-module>` 참조는 이 호환성 테스트와 shim
+자체에만 남았고 제품·도구·일반 테스트의 권위 사용처는 0건이다. 호환 module identity와
+`simulation.race_engine` patch 전달 회귀는 계속 유지한다.
+
+경계·물리 하위 모듈·planner·session 표적은 **141개, 47.481초, OK**다. 변경된 네 진단 도구의
+`--help` 진입점도 모두 정상이다. Backend 전체 discovery는 **674개, 1,828.368초, OK**다. 이번 단계는
+import와 patch 대상 경로만 바꿨으며 물리·확률·결과 schema를 변경하지 않았다. 저장소 내부 전환은
+완료됐지만 외부 도구·패키지 사용자를 위해 compatibility shim은 아직 삭제하지 않는다.

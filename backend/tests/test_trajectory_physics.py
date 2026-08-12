@@ -8,20 +8,20 @@ from math import cos, pi, sin
 
 from data_loader import load_circuits, load_teams
 from models.schemas import TireCompound
-from simulation.car_performance import car_performance_factors
+from engines.full.runtime.car_performance import car_performance_factors
 from simulation.global_trajectory_optimizer import (
     GlobalTrajectoryOptimizationRequest,
     GlobalTrajectoryOptimizer,
     GlobalTrajectoryOptimizerConfig,
 )
-from simulation.tire_model import compute_tire_physics_factors
+from engines.full.runtime.tire_model import compute_tire_physics_factors
 from simulation.track_physics import (
     PhysicalGlobalTrajectoryCostModel,
     _closed_points,
     build_track_physics_profile,
 )
-from simulation.track_surface import TrackSurfaceProfile
-from simulation.trajectory_physics import (
+from engines.full.runtime.track_surface import TrackSurfaceProfile
+from engines.full.runtime.trajectory_physics import (
     TireTrajectorySpec,
     VehicleTrajectorySpec,
     build_trajectory_speed_profile,

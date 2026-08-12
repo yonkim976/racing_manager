@@ -28,7 +28,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from data_loader import load_circuits, load_drivers, load_teams
 from session import BROADCAST_INTERVAL, RaceSession
-from simulation.race_engine import RaceEngine
+from engines.full.runtime.race_engine import RaceEngine
 
 
 @dataclass(eq=False)

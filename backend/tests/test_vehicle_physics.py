@@ -5,9 +5,9 @@ from __future__ import annotations
 import unittest
 
 from data_loader import load_circuits
-from simulation.speed_profile import SpeedProfile, build_speed_profile
+from engines.full.runtime.speed_profile import SpeedProfile, build_speed_profile
 from simulation.track_physics import PHYSICAL_CAR_LENGTH_M
-from simulation.vehicle_physics import (
+from engines.full.runtime.vehicle_physics import (
     PHYSICS_STEP_SECONDS,
     PREDICTIVE_SPEED_CACHE_MAX_ENTRIES,
     LongitudinalVehiclePhysics,

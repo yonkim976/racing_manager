@@ -29,8 +29,8 @@ from models.schemas import (
     RaceEvent,
     RaceTickState,
 )
-from simulation.race_engine import RaceEngine
-from simulation.vehicle_physics import PHYSICS_STEP_SECONDS
+from engines.full.runtime.race_engine import RaceEngine
+from engines.full.runtime.vehicle_physics import PHYSICS_STEP_SECONDS
 
 
 class RaceSessionCadenceTests(unittest.TestCase):

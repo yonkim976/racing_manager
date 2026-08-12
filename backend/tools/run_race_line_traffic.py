@@ -23,7 +23,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from data_loader import load_circuits, load_drivers, load_teams
 from models.schemas import DryTireRole, PaceMode, ThermalPresetName, TireCompound
-from simulation.race_engine import RaceEngine
+from engines.full.runtime.race_engine import RaceEngine
 from simulation.track_physics import DRIVING_LINE_RACING
 
 

@@ -1,6 +1,6 @@
 """ABSTRACT runtime result simulation.
 
-The package is intentionally independent from ``simulation.race_engine``.  It
+The package is intentionally independent from ``engines.full.runtime.race_engine``.  It
 uses validated content models as input, then owns its own immutable snapshot,
 logical clock, random streams, performance model and result objects.
 """

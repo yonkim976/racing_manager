@@ -118,8 +118,8 @@ runtime 경로를 직접 사용하며, 기존 `simulation.abstract.*`에는 동�
 3. 물리 전용 모듈을 `backend/engines/full/runtime/`으로 기계적 이동 — 차량별 track solver까지 완료
 4. 기존 `simulation.*` 경로에는 경고 없는 얇은 compatibility shim만 유지 — 이동 모듈 전체 적용
 5. ABSTRACT 기존 모듈을 `backend/engines/abstract/runtime/`으로 이동 — 완료
-6. API·도구·테스트의 public import를 `engines.*`로 전환 — ABSTRACT 완료, FULL legacy 사용처 감사 대기
-7. compatibility 사용처 0 확인 후 shim 삭제 여부 결정
+6. API·도구·테스트의 public import를 `engines.*`로 전환 — FULL·ABSTRACT 완료
+7. compatibility 사용처 0 확인 후 shim 삭제 여부 결정 — 저장소 내부 권위 사용처 0, 외부 호환 정책 대기
 
 파일 이동 단계에서는 물리 상수, 확률, 결과 hash와 테스트 기대값을 변경하지 않는다.
 

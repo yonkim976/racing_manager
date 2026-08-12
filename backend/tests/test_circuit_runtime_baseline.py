@@ -6,7 +6,7 @@ import unittest
 
 from models.schemas import DryTireRole, PaceMode, ThermalPresetName
 from data_loader import load_circuits, load_drivers, load_teams
-from simulation.race_engine import RaceEngine
+from engines.full.runtime.race_engine import RaceEngine
 from tools.run_circuit_baseline import (
     _corner_windows,
     _line_relative_lateral_error_m,
