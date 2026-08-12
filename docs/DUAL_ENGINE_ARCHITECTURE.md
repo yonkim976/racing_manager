@@ -41,6 +41,7 @@ backend/engines/
 │   ├── tire_model.py      FULL 타이어 열·마모·force
 │   ├── vehicle_dynamics.py FULL force primitives
 │   ├── trajectory_physics.py FULL vehicle-specific line 평가
+│   ├── vehicle_track_solver.py FULL 차량별 전역 주행선 최적화·캐시
 │   ├── track_surface.py   FULL 4-wheel surface 접촉
 │   └── car_performance.py FULL constructor 성능 변환
 └── abstract/adapter.py    snapshot·qualifying·instant·broadcast 생성 경계
@@ -92,17 +93,18 @@ ABSTRACT pose·kinematics·grid는 `track_physics` solver 타입을 직접 impor
 ## 5. 남은 물리 이동 단계
 
 FULL 예선과 중앙 `RaceEngine`, fixed-step·속도 profile·차량 integrator·브레이크·충돌·wake 구현은
-`backend/engines/full/runtime/`으로 이동했다. `vehicle_dynamics`는 공용 trajectory 계산에도 사용하므로
-공용 영역에 남겼다. 사고·피트·전략·SC·출발·타이밍·racecraft 운영 계층도 FULL runtime으로
+`backend/engines/full/runtime/`으로 이동했다. 사고·피트·전략·SC·출발·타이밍·racecraft 운영 계층도 FULL runtime으로
 이동했다. FULL local trajectory planner·scheduler·lap physics도 runtime으로 이동했다.
-공용 track profile compiler는 기존 위치에 남고 차량별 trajectory 의존성은 호출 시점에만 FULL
-runtime을 지연 로딩한다. 타이어·vehicle dynamics·surface·trajectory physics·constructor 성능 계산은
-FULL runtime으로 이동했다. 데이터 compiler는 아직 기존 `backend/simulation/` 아래에 있다.
+공용 track geometry·기본 주행선 compiler는 기존 위치에 남고, 차량·타이어별 전역 주행선 최적화와
+그 전용 캐시는 `vehicle_track_solver.py`로 분리됐다. 타이어·vehicle dynamics·surface·trajectory
+physics·constructor 성능 계산은 FULL runtime으로 이동했다. 공용 compiler의 기존 차량 solver symbol은
+호환 import 시에만 FULL runtime으로 지연 연결된다. 데이터 compiler는 아직 기존
+`backend/simulation/` 아래에 있다.
 한 번에 이동하면 수백 개 import와 회귀 기준이 동시에 바뀌므로 다음 순서를 지킨다.
 
 1. 현재 듀얼 경계를 커밋해 이동 전 기준점 확보 — 완료 (`2d0236a`)
 2. FULL 내부 import를 package-relative 경계로 변환 — 예선·중앙·핵심 물리·경기 운영·local planner 완료
-3. 물리 전용 모듈을 `backend/engines/full/runtime/`으로 기계적 이동 — local planner 계층까지 완료
+3. 물리 전용 모듈을 `backend/engines/full/runtime/`으로 기계적 이동 — 차량별 track solver까지 완료
 4. 기존 `simulation.*` 경로에는 경고 없는 얇은 compatibility shim만 유지 — 이동 모듈 전체 적용
 5. ABSTRACT 기존 모듈을 `backend/engines/abstract/runtime/`으로 이동
 6. API·도구·테스트의 public import를 `engines.*`로 전환

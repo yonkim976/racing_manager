@@ -65,9 +65,9 @@ from simulation.track_physics import (
     TRACK_EDGE_MARGIN_M,
     TrackPhysicsProfile,
     build_track_physics_profile,
-    build_vehicle_track_physics_profile,
     track_physics_cache_counts,
 )
+from .vehicle_track_solver import build_vehicle_track_physics_profile
 from .track_surface import TrackSurfaceProfile, VehicleSurfaceState
 from .vehicle_physics import (
     FOLLOWING_PREDICTIVE_DECELERATION_MPS2,

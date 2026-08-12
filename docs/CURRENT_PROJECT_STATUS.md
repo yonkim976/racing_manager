@@ -2739,3 +2739,21 @@ runtime 모듈을 가리키는 patch-safe alias이며 FULL runtime 내부는 pac
 **326개, 658.400초, OK**, ABSTRACT Stage 1~4·Progress 전체 **119개, 250.224초, OK**다.
 API·factory 계약은 변경하지 않았으므로 API 전체 묶음은 재실행하지 않고 52절의
 **19개, 336.871초, OK** 기준을 유지한다.
+
+## 57. FULL runtime 물리 이동 6차 — vehicle track solver (2026-08-12)
+
+공용 `simulation/track_physics.py`에 남아 있던 차량·타이어별 전역 주행선 최적화와 대용량 profile
+캐시를 `backend/engines/full/runtime/vehicle_track_solver.py`로 분리했다. 새 runtime 모듈은
+`PhysicalGlobalTrajectoryCostModel`, vehicle trajectory 최적화, corner-adaptive center 선택,
+차량별 `TrackPhysicsProfile` 생성과 캐시 수명주기를 소유한다. `RaceEngine`은 새 runtime 경로를 직접
+호출한다.
+
+공용 모듈에는 엔진 중립 geometry·기본 주행선 compiler와 profile 조회만 남겼다. 기존 테스트·도구의
+`simulation.track_physics` 차량 solver import는 module `__getattr__`을 통해 동일 runtime symbol로
+지연 연결되며 캐시 객체 identity도 보존한다. 따라서 공용 compiler를 단순 import할 때는
+`vehicle_track_solver`, tire, surface, trajectory, vehicle dynamics 등 FULL solver가 초기화되지 않는다.
+별도 subprocess 및 symbol identity 회귀가 이 경계를 검사한다.
+
+경계·track physics·trajectory 표적 **33개, 13.122초, OK**다. Backend 전체 discovery는 장기 열·API·
+FULL·ABSTRACT를 포함해 **671개, 1,841.926초, OK**다. 이번 변경은 물리 상수, 최적화 공식, profile
+cache key와 결과 schema를 변경하지 않았다.

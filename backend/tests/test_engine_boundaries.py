@@ -39,6 +39,7 @@ def imported_modules(path: Path) -> set[str]:
 class EngineBoundaryTests(unittest.TestCase):
     def test_shared_track_compiler_does_not_initialize_full_vehicle_solver(self) -> None:
         solver_modules = (
+            "engines.full.runtime.vehicle_track_solver",
             "engines.full.runtime.car_performance",
             "engines.full.runtime.tire_model",
             "engines.full.runtime.track_surface",
@@ -59,6 +60,24 @@ class EngineBoundaryTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+
+    def test_vehicle_track_solver_legacy_exports_are_runtime_symbols(self) -> None:
+        compatibility_module = importlib.import_module("simulation.track_physics")
+        runtime_module = importlib.import_module(
+            "engines.full.runtime.vehicle_track_solver"
+        )
+        exported_names = (
+            "_VEHICLE_TRACK_PHYSICS_CACHE",
+            "PhysicalGlobalTrajectoryCostModel",
+            "optimize_vehicle_trajectory",
+            "build_vehicle_track_physics_profile",
+        )
+        for name in exported_names:
+            with self.subTest(name=name):
+                self.assertIs(
+                    getattr(compatibility_module, name),
+                    getattr(runtime_module, name),
+                )
 
     def test_abstract_presentation_uses_track_contract_not_solver_module(self) -> None:
         consumers = (

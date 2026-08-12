@@ -74,5 +74,6 @@ FULL 경기 운영 계층 13개 모듈 이동과 patch-safe alias 상태는 같�
 공용 `TrackGeometryProfile` 계약과 ABSTRACT solver 직접 의존 제거는 같은 문서의 54절을 기준으로 한다.
 FULL local trajectory planner·scheduler·lap physics 이동은 같은 문서의 55절을 기준으로 한다.
 FULL tire·vehicle dynamics·surface·trajectory solver 이동과 공용 compiler lazy 경계는 같은 문서의 56절을 기준으로 한다.
+FULL 차량별 track solver·profile cache 분리와 기존 import 지연 호환은 같은 문서의 57절을 기준으로 한다.
 
 마지막 정리일: **2026-08-12**
