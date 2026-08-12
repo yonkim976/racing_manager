@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from data_loader import load_circuits, load_drivers, load_teams
-from simulation.abstract import (
+from engines.abstract.runtime import (
     AbstractCommandRecord,
     AbstractPoseFrame,
     AbstractRaceEngine,
@@ -315,7 +315,7 @@ class AbstractRaceSimulationTests(unittest.TestCase):
         )
         expected = result.canonical_result_hash
         with patch(
-            "simulation.abstract.state.canonical_hash_sections",
+            "engines.abstract.runtime.state.canonical_hash_sections",
             side_effect=AssertionError("hash must not be recomputed on property access"),
         ):
             self.assertEqual(result.canonical_result_hash, expected)
@@ -604,7 +604,7 @@ class AbstractRaceSimulationTests(unittest.TestCase):
         self.assertEqual(baseline.canonical_result_hash, after_calls.canonical_result_hash)
 
     def test_stage_c_traffic_has_contiguous_ranks_and_two_wide_corridors(self) -> None:
-        from simulation.abstract.race import AbstractTrafficSimulationCursor
+        from engines.abstract.runtime.race import AbstractTrafficSimulationCursor
 
         snapshot = self.make_snapshot()
         cursor = AbstractTrafficSimulationCursor(
@@ -666,7 +666,7 @@ class AbstractRaceSimulationTests(unittest.TestCase):
         # backed fixture.  Requiring a pass from a production RNG seed would
         # make this regression probabilistic and would not test the state
         # machine contract.
-        from simulation.abstract.race import AbstractTrafficSimulationCursor
+        from engines.abstract.runtime.race import AbstractTrafficSimulationCursor
 
         snapshot = AbstractSessionSnapshot.from_content(
             session_id="abstract-stage4-attack-test",
@@ -751,7 +751,7 @@ class AbstractRaceSimulationTests(unittest.TestCase):
         )
 
     def _run_deterministic_contact_fixture(self):
-        from simulation.abstract.race import AbstractTrafficSimulationCursor
+        from engines.abstract.runtime.race import AbstractTrafficSimulationCursor
 
         cursor = AbstractTrafficSimulationCursor(
             self.make_snapshot(),

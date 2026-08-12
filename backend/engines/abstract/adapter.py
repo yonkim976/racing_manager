@@ -21,7 +21,7 @@ from models.schemas import (
     Team,
     TireCompound,
 )
-from simulation.abstract import (
+from .runtime import (
     AbstractRaceEngine,
     AbstractSessionSnapshot,
     TireConditionSnapshot,

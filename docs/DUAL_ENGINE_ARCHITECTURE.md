@@ -1,6 +1,6 @@
 # FULL·ABSTRACT 듀얼 엔진 아키텍처
 
-상태: **1차 실행 경계 분리 완료 · FULL runtime 물리 이동 진행 중**
+상태: **FULL·ABSTRACT runtime 물리 이동 완료 · compatibility 정리 대기**
 기준일: **2026-08-12**
 
 ## 1. 결정
@@ -44,7 +44,14 @@ backend/engines/
 │   ├── vehicle_track_solver.py FULL 차량별 전역 주행선 최적화·캐시
 │   ├── track_surface.py   FULL 4-wheel surface 접촉
 │   └── car_performance.py FULL constructor 성능 변환
-└── abstract/adapter.py    snapshot·qualifying·instant·broadcast 생성 경계
+├── abstract/adapter.py    snapshot·qualifying·instant·broadcast 생성 경계
+└── abstract/runtime/
+    ├── engine.py          ABSTRACT 결과 엔진 권위
+    ├── progress_race.py   진행률·전략·사건 결과 권위
+    ├── broadcast.py       bounded logical broadcast 수명주기
+    ├── race.py            Stage 4 호환 교통 결과
+    ├── state.py           immutable snapshot·결과·canonical hash
+    └── pose.py·kinematics.py·racecraft.py 등 파생 presentation·전술
 
 backend/simulation/
 └── track_contracts.py     엔진 중립 주행선·폭·좌표·pose protocol
@@ -90,7 +97,7 @@ ABSTRACT만 확대 지도·마커·이벤트 효과로 교체하고 FULL rendere
 ABSTRACT pose·kinematics·grid는 `track_physics` solver 타입을 직접 import하지 않고
 `track_contracts.TrackGeometryProfile`만 소비한다.
 
-## 5. 남은 물리 이동 단계
+## 5. 물리 이동 상태와 남은 정리
 
 FULL 예선과 중앙 `RaceEngine`, fixed-step·속도 profile·차량 integrator·브레이크·충돌·wake 구현은
 `backend/engines/full/runtime/`으로 이동했다. 사고·피트·전략·SC·출발·타이밍·racecraft 운영 계층도 FULL runtime으로
@@ -100,14 +107,18 @@ FULL 예선과 중앙 `RaceEngine`, fixed-step·속도 profile·차량 integrato
 physics·constructor 성능 계산은 FULL runtime으로 이동했다. 공용 compiler의 기존 차량 solver symbol은
 호환 import 시에만 FULL runtime으로 지연 연결된다. 데이터 compiler는 아직 기존
 `backend/simulation/` 아래에 있다.
+ABSTRACT 결과·방송·진행률·pose·교통의 16개 구현 모듈도
+`backend/engines/abstract/runtime/`으로 이동했다. adapter, API, 진단 도구와 ABSTRACT 테스트는 새
+runtime 경로를 직접 사용하며, 기존 `simulation.abstract.*`에는 동일 모듈 객체를 가리키는 alias만
+남는다.
 한 번에 이동하면 수백 개 import와 회귀 기준이 동시에 바뀌므로 다음 순서를 지킨다.
 
 1. 현재 듀얼 경계를 커밋해 이동 전 기준점 확보 — 완료 (`2d0236a`)
 2. FULL 내부 import를 package-relative 경계로 변환 — 예선·중앙·핵심 물리·경기 운영·local planner 완료
 3. 물리 전용 모듈을 `backend/engines/full/runtime/`으로 기계적 이동 — 차량별 track solver까지 완료
 4. 기존 `simulation.*` 경로에는 경고 없는 얇은 compatibility shim만 유지 — 이동 모듈 전체 적용
-5. ABSTRACT 기존 모듈을 `backend/engines/abstract/runtime/`으로 이동
-6. API·도구·테스트의 public import를 `engines.*`로 전환
+5. ABSTRACT 기존 모듈을 `backend/engines/abstract/runtime/`으로 이동 — 완료
+6. API·도구·테스트의 public import를 `engines.*`로 전환 — ABSTRACT 완료, FULL legacy 사용처 감사 대기
 7. compatibility 사용처 0 확인 후 shim 삭제 여부 결정
 
 파일 이동 단계에서는 물리 상수, 확률, 결과 hash와 테스트 기대값을 변경하지 않는다.

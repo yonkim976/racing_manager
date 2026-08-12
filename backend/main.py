@@ -38,12 +38,12 @@ from models.schemas import (
     TireCompound,
 )
 from session import session_manager
-from simulation.abstract import (
+from engines.abstract.runtime import (
     AbstractRaceEngine,
     AbstractSessionSnapshot,
     TireConditionSnapshot,
 )
-from simulation.abstract.broadcast import abstract_broadcast_session_manager
+from engines.abstract.runtime.broadcast import abstract_broadcast_session_manager
 from simulation.track_compiler import compile_circuit_layout
 from simulation.track_geometry import validate_circuit_geometry_detailed
 

@@ -13,8 +13,8 @@ from dataclasses import FrozenInstanceError, replace
 
 from data_loader import load_circuits, load_drivers, load_teams
 from models.schemas import TrackConditions
-from simulation.abstract import AbstractRaceEngine, AbstractSessionSnapshot
-from simulation.abstract.racecraft import (
+from engines.abstract.runtime import AbstractRaceEngine, AbstractSessionSnapshot
+from engines.abstract.runtime.racecraft import (
     TrafficCorridorReservation,
     accepted_swept_distance_m,
     audit_accepted_frame_reservations,
@@ -77,7 +77,7 @@ class AbstractStage4CorrectionTests(unittest.TestCase):
         self.assertEqual(audit["reservation_conflict_pairs"], (("corridor:first", "corridor:second"),))
 
     def test_accepted_frame_audit_checks_unlisted_third_vehicle(self) -> None:
-        from simulation.abstract.race import AbstractTrafficSimulationCursor
+        from engines.abstract.runtime.race import AbstractTrafficSimulationCursor
 
         cursor = AbstractTrafficSimulationCursor(self.snapshot(), total_laps=1, tick_seconds=0.10)
         try:
@@ -209,7 +209,7 @@ class AbstractStage4CorrectionTests(unittest.TestCase):
         gap_m: float = 40.0,
         finish_ready: bool = False,
     ):
-        from simulation.abstract.race import AbstractTrafficSimulationCursor
+        from engines.abstract.runtime.race import AbstractTrafficSimulationCursor
 
         cursor = AbstractTrafficSimulationCursor(
             self.snapshot(circuit_id=circuit_id),
@@ -241,7 +241,7 @@ class AbstractStage4CorrectionTests(unittest.TestCase):
         return frames
 
     def test_scenario_01_fast_car_follows_when_corridor_is_absent(self) -> None:
-        from simulation.abstract.race import AbstractTrafficSimulationCursor
+        from engines.abstract.runtime.race import AbstractTrafficSimulationCursor
 
         cursor = AbstractTrafficSimulationCursor(
             self.snapshot(circuit_id=3), total_laps=1, tick_seconds=0.10
@@ -352,7 +352,7 @@ class AbstractStage4CorrectionTests(unittest.TestCase):
         self.assertEqual(assessment.reason_code, "corner_phase_unsafe")
 
     def test_scenario_06_third_vehicle_anticipated_occupancy_rejects(self) -> None:
-        from simulation.abstract.race import AbstractTrafficSimulationCursor
+        from engines.abstract.runtime.race import AbstractTrafficSimulationCursor
 
         cursor = AbstractTrafficSimulationCursor(
             self.snapshot(circuit_id=4), total_laps=1, tick_seconds=0.10

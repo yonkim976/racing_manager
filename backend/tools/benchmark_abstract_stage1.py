@@ -22,7 +22,7 @@ if __package__ in {None, ""}:
         sys.path.insert(0, backend_root)
 
 from data_loader import load_circuits, load_drivers, load_teams
-from simulation.abstract import AbstractRaceEngine, AbstractSessionSnapshot
+from engines.abstract.runtime import AbstractRaceEngine, AbstractSessionSnapshot
 
 
 def _peak_rss_mb() -> float:

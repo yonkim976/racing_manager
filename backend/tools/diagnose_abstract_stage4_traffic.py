@@ -24,11 +24,11 @@ if __package__ in {None, ""}:
 
 from data_loader import load_circuits, load_drivers, load_teams  # noqa: E402
 from models.schemas import TrackConditions  # noqa: E402
-from simulation.abstract import AbstractRaceEngine, AbstractSessionSnapshot  # noqa: E402
-from simulation.abstract.broadcast import AbstractBroadcastSession  # noqa: E402
-from simulation.abstract.race import AbstractTrafficSimulationCursor  # noqa: E402
-from simulation.abstract.racecraft import audit_accepted_frame_reservations  # noqa: E402
-from simulation.abstract.state import canonical_json  # noqa: E402
+from engines.abstract.runtime import AbstractRaceEngine, AbstractSessionSnapshot  # noqa: E402
+from engines.abstract.runtime.broadcast import AbstractBroadcastSession  # noqa: E402
+from engines.abstract.runtime.race import AbstractTrafficSimulationCursor  # noqa: E402
+from engines.abstract.runtime.racecraft import audit_accepted_frame_reservations  # noqa: E402
+from engines.abstract.runtime.state import canonical_json  # noqa: E402
 
 
 DT = 0.10

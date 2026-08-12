@@ -9,7 +9,7 @@ from math import hypot
 from types import SimpleNamespace
 
 from data_loader import load_circuits, load_drivers, load_teams
-from simulation.abstract import (
+from engines.abstract.runtime import (
     AbstractRaceEngine,
     AbstractSessionSnapshot,
     PROGRESS_RACE_ENGINE_VERSION,

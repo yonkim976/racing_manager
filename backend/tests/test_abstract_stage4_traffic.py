@@ -17,10 +17,10 @@ from pathlib import Path
 
 from data_loader import load_circuits, load_drivers, load_teams
 from models.schemas import TrackConditions
-from simulation.abstract import AbstractRaceEngine, AbstractSessionSnapshot
-from simulation.abstract.broadcast import AbstractBroadcastSession
-from simulation.abstract.race import AbstractTrafficSimulationCursor
-from simulation.abstract.racecraft import local_corridor_assessment
+from engines.abstract.runtime import AbstractRaceEngine, AbstractSessionSnapshot
+from engines.abstract.runtime.broadcast import AbstractBroadcastSession
+from engines.abstract.runtime.race import AbstractTrafficSimulationCursor
+from engines.abstract.runtime.racecraft import local_corridor_assessment
 from tools.diagnose_abstract_stage4_traffic import _aggregate_diagnostic_payload
 
 

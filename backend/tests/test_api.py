@@ -22,7 +22,7 @@ from models.schemas import (
     RaceSetupRequest,
     SimulationMode,
 )
-from simulation.abstract.broadcast import (
+from engines.abstract.runtime.broadcast import (
     abstract_broadcast_session_manager,
 )
 

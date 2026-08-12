@@ -81,8 +81,8 @@ class EngineBoundaryTests(unittest.TestCase):
 
     def test_abstract_presentation_uses_track_contract_not_solver_module(self) -> None:
         consumers = (
-            BACKEND_ROOT / "simulation" / "abstract" / "kinematics.py",
-            BACKEND_ROOT / "simulation" / "abstract" / "pose.py",
+            BACKEND_ROOT / "engines" / "abstract" / "runtime" / "kinematics.py",
+            BACKEND_ROOT / "engines" / "abstract" / "runtime" / "pose.py",
             BACKEND_ROOT / "simulation" / "start_grid_geometry.py",
         )
         for path in consumers:
@@ -180,6 +180,46 @@ class EngineBoundaryTests(unittest.TestCase):
     def test_full_qualifying_compatibility_import_is_the_runtime_symbol(self) -> None:
         self.assertIs(compatibility_run_qualifying, full_run_qualifying)
 
+    def test_abstract_runtime_compatibility_paths_alias_runtime_modules(self) -> None:
+        module_names = (
+            "broadcast",
+            "clock",
+            "engine",
+            "incidents",
+            "kinematics",
+            "performance",
+            "pit",
+            "pose",
+            "progress_broadcast",
+            "progress_race",
+            "qualifying",
+            "race",
+            "racecraft",
+            "replay",
+            "rng",
+            "state",
+        )
+        for module_name in module_names:
+            with self.subTest(module=module_name):
+                compatibility_module = importlib.import_module(
+                    f"simulation.abstract.{module_name}"
+                )
+                runtime_module = importlib.import_module(
+                    f"engines.abstract.runtime.{module_name}"
+                )
+                self.assertIs(compatibility_module, runtime_module)
+
+    def test_abstract_state_compatibility_path_is_patch_safe(self) -> None:
+        compatibility_state = importlib.import_module("simulation.abstract.state")
+        runtime_state = importlib.import_module("engines.abstract.runtime.state")
+        replacement = object()
+        with patch.object(
+            compatibility_state,
+            "canonical_hash_sections",
+            replacement,
+        ):
+            self.assertIs(runtime_state.canonical_hash_sections, replacement)
+
     def test_full_race_engine_compatibility_path_is_a_patch_safe_alias(self) -> None:
         self.assertIs(compatibility_race_engine, full_race_engine)
         replacement = object()
@@ -229,7 +269,7 @@ class EngineBoundaryTests(unittest.TestCase):
         self.assertFalse(
             {
                 module for module in full_modules
-                if module.startswith("simulation.abstract")
+                if module.startswith("engines.abstract.runtime")
                 or module.startswith("engines.abstract")
             }
         )
@@ -245,6 +285,7 @@ class EngineBoundaryTests(unittest.TestCase):
     def test_api_selection_is_centralized_in_engine_factory(self) -> None:
         source = (BACKEND_ROOT / "main.py").read_text(encoding="utf-8")
         self.assertIn("simulation_engine_factory.for_mode", source)
+        self.assertNotIn("simulation.abstract", source)
         qualifying_source = source.split(
             'def run_qualifying_session', 1
         )[1].split('@app.post("/api/race/setup"', 1)[0]

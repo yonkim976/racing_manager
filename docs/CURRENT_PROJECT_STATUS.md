@@ -2757,3 +2757,22 @@ API·factory 계약은 변경하지 않았으므로 API 전체 묶음은 재실�
 경계·track physics·trajectory 표적 **33개, 13.122초, OK**다. Backend 전체 discovery는 장기 열·API·
 FULL·ABSTRACT를 포함해 **671개, 1,841.926초, OK**다. 이번 변경은 물리 상수, 최적화 공식, profile
 cache key와 결과 schema를 변경하지 않았다.
+
+## 58. ABSTRACT runtime 물리 이동 (2026-08-12)
+
+기존 `backend/simulation/abstract/`의 결과·방송·진행률·교통·pose 구현 16개를
+`backend/engines/abstract/runtime/`으로 이동했다. `AbstractEngineAdapter`, API 진입점, ABSTRACT 진단
+도구와 전용 테스트는 새 runtime을 직접 import한다. runtime 내부 결합은 package-relative import를
+유지하므로 FULL 내부 구현을 참조하지 않는다.
+
+기존 `simulation.abstract` package public symbol은 새 runtime symbol을 재수출하고, 각
+`simulation.abstract.<module>`은 실제 runtime 모듈 객체를 등록하는 patch-safe alias로 남겼다.
+따라서 기존 외부 호출과 monkey-patch 호환은 유지하면서 동일 구현이 서로 다른 module name으로
+중복 로드되는 것을 막는다. 경계 테스트는 16개 모듈 identity, canonical hash 함수 patch 전달,
+ABSTRACT의 FULL import 0과 API의 legacy import 0을 검사한다.
+
+경계·ABSTRACT Stage 1~4·Progress 회귀는 **132개, 248.928초, OK**다. 변경된 API와 반대편 FULL
+session·foundation 회귀는 **58개, 372.103초, OK**다. 결과 공식, RNG stream, engine/version 문자열,
+canonical hash payload와 방송 계약은 변경하지 않았다. 다음 구조 작업은 FULL 테스트·도구에 남은
+legacy import 사용처 감사이며, compatibility shim 삭제는 사용처 0과 외부 호환 정책을 별도로 승인한
+뒤 결정한다. Backend 전체 discovery도 **673개, 1,827.339초, OK**로 최종 통과했다.

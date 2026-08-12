@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from data_loader import load_circuits, load_drivers, load_teams  # noqa: E402
-from simulation.abstract import (  # noqa: E402
+from engines.abstract.runtime import (  # noqa: E402
     AbstractSessionSnapshot,
     LateralTrajectory,
     SingleProbeKinematicCursor,

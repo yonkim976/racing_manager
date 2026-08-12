@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from data_loader import load_circuits, load_drivers, load_teams
-from simulation.abstract import (
+from engines.abstract.runtime import (
     AbstractSessionSnapshot,
     BoundedKinematicPoseBuffer,
     LateralTrajectory,
@@ -201,7 +201,7 @@ class AbstractStage3KinematicsTests(unittest.TestCase):
     def test_baseline_lateral_offset_has_no_instant_transition_contract(self) -> None:
         """The old pose API has no duration/easing for a line transition."""
 
-        from simulation.abstract.kinematics import LateralTrajectory
+        from engines.abstract.runtime.kinematics import LateralTrajectory
 
         trajectory = LateralTrajectory.create(
             start_offset_m=0.0,

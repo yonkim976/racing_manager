@@ -8,8 +8,8 @@ from math import hypot, pi
 
 from data_loader import load_circuits, load_drivers, load_teams
 from models.schemas import TrackConditions
-from simulation.abstract import AbstractRaceEngine, AbstractSessionSnapshot, SingleVehiclePoseSynthesizer
-from simulation.abstract.broadcast import AbstractBroadcastSession
+from engines.abstract.runtime import AbstractRaceEngine, AbstractSessionSnapshot, SingleVehiclePoseSynthesizer
+from engines.abstract.runtime.broadcast import AbstractBroadcastSession
 from simulation.race_engine import RaceEngine
 from session import RaceSession
 from simulation.track_physics import DRIVING_LINE_RACING, build_track_physics_profile
