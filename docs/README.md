@@ -79,5 +79,6 @@ FULL 차량별 track solver·profile cache 분리와 기존 import 지연 호환
 ABSTRACT 구현 16개 모듈의 runtime 이동과 patch-safe legacy alias는 같은 문서의 58절을 기준으로 한다.
 FULL 제품·도구·테스트의 runtime 권위 import 전환과 legacy 재유입 차단은 같은 문서의 59절을 기준으로 한다.
 엔진 compatibility manifest·유지 정책·삭제 gate와 제품 빌드 검증은 같은 문서의 60절을 기준으로 한다.
+듀얼 엔진 분리 후 macOS arm64 패키징·서명 불변성·설정 화면 smoke는 같은 문서의 61절을 기준으로 한다.
 
 마지막 정리일: **2026-08-12**

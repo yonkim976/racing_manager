@@ -2810,3 +2810,19 @@ facade 공개 symbol identity와 patch 전달을 검사한다.
 **18개**, lint와 production build, Desktop **13개**도 모두 통과했다. 직전 59절의 Backend 전체
 **674개, 1,828.368초, OK** 이후 계산 코드는 변경하지 않았다. 새 macOS 앱 패키지는 이번 단계에서
 생성하지 않았다.
+
+## 61. 듀얼 엔진 분리 후 macOS 패키징·실행 smoke (2026-08-12)
+
+브랜치 `codex/abstract-race-simulation`을 origin에 푸시하고 Electron 37.2.6 macOS arm64 앱을
+재생성했다. 최종 앱은 `desktop/out/F1 Race Manager-darwin-arm64/F1 Race Manager.app`이며 약
+587MB다. 번들에는 `engine-runtime-compat-v1`, FULL runtime과 ABSTRACT runtime이 모두 포함됐다.
+
+패키징 직후와 실제 앱 실행·종료 뒤 모두 `codesign --verify --deep --strict`를 통과했다. backend
+resource의 `.pyc`는 실행 전후 0개였고 F1 Race Manager/Electron/backend 잔류 프로세스도 0이다. 앱
+설정 화면은 Bahrain 57랩, FULL Physics, ABSTRACT Broadcast, ABSTRACT Instant와 팀·타이어 데이터를
+정상 표시했다.
+
+검증 중 서명된 번들 Python을 직접 실행하면 `.pyc`가 생성되어 sealed resource를 변경한다는 점을
+재확인했다. 해당 중간 산출물은 폐기하고 앱을 깨끗하게 다시 패키징했으며, 최종 검증은 번들 파일을
+실행하지 않는 정적 검사와 실제 Electron 실행 경로만 사용했다. 이번 smoke에서는 레이스 계산이나
+FULL·ABSTRACT 장기 관전은 시작하지 않았다.
