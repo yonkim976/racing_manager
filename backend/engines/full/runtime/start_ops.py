@@ -15,7 +15,7 @@ from models.schemas import (
     TireCompound,
     TrackSegmentType,
 )
-from simulation.car_performance import car_performance_factors
+from .car_performance import car_performance_factors
 from .physics import driver_pace_multiplier
 from .racecraft_ops import MANEUVER_CLEARANCE_MARGIN_M
 from .runtime_constants import GRID_LAUNCH_MERGE_DISTANCE_M
@@ -26,7 +26,7 @@ from .strategy_ops import (
     MAX_INITIAL_FUEL_MASS_KG,
     PACE_MODE_TRANSITION_SECONDS,
 )
-from simulation.tire_model import tire_blanket_temperature_c
+from .tire_model import tire_blanket_temperature_c
 from simulation.start_grid_geometry import (
     GRID_COLUMN_OFFSET_M,
     GRID_POLE_DISTANCE_BEHIND_LINE_M,

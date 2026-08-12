@@ -73,5 +73,6 @@ FULL 핵심 차량 물리 6개 모듈 이동과 package 지연 로딩 경계는 
 FULL 경기 운영 계층 13개 모듈 이동과 patch-safe alias 상태는 같은 문서의 53절을 기준으로 한다.
 공용 `TrackGeometryProfile` 계약과 ABSTRACT solver 직접 의존 제거는 같은 문서의 54절을 기준으로 한다.
 FULL local trajectory planner·scheduler·lap physics 이동은 같은 문서의 55절을 기준으로 한다.
+FULL tire·vehicle dynamics·surface·trajectory solver 이동과 공용 compiler lazy 경계는 같은 문서의 56절을 기준으로 한다.
 
 마지막 정리일: **2026-08-12**

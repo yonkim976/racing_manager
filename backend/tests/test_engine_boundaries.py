@@ -5,6 +5,8 @@ from __future__ import annotations
 import ast
 import importlib
 from pathlib import Path
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -35,6 +37,29 @@ def imported_modules(path: Path) -> set[str]:
 
 
 class EngineBoundaryTests(unittest.TestCase):
+    def test_shared_track_compiler_does_not_initialize_full_vehicle_solver(self) -> None:
+        solver_modules = (
+            "engines.full.runtime.car_performance",
+            "engines.full.runtime.tire_model",
+            "engines.full.runtime.track_surface",
+            "engines.full.runtime.trajectory_physics",
+            "engines.full.runtime.vehicle_dynamics",
+        )
+        probe = (
+            "import sys; import simulation.track_physics; "
+            f"blocked={solver_modules!r}; "
+            "loaded=[name for name in blocked if name in sys.modules]; "
+            "assert not loaded, loaded"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", probe],
+            cwd=BACKEND_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+
     def test_abstract_presentation_uses_track_contract_not_solver_module(self) -> None:
         consumers = (
             BACKEND_ROOT / "simulation" / "abstract" / "kinematics.py",
@@ -50,15 +75,14 @@ class EngineBoundaryTests(unittest.TestCase):
     def test_shared_geometry_does_not_import_full_runtime_aliases(self) -> None:
         shared_module_names = (
             "start_grid_geometry",
+            "track_contracts",
             "track_display",
-            "track_physics",
-            "trajectory_physics",
             "vehicle_dimensions",
-            "vehicle_dynamics",
         )
         full_aliases = {
             "simulation.ai_strategy",
             "simulation.brake_model",
+            "simulation.car_performance",
             "simulation.collision",
             "simulation.events",
             "simulation.fixed_step",
@@ -77,6 +101,10 @@ class EngineBoundaryTests(unittest.TestCase):
             "simulation.state_contract",
             "simulation.strategy_ops",
             "simulation.timing_ops",
+            "simulation.tire_model",
+            "simulation.track_surface",
+            "simulation.trajectory_physics",
+            "simulation.vehicle_dynamics",
             "simulation.vehicle_physics",
             "simulation.wake_model",
         }
@@ -94,6 +122,7 @@ class EngineBoundaryTests(unittest.TestCase):
         module_names = (
             "ai_strategy",
             "brake_model",
+            "car_performance",
             "collision",
             "events",
             "fixed_step",
@@ -112,6 +141,10 @@ class EngineBoundaryTests(unittest.TestCase):
             "state_contract",
             "strategy_ops",
             "timing_ops",
+            "tire_model",
+            "track_surface",
+            "trajectory_physics",
+            "vehicle_dynamics",
             "vehicle_physics",
             "wake_model",
         )

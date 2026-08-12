@@ -23,7 +23,7 @@ from .racecraft_ops import (
     AI_DEFEND_EXIT_GAP_SECONDS,
     AI_DEFEND_GAP_SECONDS,
 )
-from simulation.tire_model import (
+from .tire_model import (
     compound_spec_for,
     TirePhysicsFactors,
     advance_tire_thermal_state,

@@ -2717,3 +2717,25 @@ start operation의 내부 참조도 package-relative 경로로 전환했다. 기
 **326개, 637.234초, OK**, 별도 session·simulation foundation **39개, 34.663초, OK**다.
 ABSTRACT Stage 1~4·Progress 전체 **119개, 245.763초, OK**다. API·factory 계약은 변경하지 않았으므로
 API 전체 묶음은 재실행하지 않고 52절의 **19개, 336.871초, OK** 기준을 유지한다.
+
+## 56. FULL runtime 물리 이동 5차 — tire·trajectory solver (2026-08-12)
+
+FULL 전용 solver 5개를 `backend/engines/full/runtime/`으로 이동했다.
+
+- `tire_model`: compound physics, wear, blanket, thermal budget
+- `vehicle_dynamics`: force·bicycle model primitives
+- `trajectory_physics`: vehicle/tire whole-lap speed profile
+- `track_surface`: four-wheel contact, kerb·runoff assessment
+- `car_performance`: constructor spec의 FULL 성능 factor 변환
+
+공용 `track_physics`의 기본 geometry compiler가 import만으로 이 solver 체인을 초기화하지 않도록
+차량별 최적화 구간의 surface·trajectory import를 함수 내부로 지연했다. 공용 kerb allowance는
+`track_contracts`로 옮겼다. 별도 subprocess 경계 테스트는 `import simulation.track_physics` 직후
+위 FULL solver 5개가 `sys.modules`에 존재하지 않는지 확인한다. 기존 `simulation.<module>`은 동일
+runtime 모듈을 가리키는 patch-safe alias이며 FULL runtime 내부는 package-relative import를 사용한다.
+
+경계·trajectory·surface·vehicle dynamics·compound 표적 **42개, 9.443초, OK**, track physics·타이어
+장기 열·서킷 열 profile **42개, 531.988초, OK**, FULL 예선·타이어·레이스 엔진
+**326개, 658.400초, OK**, ABSTRACT Stage 1~4·Progress 전체 **119개, 250.224초, OK**다.
+API·factory 계약은 변경하지 않았으므로 API 전체 묶음은 재실행하지 않고 52절의
+**19개, 336.871초, OK** 기준을 유지한다.

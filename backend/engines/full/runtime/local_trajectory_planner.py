@@ -11,14 +11,14 @@ from .collision import (
     oriented_body_separation_m,
 )
 from simulation.track_contracts import DRIVING_LINE_RACING, TrackGeometryProfile
-from simulation.track_surface import TrackSurfaceProfile
+from .track_surface import TrackSurfaceProfile
 from .vehicle_physics import (
     FOLLOWING_CONTROL_REACTION_SECONDS,
     FOLLOWING_PREDICTIVE_DECELERATION_MPS2,
     LongitudinalVehiclePhysics,
     VehiclePhysicsModifiers,
 )
-from simulation.vehicle_dynamics import MAX_ACCELERATION_MPS2, MAX_BRAKING_MPS2
+from .vehicle_dynamics import MAX_ACCELERATION_MPS2, MAX_BRAKING_MPS2
 
 # Owned here so RaceEngine mixins can share the cadence without importing the
 # race_engine facade.  1 Hz leaves nine tactical opportunities between routine

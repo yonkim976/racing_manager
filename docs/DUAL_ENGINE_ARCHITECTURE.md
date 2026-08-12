@@ -37,7 +37,12 @@ backend/engines/
 │   ├── state_contract.py  FULL tick 내부 계약
 │   ├── local_trajectory_planner.py  FULL 단기 trajectory lattice
 │   ├── planner_scheduler.py         FULL planner cadence
-│   └── physics.py         FULL lap-time·progress 계산
+│   ├── physics.py         FULL lap-time·progress 계산
+│   ├── tire_model.py      FULL 타이어 열·마모·force
+│   ├── vehicle_dynamics.py FULL force primitives
+│   ├── trajectory_physics.py FULL vehicle-specific line 평가
+│   ├── track_surface.py   FULL 4-wheel surface 접촉
+│   └── car_performance.py FULL constructor 성능 변환
 └── abstract/adapter.py    snapshot·qualifying·instant·broadcast 생성 경계
 
 backend/simulation/
@@ -90,8 +95,9 @@ FULL 예선과 중앙 `RaceEngine`, fixed-step·속도 profile·차량 integrato
 `backend/engines/full/runtime/`으로 이동했다. `vehicle_dynamics`는 공용 trajectory 계산에도 사용하므로
 공용 영역에 남겼다. 사고·피트·전략·SC·출발·타이밍·racecraft 운영 계층도 FULL runtime으로
 이동했다. FULL local trajectory planner·scheduler·lap physics도 runtime으로 이동했다.
-공용 track profile compiler·surface·trajectory physics, 타이어·성능 계산과 데이터 compiler는 아직
-기존 `backend/simulation/` 아래에 있다.
+공용 track profile compiler는 기존 위치에 남고 차량별 trajectory 의존성은 호출 시점에만 FULL
+runtime을 지연 로딩한다. 타이어·vehicle dynamics·surface·trajectory physics·constructor 성능 계산은
+FULL runtime으로 이동했다. 데이터 compiler는 아직 기존 `backend/simulation/` 아래에 있다.
 한 번에 이동하면 수백 개 import와 회귀 기준이 동시에 바뀌므로 다음 순서를 지킨다.
 
 1. 현재 듀얼 경계를 커밋해 이동 전 기준점 확보 — 완료 (`2d0236a`)

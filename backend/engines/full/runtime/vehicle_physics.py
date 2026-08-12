@@ -8,7 +8,7 @@ from math import sqrt
 import struct
 
 from .speed_profile import SpeedProfile
-from simulation.vehicle_dynamics import (
+from .vehicle_dynamics import (
     DynamicBicycleState,
     GRAVITY_MPS2,
     MAX_ACCELERATION_MPS2,

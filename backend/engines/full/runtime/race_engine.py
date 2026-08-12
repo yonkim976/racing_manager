@@ -30,7 +30,7 @@ from models.schemas import (
     TrackSegmentType,
     VehicleTrajectorySample,
 )
-from simulation.car_performance import CarPerformanceFactors, car_performance_factors
+from .car_performance import CarPerformanceFactors, car_performance_factors
 from .brake_model import brake_temperature_force_factor
 from .collision import (
     BodyPose,
@@ -68,7 +68,7 @@ from simulation.track_physics import (
     build_vehicle_track_physics_profile,
     track_physics_cache_counts,
 )
-from simulation.track_surface import TrackSurfaceProfile, VehicleSurfaceState
+from .track_surface import TrackSurfaceProfile, VehicleSurfaceState
 from .vehicle_physics import (
     FOLLOWING_PREDICTIVE_DECELERATION_MPS2,
     LOCKUP_SLIP_RATIO_THRESHOLD,
@@ -78,7 +78,7 @@ from .vehicle_physics import (
     VehicleFollowingConstraint,
     VehiclePhysicsModifiers,
 )
-from simulation.vehicle_dynamics import maximum_braking_deceleration_mps2
+from .vehicle_dynamics import maximum_braking_deceleration_mps2
 from .planner_scheduler import (
     AdaptivePlannerScheduler,
     TrackSpatialIndex,
@@ -88,7 +88,7 @@ from simulation.track_geometry import (
     FLAT_TRACK_GRADE,
     segment_at_progress,
 )
-from simulation.tire_model import (
+from .tire_model import (
     TireThermalBudget,
     TireThermalState,
     compound_spec_for,
@@ -97,7 +97,7 @@ from simulation.tire_model import (
     physical_compound_for_state,
     tire_grip_indices_c3,
 )
-from simulation.trajectory_physics import (
+from .trajectory_physics import (
     TireTrajectorySpec,
     VehicleTrajectorySpec,
 )

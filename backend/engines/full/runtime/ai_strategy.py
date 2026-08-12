@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from models.schemas import DriverRaceState, TireCompound
-from simulation.tire_model import (
+from .tire_model import (
     compound_spec_for,
     compute_managed_tire_age,
     compute_wear,

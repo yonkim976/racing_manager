@@ -21,7 +21,7 @@ from models.schemas import (
     TireCompound,
 )
 from .state_contract import TickPhase
-from simulation.tire_model import physical_compound_for, physical_compound_for_state
+from .tire_model import physical_compound_for, physical_compound_for_state
 
 PROGRESS_EPSILON = 1e-9
 TIMING_CROSSING_LAPS_TO_RETAIN = 4

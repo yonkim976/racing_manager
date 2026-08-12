@@ -5,6 +5,7 @@ from __future__ import annotations
 from bisect import bisect_right
 from dataclasses import dataclass, replace
 from math import atan2, floor, hypot, sqrt
+from typing import TYPE_CHECKING
 
 from models.schemas import Circuit
 from simulation.global_trajectory_optimizer import (
@@ -22,22 +23,20 @@ from simulation.track_contracts import (
     DRIVING_LINE_OUTSIDE,
     DRIVING_LINE_RACING,
     LocalMetricCoordinateFrame,
-    TrackPhysicsSample,
-)
-from simulation.track_surface import (
     TRAJECTORY_LOW_KERB_ALLOWANCE_M,
-    TrackSurfaceProfile,
+    TrackPhysicsSample,
 )
 from simulation.vehicle_dimensions import (
     PHYSICAL_CAR_LENGTH_M,
     PHYSICAL_CAR_WIDTH_M,
 )
-from simulation.trajectory_physics import (
-    TRAJECTORY_SPEED_PASS_COUNT,
-    TireTrajectorySpec,
-    VehicleTrajectorySpec,
-    build_trajectory_speed_profile,
-)
+
+if TYPE_CHECKING:
+    from engines.full.runtime.track_surface import TrackSurfaceProfile
+    from engines.full.runtime.trajectory_physics import (
+        TireTrajectorySpec,
+        VehicleTrajectorySpec,
+    )
 
 DEFAULT_TRACK_WIDTH_M = 12.0
 TRACK_EDGE_MARGIN_M = 0.35
@@ -862,6 +861,8 @@ class PhysicalGlobalTrajectoryCostModel(_LegacyGlobalTrajectoryCostModel):
         offsets_m,
         reference_offsets_m,
     ) -> GlobalTrajectoryEvaluation | None:
+        from engines.full.runtime.trajectory_physics import build_trajectory_speed_profile
+
         offsets = list(offsets_m)
         if not _line_transitions_within_limit(
             offsets,
@@ -964,6 +965,9 @@ def optimize_vehicle_trajectory(
     search_speed_pass_count: int = 4,
 ) -> GlobalTrajectoryOptimizationResult:
     """Build a vehicle-specific nominal trajectory without changing live race state."""
+    from engines.full.runtime.track_surface import TrackSurfaceProfile
+    from engines.full.runtime.trajectory_physics import TRAJECTORY_SPEED_PASS_COUNT
+
     base_profile = build_track_physics_profile(circuit)
     points = _closed_points(circuit)
     surface_profile = TrackSurfaceProfile.for_circuit(circuit, base_profile)
@@ -1095,6 +1099,8 @@ def build_vehicle_track_physics_profile(
     tire: TireTrajectorySpec,
 ) -> TrackPhysicsProfile:
     """Return a cached, live-budget vehicle-specific set of driving lines."""
+    from engines.full.runtime.trajectory_physics import build_trajectory_speed_profile
+
     points = _closed_points(circuit)
     _, center_progress = _centerline_progress(points)
     widths = _metric_widths(circuit, center_progress)

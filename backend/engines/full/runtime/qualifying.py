@@ -15,9 +15,9 @@ from models.schemas import (
     ThermalPresetName,
     TrackConditions,
 )
-from simulation.car_performance import car_performance_factors
+from .car_performance import car_performance_factors
 from .physics import compute_effective_lap_time, driver_pace_multiplier
-from simulation.tire_model import compute_tire_performance
+from .tire_model import compute_tire_performance
 
 # Each entry: (session name, number of drivers advancing to the next session).
 # ``None`` marks the final session, where every remaining driver fights for pole.

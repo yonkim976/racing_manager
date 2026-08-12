@@ -10,6 +10,7 @@ DRIVING_LINE_RACING = "racing_line"
 DRIVING_LINE_INSIDE = "inside"
 DRIVING_LINE_OUTSIDE = "outside"
 DRIVING_LINE_DEFENSIVE = "defensive_line"
+TRAJECTORY_LOW_KERB_ALLOWANCE_M = 0.60
 
 
 @dataclass(frozen=True)

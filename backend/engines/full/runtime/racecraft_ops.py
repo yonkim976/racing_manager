@@ -23,7 +23,7 @@ from simulation.track_physics import (
     PHYSICAL_CAR_LENGTH_M,
     PHYSICAL_CAR_WIDTH_M,
 )
-from simulation.vehicle_dynamics import maximum_braking_deceleration_mps2
+from .vehicle_dynamics import maximum_braking_deceleration_mps2
 from .vehicle_physics import PHYSICS_MAX_LATERAL_SPEED_MPS, PHYSICS_STEP_SECONDS
 
 PROGRESS_EPSILON = 1e-9

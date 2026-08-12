@@ -22,7 +22,7 @@ from models.schemas import (
 from .collision import BodyPose, oriented_body_overlap
 from .pit_stop import compute_pit_components
 from .state_contract import TickPhase
-from simulation.tire_model import physical_compound_for_state, tire_blanket_temperature_c
+from .tire_model import physical_compound_for_state, tire_blanket_temperature_c
 from simulation.track_display import (
     build_pit_exit_lane_points_m,
     build_pit_route_points_m,
